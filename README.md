@@ -30,6 +30,23 @@ Gedächtnis zu verlieren.
 
 ---
 
+## Ohne Terminal: Doppelklick genügt
+
+Im Ordner `windows/` liegen Startdateien. Der Reihe nach durchnummeriert,
+du brauchst nur zu klicken:
+
+| Datei | Wofür |
+|---|---|
+| `1 - Einrichten.bat` | Installiert alles und fragt nach dem API-Schlüssel |
+| `2 - Dashboard starten.bat` | Öffnet das Dashboard im Browser |
+| `3 - Dashboard auch fuer das Handy.bat` | Macht es zusätzlich im WLAN erreichbar |
+| `4 - Beim Hochfahren mitstarten.bat` | Dashboard startet künftig beim Anmelden |
+| `5 - Nicht mehr mitstarten.bat` | Hebt das wieder auf |
+| `6 - Neue Version holen.bat` | Holt Änderungen und installiert sie |
+
+Ein schwarzes Fenster erscheint dabei trotzdem — es ist der laufende
+Server. Schließen beendet das Dashboard, das ist der Ausknopf.
+
 ## Schnellstart
 
 ```bash
@@ -258,6 +275,6 @@ insta_agent/
 pytest
 ```
 
-69 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+74 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

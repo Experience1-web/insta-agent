@@ -150,6 +150,47 @@ def web(
 
 
 @app.command()
+def autostart(
+    ein: bool = typer.Option(None, "--ein/--aus", help="Autostart ein- oder ausschalten."),
+    handy: bool = typer.Option(
+        False, "--handy", help="Auch im WLAN erreichbar machen, nur zum Nachsehen."
+    ),
+    port: int = typer.Option(8765),
+) -> None:
+    """Sorgt dafür, dass das Dashboard beim Anmelden von selbst startet.
+
+    Ohne Angabe wird nur der aktuelle Stand gezeigt.
+    """
+    from . import windows
+
+    if ein is None:
+        stand = "eingeschaltet" if windows.ist_eingeschaltet() else "ausgeschaltet"
+        console.print(f"Autostart ist [bold]{stand}[/bold].")
+        if ordner := windows.autostart_ordner():
+            console.print(f"[dim]Ordner: {ordner}[/dim]")
+        console.print(
+            "\nEinschalten mit [bold]insta-agent autostart --ein[/bold]"
+            if not windows.ist_eingeschaltet()
+            else "\nAusschalten mit [bold]insta-agent autostart --aus[/bold]"
+        )
+        return
+
+    ergebnis = (
+        windows.einschalten(
+            host="0.0.0.0" if handy else "127.0.0.1", port=port, nur_lesen=handy
+        )
+        if ein
+        else windows.ausschalten()
+    )
+    farbe = "green" if ergebnis.erfolg else "red"
+    console.print(f"[{farbe}]{ergebnis.nachricht}[/{farbe}]")
+    if ergebnis.pfad and ergebnis.erfolg and ein:
+        console.print(f"[dim]{ergebnis.pfad}[/dim]")
+    if not ergebnis.erfolg:
+        raise typer.Exit(1)
+
+
+@app.command()
 def check() -> None:
     """Prüft, ob die Zugangsdaten richtig in der .env stehen.
 
