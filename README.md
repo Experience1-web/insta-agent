@@ -206,6 +206,6 @@ insta_agent/
 pytest
 ```
 
-36 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+43 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

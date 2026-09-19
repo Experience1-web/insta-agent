@@ -16,17 +16,26 @@ EXAMPLE_CONFIG = REPO_ROOT / "config" / "agent.example.yaml"
 
 
 def _load_dotenv(path: Path) -> None:
-    """Minimaler .env-Loader, damit keine weitere Abhängigkeit nötig ist."""
+    """Minimaler .env-Loader, damit keine weitere Abhängigkeit nötig ist.
+
+    Zwei Vorrangregeln, in dieser Reihenfolge:
+      1. Steht ein Schlüssel mehrfach in der Datei, gilt der letzte. So
+         überschreibt eine angehängte Zeile die Platzhalterzeile darüber,
+         statt wirkungslos zu bleiben.
+      2. Eine echte Umgebungsvariable schlägt die Datei immer.
+    """
     if not path.exists():
         return
+
+    values: dict[str, str] = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        # Echte Umgebungsvariablen haben Vorrang vor der Datei.
+        values[key.strip()] = value.strip().strip('"').strip("'")
+
+    for key, value in values.items():
         os.environ.setdefault(key, value)
 
 
