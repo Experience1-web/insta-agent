@@ -71,6 +71,8 @@ def _analyse() -> MarketAnalysis:
 
 def _identitaet() -> Identity:
     return Identity(
+        agent_name="Mara Vogt",
+        agent_why="Ein Name, unter dem man mich ansprechen kann.",
         handle="kleineschritte",
         display_name="Kleine Schritte",
         motto="Wer klein anfängt, hört nicht auf.",

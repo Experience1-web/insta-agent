@@ -1,7 +1,7 @@
 # insta-agent
 
-Ein Agent, der einen Instagram-Account **selbst erfindet, führt und zu
-finanzieren versucht**. Er sucht sich seine Nische, denkt sich sein Motto
+Ein Agent, der sich **selbst einen Namen gibt** und einen
+Instagram-Account **erfindet, führt und zu finanzieren versucht**. Er sucht sich seine Nische, denkt sich sein Motto
 aus, recherchiert seinen Markt, schreibt und gestaltet seine Beiträge,
 liest seine eigenen Zahlen, zieht daraus Konsequenzen — und rechnet dabei
 mit, was sein eigenes Denken kostet.
@@ -15,7 +15,7 @@ Was er entscheidet, entscheidet er allein. Du gibst ihm kein Thema vor
 
 | Schritt | Was passiert |
 |---|---|
-| **Geburt** | Einmalig: Marktrecherche im Web, dann erfindet er Handle, Motto, Nische, Zielgruppe, Tonfall, Bildsprache und Themensäulen. |
+| **Geburt** | Einmalig: Er gibt sich selbst einen Namen, recherchiert im Web und erfindet dann Handle, Motto, Nische, Zielgruppe, Tonfall, Bildsprache und Themensäulen. |
 | **Messen** | Holt Follower, Reichweite und Beitragskennzahlen über die Graph API. |
 | **Lernen** | Liest seine eigenen Zahlen und trennt dabei, was er *weiß*, von dem, was er nur *vermutet*. |
 | **Recherchieren** | Alle 7 Zyklen (oder wenn der Kurs wackelt): Websuche nach Trends, Wettbewerb und Lücken. |
@@ -58,9 +58,34 @@ alle Entwürfe samt fertigen Bildern und den Geschäftsplan — und startest
 den Agenten per Knopfdruck. Während er arbeitet, läuft sein Protokoll live
 mit.
 
-Gebaut ohne Zusatzbibliotheken, nur mit Bordmitteln von Python. Der Server
-lauscht ausschließlich auf `127.0.0.1`: Wer die Seite öffnen kann, kann
-Zyklen starten und damit Geld ausgeben — das gehört nicht ins Netz.
+Gebaut ohne Zusatzbibliotheken, nur mit Bordmitteln von Python.
+
+### Vom Handy aus
+
+```bash
+insta-agent web --host 0.0.0.0 --read-only
+```
+
+Beim Start wird eine zweite Adresse angezeigt, die ein **Zugangswort**
+enthält. Die öffnest du einmal auf dem Handy; der Browser merkt sich das
+Wort, danach genügt die nackte Adresse. Am besten als Lesezeichen auf den
+Startbildschirm legen.
+
+`--read-only` blendet die Steuerung aus: Von unterwegs siehst du Kasse,
+Kurs und Beiträge, aber niemand kann einen Zyklus starten. Lass es weg,
+wenn du auch von unterwegs starten können willst.
+
+**Zwei Dinge dazu, ehrlich gesagt:**
+
+Ohne `--host` lauscht der Server nur auf `127.0.0.1` und ist vom Handy
+nicht erreichbar — das ist Absicht. Wer die Seite öffnen kann, kann Geld
+ausgeben, deshalb verlangt jeder Zugriff von außen das Zugangswort. Es
+steht in der `.env` als `WEB_TOKEN` und wird beim ersten Mal selbst
+erzeugt.
+
+Und: Das Ganze läuft auf deinem Rechner. Ist er aus oder im Ruhezustand,
+ist auch die Seite weg. Für echten Zugriff von überall bräuchte es einen
+durchlaufenden Server oder einen privaten Tunnel (etwa Tailscale).
 
 Ohne Instagram-Zugangsdaten läuft der Agent vollständig im Trockenlauf: Er
 erfindet sich, plant, schreibt und rendert Bilder — er veröffentlicht nur
@@ -233,6 +258,6 @@ insta_agent/
 pytest
 ```
 
-62 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+69 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

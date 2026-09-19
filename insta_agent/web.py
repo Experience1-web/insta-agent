@@ -9,9 +9,12 @@ kann Zyklen starten und damit Geld ausgeben; das gehört nicht ins Netz.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import mimetypes
+import secrets
+import socket
 import threading
 import webbrowser
 from collections import deque
@@ -46,8 +49,9 @@ class Steuerung:
     und die Seite fragt den Fortschritt regelmäßig ab.
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, nur_lesen: bool = False) -> None:
         self.settings = settings
+        self.nur_lesen = nur_lesen
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.protokoll = LaufProtokoll()
@@ -61,6 +65,11 @@ class Steuerung:
     def starte(self, *, zyklen: int, hinweis: str | None) -> tuple[bool, str]:
         """Startet einen Lauf und nennt bei Ablehnung den Grund."""
         with self._lock:
+            if self.nur_lesen:
+                return False, (
+                    "Diese Ansicht ist nur zum Nachsehen freigegeben. Starten geht "
+                    "am Rechner, auf dem der Agent läuft."
+                )
             if self.laeuft:
                 return False, "Es läuft bereits ein Zyklus."
             if not self.settings.anthropic_api_key:
@@ -127,6 +136,7 @@ class Steuerung:
 
             return {
                 "laeuft": self.laeuft,
+                "nur_lesen": self.nur_lesen,
                 "protokoll": list(self.protokoll.zeilen),
                 "fehler": self.letzter_fehler,
                 "bericht": self.letzter_bericht,
@@ -166,11 +176,26 @@ def _verstaendlich(exc: Exception) -> str:
     return f"Unerwarteter Fehler ({type(exc).__name__}): {text}"
 
 
-def _handler_klasse(steuerung: Steuerung):
-    seite = (Path(__file__).parent / "web_page.html").read_text(encoding="utf-8")
+def _handler_klasse(steuerung: Steuerung, token: str | None):
+    seiten_datei = Path(__file__).parent / "web_page.html"
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "insta-agent"
+
+        def _zugang_erlaubt(self) -> bool:
+            """Vom eigenen Rechner ohne Zugangswort, von außen nur damit.
+
+            Wer die Seite erreicht, kann Geld ausgeben - deshalb reicht
+            "steht halt im eigenen WLAN" als Schutz nicht.
+            """
+            if self.client_address[0] in ("127.0.0.1", "::1"):
+                return True
+            if not token:
+                return False
+            mitgeliefert = self.headers.get("X-Token") or parse_qs(
+                urlparse(self.path).query
+            ).get("token", [""])[0]
+            return hmac.compare_digest(mitgeliefert, token)
 
         def log_message(self, *args: Any) -> None:
             """Jede Anfrage zu protokollieren macht die Konsole unlesbar."""
@@ -192,8 +217,23 @@ def _handler_klasse(steuerung: Steuerung):
         def do_GET(self) -> None:  # noqa: N802 - von BaseHTTPRequestHandler vorgegeben
             pfad = urlparse(self.path)
 
+            if not self._zugang_erlaubt():
+                self._sende(
+                    403,
+                    "text/html; charset=utf-8",
+                    "<h1>Kein Zugang</h1><p>Ruf die Seite mit dem Zugangswort auf, "
+                    "das beim Start angezeigt wurde.</p>".encode("utf-8"),
+                )
+                return
+
             if pfad.path == "/":
-                self._sende(200, "text/html; charset=utf-8", seite.encode("utf-8"))
+                # Bei jedem Aufruf frisch lesen: nach einem `git pull` wirkt
+                # eine geänderte Seite sofort, ohne den Server neu zu starten.
+                self._sende(
+                    200,
+                    "text/html; charset=utf-8",
+                    seiten_datei.read_text(encoding="utf-8").encode("utf-8"),
+                )
             elif pfad.path == "/api/zustand":
                 self._json(steuerung.zustand())
             elif pfad.path == "/media":
@@ -220,6 +260,9 @@ def _handler_klasse(steuerung: Steuerung):
             self._sende(200, typ, datei.read_bytes())
 
         def do_POST(self) -> None:  # noqa: N802
+            if not self._zugang_erlaubt():
+                self._json({"gestartet": False, "grund": "Kein Zugang."}, 403)
+                return
             if urlparse(self.path).path != "/api/start":
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -239,16 +282,48 @@ def _handler_klasse(steuerung: Steuerung):
     return Handler
 
 
-def starte_server(settings: Settings, port: int = 8765, oeffnen: bool = True) -> None:
-    steuerung = Steuerung(settings)
-    server = ThreadingHTTPServer(("127.0.0.1", port), _handler_klasse(steuerung))
-    adresse = f"http://127.0.0.1:{port}"
+def eigene_ip() -> str:
+    """Die Adresse, unter der andere Geräte im Netz den Rechner erreichen."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            # Es wird nichts gesendet; der Aufruf verrät nur die Route.
+            s.connect(("192.0.2.1", 1))
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
 
+
+def starte_server(
+    settings: Settings,
+    port: int = 8765,
+    oeffnen: bool = True,
+    host: str = "127.0.0.1",
+    nur_lesen: bool = False,
+) -> None:
+    nach_aussen = host not in ("127.0.0.1", "localhost", "::1")
+
+    token = settings.web_token
+    if nach_aussen and not token:
+        # Ohne Zugangswort wäre die Seite für jeden im Netz bedienbar.
+        from .config import set_env_value
+
+        token = secrets.token_urlsafe(12)
+        set_env_value("WEB_TOKEN", token)
+
+    steuerung = Steuerung(settings, nur_lesen=nur_lesen)
+    server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
+
+    lokal = f"http://127.0.0.1:{port}"
     if oeffnen:
-        threading.Timer(0.5, lambda: webbrowser.open(adresse)).start()
+        threading.Timer(0.5, lambda: webbrowser.open(lokal)).start()
 
-    print(f"\n  Die Oberfläche läuft unter {adresse}")
-    print("  Zum Beenden: Strg+C\n")
+    print(f"\n  Auf diesem Rechner:  {lokal}")
+    if nach_aussen:
+        print(f"  Von anderen Geräten: http://{eigene_ip()}:{port}/?token={token}")
+        print("\n  Diese Adresse enthält dein Zugangswort - behandle sie wie ein Passwort.")
+        if nur_lesen:
+            print("  Nur-Lesen-Modus: von außen kann niemand einen Zyklus starten.")
+    print("\n  Zum Beenden: Strg+C\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

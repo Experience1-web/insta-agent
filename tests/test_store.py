@@ -7,6 +7,8 @@ from insta_agent.store import Store
 def test_identitaet_ueberlebt_den_neustart(tmp_path, draft):
     path = tmp_path / "memory.db"
     identity = Identity(
+        agent_name="Mara Vogt",
+        agent_why="Kurz, sprechbar, nicht nach Maschine klingend.",
         handle="beispiel",
         display_name="Beispiel",
         motto="Ein Satz, der trägt.",

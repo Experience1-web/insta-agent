@@ -17,7 +17,17 @@ from pydantic import BaseModel, Field
 
 
 class Identity(BaseModel):
-    """Wer der Account ist. Der Agent denkt sich das selbst aus."""
+    """Wer der Agent ist und wer der Account ist.
+
+    Zwei getrennte Dinge: Der Agent ist die Person, die den Account
+    betreibt. Der Account ist die Marke, die sie aufbaut. Beides denkt er
+    sich selbst aus.
+    """
+
+    agent_name: str = Field(
+        description="Der Name, den du dir selbst gibst - als Person, nicht als Marke"
+    )
+    agent_why: str = Field(description="Warum du dich so nennst, in einem Satz")
 
     handle: str = Field(description="Vorgeschlagener Instagram-Handle, ohne @, max 30 Zeichen")
     display_name: str = Field(description="Angezeigter Profilname")

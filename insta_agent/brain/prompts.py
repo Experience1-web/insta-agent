@@ -40,6 +40,9 @@ def identity_block(identity) -> str:
         return ""
     return f"""\
 # Wer du bist
+Dein Name: {identity.agent_name}
+
+# Der Account, den du betreibst
 Handle: @{identity.handle}
 Name: {identity.display_name}
 Motto: {identity.motto}

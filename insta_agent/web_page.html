@@ -100,8 +100,8 @@
 <h2>Kasse</h2>
 <div class="kacheln" id="kasse"></div>
 
-<h2>Arbeiten lassen</h2>
-<div class="karte">
+<h2 id="steuerungstitel">Arbeiten lassen</h2>
+<div class="karte" id="steuerung">
   <div class="zeile">
     <select id="zyklen">
       <option value="1">1 Zyklus</option>
@@ -129,6 +129,22 @@
 </div>
 
 <script>
+// Das Zugangswort steht beim ersten Aufruf in der Adresse. Es wandert in
+// den Speicher des Browsers, damit man es beim nächsten Mal nicht braucht -
+// und verschwindet aus der Adresszeile, damit es nicht im Verlauf landet.
+const TOKEN_SCHLUESSEL = "insta-agent-token";
+(() => {
+  const aus_adresse = new URLSearchParams(location.search).get("token");
+  if (aus_adresse) {
+    try { localStorage.setItem(TOKEN_SCHLUESSEL, aus_adresse); } catch {}
+    history.replaceState({}, "", location.pathname);
+  }
+})();
+const token = (() => {
+  try { return localStorage.getItem(TOKEN_SCHLUESSEL) || ""; } catch { return ""; }
+})();
+const kopf = token ? { "X-Token": token } : {};
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const geld = n => (n ?? 0).toFixed(n < 1 && n > -1 ? 4 : 2) + " USD";
@@ -138,7 +154,15 @@ let laeuftGerade = false;
 async function laden() {
   let d;
   try {
-    d = await (await fetch("/api/zustand")).json();
+    const antwort = await fetch("/api/zustand", { headers: kopf });
+    if (antwort.status === 403) {
+      $("zustand").innerHTML = '<span class="schlecht">Kein Zugang</span>';
+      $("warnbox").innerHTML = `<div class="karte"><strong class="schlecht">Zugangswort fehlt</strong>
+        <p class="hinweis" style="margin:8px 0 0">Ruf die Seite noch einmal mit der vollständigen
+        Adresse auf, die beim Start angezeigt wurde – die mit <code>?token=…</code> am Ende.</p></div>`;
+      return;
+    }
+    d = await antwort.json();
   } catch {
     $("zustand").innerHTML = '<span class="schlecht">Keine Verbindung zum Agenten</span>';
     return;
@@ -148,6 +172,13 @@ async function laden() {
 
 function zeichne(d) {
   laeuftGerade = d.laeuft;
+
+  // Nur-Lesen: die Steuerung verschwindet, statt einen Knopf anzubieten,
+  // der ohnehin abgelehnt würde.
+  const steuerung_sichtbar = d.nur_lesen ? "none" : "";
+  $("steuerung").style.display = steuerung_sichtbar;
+  $("steuerungstitel").style.display = steuerung_sichtbar;
+
   $("start").disabled = d.laeuft;
   $("start").textContent = d.laeuft ? "Läuft …" : "Starten";
   $("zustand").innerHTML = d.laeuft
@@ -188,12 +219,15 @@ function zeichne(d) {
 
   // Profil
   const i = d.identitaet;
-  $("titel").textContent = i ? "@" + i.handle : "insta-agent";
+  $("titel").textContent = i ? i.agent_name : "insta-agent";
   $("motto").textContent = i ? i.motto : "";
+  document.title = i ? `${i.agent_name} · @${i.handle}` : "insta-agent";
   $("profilbox").innerHTML = !i ? "" : `
-    <h2>Wer er zu sein beschlossen hat</h2>
+    <h2>Wer er ist und was er aufbaut</h2>
     <div class="karte"><dl>
-      <dt>Name</dt><dd>${esc(i.display_name)}</dd>
+      <dt>Sein Name</dt><dd><strong>${esc(i.agent_name)}</strong>
+        <div class="hinweis">${esc(i.agent_why)}</div></dd>
+      <dt>Account</dt><dd>@${esc(i.handle)} – ${esc(i.display_name)}</dd>
       <dt>Nische</dt><dd>${esc(i.niche)}</dd>
       <dt>Zielgruppe</dt><dd>${esc(i.target_audience)}</dd>
       <dt>Tonfall</dt><dd>${esc(i.tone_of_voice)}</dd>
@@ -223,7 +257,8 @@ function zeichne(d) {
     <h2>Seine Beiträge</h2>
     <div class="gitter">${d.entwuerfe.map(p => `
       <div class="post">
-        ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}" alt="">` : ""}
+        ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${
+          token ? "&token=" + encodeURIComponent(token) : ""}" alt="" loading="lazy">` : ""}
         <div class="text">
           <span class="marke ${p.status === "published" ? "live" : ""}">${
             p.status === "published" ? "veröffentlicht" : "Entwurf"}</span>
@@ -264,7 +299,7 @@ $("start").onclick = async () => {
   $("start").disabled = true;
   const antwort = await fetch("/api/start", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...kopf },
     body: JSON.stringify({ zyklen: +$("zyklen").value, hinweis: $("hinweis").value }),
   });
   if (!antwort.ok) {

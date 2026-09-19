@@ -114,6 +114,13 @@ def setup() -> None:
 @app.command()
 def web(
     port: int = typer.Option(8765, help="Auf welchem Port die Oberfläche läuft."),
+    host: str = typer.Option(
+        "127.0.0.1",
+        help="0.0.0.0 macht die Seite für Handy und andere Geräte im Netz erreichbar.",
+    ),
+    read_only: bool = typer.Option(
+        False, "--read-only", help="Nur nachsehen, nicht starten. Für den Zugriff von unterwegs."
+    ),
     open_browser: bool = typer.Option(
         True, "--open/--no-open", help="Browser automatisch öffnen."
     ),
@@ -137,7 +144,9 @@ def web(
 
     from .web import starte_server
 
-    starte_server(settings, port=port, oeffnen=open_browser)
+    starte_server(
+        settings, port=port, oeffnen=open_browser, host=host, nur_lesen=read_only
+    )
 
 
 @app.command()
@@ -285,6 +294,8 @@ def identity(config: Path = typer.Option(None)) -> None:
         console.print(
             Panel(
                 f"[bold]{ident.motto}[/bold]\n\n"
+                f"[dim]Der Agent nennt sich[/dim] [bold]{ident.agent_name}[/bold]\n"
+                f"[dim]{ident.agent_why}[/dim]\n\n"
                 f"Handle:      @{ident.handle}\n"
                 f"Name:        {ident.display_name}\n"
                 f"Nische:      {ident.niche}\n"
@@ -294,7 +305,7 @@ def identity(config: Path = typer.Option(None)) -> None:
                 f"Säulen:      {', '.join(ident.content_pillars)}\n\n"
                 f"[dim]Bio:[/dim] {ident.bio}\n\n"
                 f"[dim]Begründung:[/dim] {ident.why_this_works}",
-                title="Das Profil, das der Agent sich gegeben hat",
+                title="Wer er ist und was er aufbaut",
             )
         )
     finally:
