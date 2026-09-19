@@ -18,7 +18,7 @@ import socket
 import threading
 import webbrowser
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -49,9 +49,12 @@ class Steuerung:
     und die Seite fragt den Fortschritt regelmäßig ab.
     """
 
-    def __init__(self, settings: Settings, *, nur_lesen: bool = False) -> None:
+    def __init__(
+        self, settings: Settings, *, nur_lesen: bool = False, auto_stunden: float = 0
+    ) -> None:
         self.settings = settings
         self.nur_lesen = nur_lesen
+        self.auto_stunden = auto_stunden
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.protokoll = LaufProtokoll()
@@ -62,10 +65,16 @@ class Steuerung:
     def laeuft(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    def starte(self, *, zyklen: int, hinweis: str | None) -> tuple[bool, str]:
-        """Startet einen Lauf und nennt bei Ablehnung den Grund."""
+    def starte(
+        self, *, zyklen: int, hinweis: str | None, von_hand: bool = True
+    ) -> tuple[bool, str]:
+        """Startet einen Lauf und nennt bei Ablehnung den Grund.
+
+        von_hand unterscheidet den Knopfdruck vom Arbeitstakt. Der
+        Lesemodus sperrt nur fremde Zugriffe, nicht den Agenten selbst.
+        """
         with self._lock:
-            if self.nur_lesen:
+            if von_hand and self.nur_lesen:
                 return False, (
                     "Diese Ansicht ist nur zum Nachsehen freigegeben. Starten geht "
                     "am Rechner, auf dem der Agent läuft."
@@ -109,6 +118,43 @@ class Steuerung:
             agent.close()
             wurzel.removeHandler(self.protokoll)
 
+    # -- Arbeitstakt -------------------------------------------------------
+
+    def naechster_lauf(self) -> datetime | None:
+        """Wann der Agent von selbst wieder arbeitet. None heißt: gar nicht."""
+        if self.auto_stunden <= 0:
+            return None
+        agent = Agent(self.settings)
+        try:
+            zuletzt = agent.store.last_cycle_at()
+        finally:
+            agent.close()
+        if zuletzt is None:
+            return datetime.now(timezone.utc)
+        return zuletzt + timedelta(hours=self.auto_stunden)
+
+    def _takt(self) -> None:
+        """Weckt den Agenten, wenn seine Pause vorbei ist.
+
+        Der Abstand zählt ab dem letzten Zyklus, nicht ab dem Start des
+        Programms. Sonst würde jeder Neustart des Rechners erneut Geld
+        kosten - bei jemandem, der seinen Laptop mehrmals täglich
+        hochfährt, wäre das Budget schnell weg.
+        """
+        while True:
+            try:
+                faellig = self.naechster_lauf()
+                if faellig and datetime.now(timezone.utc) >= faellig and not self.laeuft:
+                    log.info("Arbeitstakt: der Agent legt los")
+                    self.starte(zyklen=1, hinweis=None, von_hand=False)
+            except Exception:  # noqa: BLE001 - der Takt darf nie ganz abreißen
+                log.exception("Arbeitstakt gestolpert")
+            threading.Event().wait(300)
+
+    def starte_takt(self) -> None:
+        if self.auto_stunden > 0:
+            threading.Thread(target=self._takt, daemon=True).start()
+
     # -- Daten für die Anzeige --------------------------------------------
 
     def zustand(self) -> dict[str, Any]:
@@ -137,6 +183,8 @@ class Steuerung:
             return {
                 "laeuft": self.laeuft,
                 "nur_lesen": self.nur_lesen,
+                "auto_stunden": self.auto_stunden,
+                "naechster_lauf": (n.isoformat() if (n := self.naechster_lauf()) else None),
                 "protokoll": list(self.protokoll.zeilen),
                 "fehler": self.letzter_fehler,
                 "bericht": self.letzter_bericht,
@@ -299,6 +347,7 @@ def starte_server(
     oeffnen: bool = True,
     host: str = "127.0.0.1",
     nur_lesen: bool = False,
+    auto_stunden: float = 0,
 ) -> None:
     nach_aussen = host not in ("127.0.0.1", "localhost", "::1")
 
@@ -310,7 +359,8 @@ def starte_server(
         token = secrets.token_urlsafe(12)
         set_env_value("WEB_TOKEN", token)
 
-    steuerung = Steuerung(settings, nur_lesen=nur_lesen)
+    steuerung = Steuerung(settings, nur_lesen=nur_lesen, auto_stunden=auto_stunden)
+    steuerung.starte_takt()
     server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
 
     lokal = f"http://127.0.0.1:{port}"
@@ -323,6 +373,8 @@ def starte_server(
         print("\n  Diese Adresse enthält dein Zugangswort - behandle sie wie ein Passwort.")
         if nur_lesen:
             print("  Nur-Lesen-Modus: von außen kann niemand einen Zyklus starten.")
+    if auto_stunden > 0:
+        print(f"\n  Arbeitstakt: alle {auto_stunden:g} Stunden von selbst.")
     print("\n  Zum Beenden: Strg+C\n")
     try:
         server.serve_forever()

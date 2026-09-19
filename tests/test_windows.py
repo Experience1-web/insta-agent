@@ -58,3 +58,21 @@ def test_ohne_appdata_wird_sauber_abgelehnt(monkeypatch):
     for ergebnis in (windows.einschalten(), windows.ausschalten()):
         assert not ergebnis.erfolg
         assert "Windows" in ergebnis.nachricht
+
+
+def test_arbeitstakt_landet_in_der_startdatei(appdata):
+    windows.einschalten(host="0.0.0.0", nur_lesen=True, auto_stunden=24)
+    inhalt = (appdata / windows.DATEINAME).read_text(encoding="utf-8")
+    assert "--auto-hours 24" in inhalt
+
+
+def test_ohne_takt_steht_nichts_davon_drin(appdata):
+    windows.einschalten()
+    assert "--auto-hours" not in (appdata / windows.DATEINAME).read_text(encoding="utf-8")
+
+
+def test_die_meldung_erklaert_den_takt(appdata):
+    ergebnis = windows.einschalten(auto_stunden=24)
+    assert "alle 24 Stunden" in ergebnis.nachricht
+    # Der entscheidende Hinweis: nicht bei jedem Neustart.
+    assert "Neustart" in ergebnis.nachricht

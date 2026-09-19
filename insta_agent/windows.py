@@ -41,7 +41,13 @@ def ist_eingeschaltet() -> bool:
     return bool(ziel and ziel.exists())
 
 
-def einschalten(*, host: str = "127.0.0.1", port: int = 8765, nur_lesen: bool = False) -> Ergebnis:
+def einschalten(
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    nur_lesen: bool = False,
+    auto_stunden: float = 0,
+) -> Ergebnis:
     """Legt die Startdatei im Autostart-Ordner ab."""
     ziel = _ziel()
     if ziel is None:
@@ -50,6 +56,8 @@ def einschalten(*, host: str = "127.0.0.1", port: int = 8765, nur_lesen: bool = 
     befehl = f'%PY% -m insta_agent.cli web --host {host} --port {port} --no-open'
     if nur_lesen:
         befehl += " --read-only"
+    if auto_stunden > 0:
+        befehl += f" --auto-hours {auto_stunden:g}"
 
     # chcp 65001 stellt die Ausgabe auf UTF-8 um, sonst werden Umlaute
     # im schwarzen Fenster zu Fragezeichen.
@@ -74,7 +82,13 @@ def einschalten(*, host: str = "127.0.0.1", port: int = 8765, nur_lesen: bool = 
     except OSError as exc:
         return Ergebnis(False, f"Konnte die Startdatei nicht anlegen: {exc}")
 
-    return Ergebnis(True, "Das Dashboard startet ab jetzt beim Anmelden mit.", ziel)
+    nachricht = "Das Dashboard startet ab jetzt beim Anmelden mit."
+    if auto_stunden > 0:
+        nachricht += (
+            f" Der Agent arbeitet dabei alle {auto_stunden:g} Stunden von selbst - "
+            "gerechnet ab seinem letzten Zyklus, nicht ab jedem Neustart."
+        )
+    return Ergebnis(True, nachricht, ziel)
 
 
 def ausschalten() -> Ergebnis:

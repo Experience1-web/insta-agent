@@ -193,6 +193,18 @@ class Store:
             "SELECT * FROM journal ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
 
+    def last_cycle_at(self) -> datetime | None:
+        """Ende des letzten abgeschlossenen Zyklus.
+
+        Grundlage für den Arbeitstakt: Ohne diese Angabe würde der Agent
+        bei jedem Neustart des Rechners erneut losarbeiten und Geld
+        ausgeben.
+        """
+        row = self._conn.execute(
+            "SELECT occurred_at FROM journal WHERE kind='cycle' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return datetime.fromisoformat(row["occurred_at"]) if row else None
+
     def next_cycle_number(self) -> int:
         row = self._conn.execute("SELECT MAX(cycle) AS c FROM journal").fetchone()
         return int((row["c"] or 0)) + 1

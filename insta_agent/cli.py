@@ -121,6 +121,11 @@ def web(
     read_only: bool = typer.Option(
         False, "--read-only", help="Nur nachsehen, nicht starten. Für den Zugriff von unterwegs."
     ),
+    auto_hours: float = typer.Option(
+        0,
+        "--auto-hours",
+        help="Arbeitstakt in Stunden. 24 heißt: einmal täglich von selbst. 0 schaltet ab.",
+    ),
     open_browser: bool = typer.Option(
         True, "--open/--no-open", help="Browser automatisch öffnen."
     ),
@@ -145,7 +150,12 @@ def web(
     from .web import starte_server
 
     starte_server(
-        settings, port=port, oeffnen=open_browser, host=host, nur_lesen=read_only
+        settings,
+        port=port,
+        oeffnen=open_browser,
+        host=host,
+        nur_lesen=read_only,
+        auto_stunden=auto_hours,
     )
 
 
@@ -154,6 +164,9 @@ def autostart(
     ein: bool = typer.Option(None, "--ein/--aus", help="Autostart ein- oder ausschalten."),
     handy: bool = typer.Option(
         False, "--handy", help="Auch im WLAN erreichbar machen, nur zum Nachsehen."
+    ),
+    arbeitet: float = typer.Option(
+        0, "--arbeitet", help="Arbeitstakt in Stunden, etwa 24 für einmal täglich."
     ),
     port: int = typer.Option(8765),
 ) -> None:
@@ -177,7 +190,10 @@ def autostart(
 
     ergebnis = (
         windows.einschalten(
-            host="0.0.0.0" if handy else "127.0.0.1", port=port, nur_lesen=handy
+            host="0.0.0.0" if handy else "127.0.0.1",
+            port=port,
+            nur_lesen=handy,
+            auto_stunden=arbeitet,
         )
         if ein
         else windows.ausschalten()

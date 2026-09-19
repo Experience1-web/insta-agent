@@ -114,6 +114,7 @@
   <p class="hinweis" id="starthinweis" style="margin:12px 0 0">
     Der erste Lauf dauert einige Minuten. Veröffentlicht wird nichts – es entstehen nur Entwürfe.
   </p>
+  <p class="hinweis" id="takthinweis" style="margin:8px 0 0; display:none"></p>
 </div>
 
 <div id="protokollbox" style="display:none">
@@ -179,11 +180,19 @@ function zeichne(d) {
   $("steuerung").style.display = steuerung_sichtbar;
   $("steuerungstitel").style.display = steuerung_sichtbar;
 
+  const takt = $("takthinweis");
+  takt.style.display = d.auto_stunden ? "" : "none";
+  if (d.auto_stunden) {
+    takt.textContent =
+      `Er arbeitet alle ${d.auto_stunden} Stunden von selbst – gerechnet ab seinem ` +
+      `letzten Zyklus, nicht ab jedem Neustart des Rechners.`;
+  }
+
   $("start").disabled = d.laeuft;
   $("start").textContent = d.laeuft ? "Läuft …" : "Starten";
   $("zustand").innerHTML = d.laeuft
     ? '<span class="puls"></span> arbeitet'
-    : '<span class="hinweis">bereit</span>';
+    : `<span class="hinweis">${takt_text(d)}</span>`;
 
   // Warnungen, die das Weiterarbeiten verhindern
   let warn = "";
@@ -291,6 +300,17 @@ function zeichne(d) {
 
 // Bei winzigen Ausgaben ergeben sich absurd wirkende Prozentzahlen.
 const deckung = q => (q > 9.99 ? "&gt;999" : Math.round(q * 100)) + " %";
+
+// Wann der Agent von selbst wieder loslegt.
+function takt_text(d) {
+  if (!d.auto_stunden) return "bereit";
+  if (!d.naechster_lauf) return "bereit";
+  const rest = new Date(d.naechster_lauf) - new Date();
+  if (rest <= 0) return "arbeitet gleich";
+  const stunden = Math.floor(rest / 3600000);
+  const minuten = Math.round((rest % 3600000) / 60000);
+  return stunden ? `wieder in ${stunden} h ${minuten} min` : `wieder in ${minuten} min`;
+}
 
 const kachel = (wert, name) =>
   `<div class="kachel"><div class="wert">${wert}</div><div class="name">${name}</div></div>`;
