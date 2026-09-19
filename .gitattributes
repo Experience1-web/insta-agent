@@ -1,0 +1,7 @@
+# Git wandelt auf Windows standardmäßig Zeilenenden um. Dadurch gelten
+# Dateien plötzlich als bearbeitet, und `git pull` verweigert die
+# Aktualisierung mit "local changes would be overwritten" - ohne dass
+# jemand etwas bearbeitet hätte.
+#
+# Hier bleibt alles byteweise so, wie es abgelegt wurde.
+* -text
