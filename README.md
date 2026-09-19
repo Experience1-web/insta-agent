@@ -163,6 +163,15 @@ posting:
 Setze die Sparschwelle nicht über das Startkapital — sonst läuft der Agent
 vom ersten Zyklus an gedrosselt. Er warnt dich, wenn das passiert.
 
+Für ein **kleines Startguthaben von 5 USD** liegt eine fertige
+`config/agent.yaml` bei: Sparschwelle 1,50 USD, Stopp bei 0,25 USD,
+höchstens 0,50 USD pro Zyklus. Damit reicht das Guthaben für grob 10–50
+Durchläufe.
+
+`TREASURY_START_USD` in der `.env` **überschreibt** den YAML-Wert. Lass die
+Zeile auskommentiert, solange du die Kasse über die YAML-Datei steuerst —
+sonst plant der Agent mit Geld, das nicht aufgeladen ist.
+
 ---
 
 ## Aufbau

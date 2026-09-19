@@ -1,0 +1,24 @@
+# Fertige Einstellung für ein kleines Startguthaben von 5 USD.
+#
+# Die Schwellen sind bewusst eng gesetzt: Bei 5 USD Guthaben und der
+# Standard-Sparschwelle von 5 USD liefe der Agent sonst vom ersten Zyklus
+# an gedrosselt. Lädst du später mehr auf, zieh die Werte mit hoch.
+
+llm:
+  model: claude-opus-5          # Strategie, Recherche, Reflexion
+  cheap_model: claude-haiku-4-5 # Routinearbeit, spart Budget
+  fallback_model: claude-opus-4-8
+  effort: high
+  max_tokens: 16000
+
+economy:
+  treasury_start_usd: 5.00
+  low_balance_usd: 1.50   # ab hier Sparbetrieb - reicht noch für einige Zyklen
+  halt_balance_usd: 0.25  # darunter stoppt er und meldet sich bei dir
+  max_cost_per_cycle_usd: 0.50  # ein Ausreißer kostet höchstens 50 Cent
+
+posting:
+  posts_per_day: 1
+  preferred_hours: [8, 12, 18]
+  max_hashtags: 20
+  live: false             # erst umstellen, wenn dir die Entwürfe gefallen
