@@ -149,3 +149,44 @@ def test_mehrzeilige_eingabe_wird_zu_einer_zeile_zusammengezogen():
 
     # Auch Leerzeichen und Tabs verschwinden.
     assert "".join("  sk-ant-x y\tz ".split()) == "sk-ant-xyz"
+
+
+# --- Anführungszeichen ----------------------------------------------------
+
+
+def test_eingefasster_wert_wird_ausgepackt(tmp_path):
+    from insta_agent.config import _load_dotenv
+
+    env = tmp_path / ".env"
+    env.write_text('ANTHROPIC_API_KEY="sk-ant-abc"\n', encoding="utf-8")
+    _load_dotenv(env)
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-abc"
+
+
+def test_einzelnes_anfuehrungszeichen_wird_nicht_abgeschnitten(tmp_path):
+    """Der Fehler, der genau ein Zeichen verschluckte.
+
+    Ein Schlüssel mit sichtbarem Anführungszeichen fällt sofort auf. Ein
+    um ein Zeichen gekürzter scheitert erst später beim API-Aufruf.
+    """
+    from insta_agent.config import _load_dotenv
+
+    env = tmp_path / ".env"
+    env.write_text('ANTHROPIC_API_KEY=sk-ant-abc"\n', encoding="utf-8")
+    _load_dotenv(env)
+    assert os.environ["ANTHROPIC_API_KEY"] == 'sk-ant-abc"'
+
+
+def test_apostroph_im_wert_bleibt_erhalten(tmp_path):
+    from insta_agent.config import _load_dotenv
+
+    env = tmp_path / ".env"
+    env.write_text("IG_USER_ID=abc'def\n", encoding="utf-8")
+    _load_dotenv(env)
+    assert os.environ["IG_USER_ID"] == "abc'def"
+
+
+def test_setup_entfernt_anfuehrungszeichen_aus_der_eingabe():
+    """Was `insta-agent setup` mit einem zu weit markierten Schlüssel macht."""
+    assert "".join('"sk-ant-abc"'.split()).strip("\"'") == "sk-ant-abc"
+    assert "".join('sk-ant-abc"'.split()).strip("\"'") == "sk-ant-abc"

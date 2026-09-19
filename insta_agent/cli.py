@@ -67,9 +67,11 @@ def setup() -> None:
     # Beim Einfügen aus der Zwischenablage kommen oft Zeilenumbrüche oder
     # Leerzeichen mit. Ein API-Schlüssel enthält nie welche, also raus damit -
     # sonst zerreißt ein Umbruch die .env und der Schlüssel geht verloren.
-    key = "".join(roh.split())
+    # Anführungszeichen kommen mit, wenn beim Markieren ein Zeichen zu viel
+    # erwischt wird. Ein API-Schlüssel enthält nie welche.
+    key = "".join(roh.split()).strip("\"'")
     if key != roh.strip():
-        console.print("[dim]Leerzeichen und Zeilenumbrüche aus der Eingabe entfernt.[/dim]")
+        console.print("[dim]Leerraum und Anführungszeichen aus der Eingabe entfernt.[/dim]")
 
     if not key:
         console.print("[red]Nichts eingegeben, nichts geändert.[/red]")

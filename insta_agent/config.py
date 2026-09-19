@@ -57,6 +57,19 @@ def set_env_value(key: str, value: str, path: Path | None = None) -> Path:
     return target
 
 
+def _unquote(value: str) -> str:
+    """Entfernt Anführungszeichen nur, wenn der Wert wirklich eingefasst ist.
+
+    Ein blindes strip('"') würde auch ein einzelnes Zeichen am Ende
+    abschneiden - und ein um ein Zeichen verkürzter Schlüssel ist schlimmer
+    als einer mit sichtbarem Anführungszeichen: Der erste scheitert später
+    mit einer nichtssagenden Fehlermeldung, der zweite fällt sofort auf.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
+
+
 def _load_dotenv(path: Path) -> None:
     """Minimaler .env-Loader, damit keine weitere Abhängigkeit nötig ist.
 
@@ -75,7 +88,7 @@ def _load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        values[key.strip()] = value.strip().strip('"').strip("'")
+        values[key.strip()] = _unquote(value.strip())
 
     for key, value in values.items():
         os.environ.setdefault(key, value)
