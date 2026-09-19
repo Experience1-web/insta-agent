@@ -99,6 +99,13 @@ class LLMConfig:
     model: str = "claude-opus-5"
     # Günstigeres Modell für Routinearbeit (Hashtags, Umformulierungen).
     cheap_model: str = "claude-haiku-4-5"
+    # Die Websuche ist der teuerste Einzelschritt. Sie braucht kein
+    # Spitzenmodell - Seiten lesen und zusammenfassen kann auch Sonnet,
+    # zu einem Bruchteil der Kosten.
+    research_model: str = "claude-sonnet-5"
+    research_effort: str = "medium"
+    max_web_searches: int = 4
+
     # Wohin der Agent ausweicht, wenn ein Aufruf mit stop_reason "refusal" endet.
     fallback_model: str = "claude-opus-4-8"
     effort: str = "high"

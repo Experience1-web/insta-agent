@@ -274,3 +274,35 @@ def test_eine_teure_recherche_geht_nicht_verloren(monkeypatch):
     assert analyse.sources == ["https://beispiel.de/studie"]
     # Als unsicher gekennzeichnet, damit der Agent nicht zu viel darauf gibt.
     assert analyse.confidence == "low"
+
+
+def test_eine_bezahlte_recherche_wird_beim_zweiten_versuch_wiederverwendet(agent, monkeypatch):
+    """Bricht der Geburtszyklus ab, darf der nächste nicht neu einkaufen."""
+    from insta_agent.runner import KEY_ANALYSIS
+
+    aufrufe = {"n": 0}
+    echte_recherche = None
+
+    def zaehlende_recherche(brain, **kwargs):
+        aufrufe["n"] += 1
+        return _analyse()
+
+    monkeypatch.setattr("insta_agent.runner.run_market_research", zaehlende_recherche)
+
+    # Erster Versuch: Recherche läuft, danach bricht es ab.
+    def platzt(*a, **k):
+        raise RuntimeError("Budget alle")
+
+    monkeypatch.setattr("insta_agent.runner.invent_identity", platzt)
+    with pytest.raises(RuntimeError):
+        agent.bootstrap()
+
+    assert aufrufe["n"] == 1
+    assert agent.store.get_json(KEY_ANALYSIS) is not None
+
+    # Zweiter Versuch: kein weiterer Rechercheaufruf.
+    monkeypatch.setattr("insta_agent.runner.invent_identity", lambda *a, **k: _identitaet())
+    agent.bootstrap()
+
+    assert aufrufe["n"] == 1, "die Recherche wurde ein zweites Mal bezahlt"
+    assert agent.identity is not None

@@ -23,6 +23,7 @@ def run_market_research(brain: Brain, *, identity=None, focus: str | None = None
     research = brain.text(
         system=PERSONA,
         label="Marktrecherche",
+        task="research",
         web_search=True,
         prompt=with_context(
             identity_block(identity),

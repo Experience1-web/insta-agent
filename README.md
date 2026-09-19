@@ -300,8 +300,16 @@ vom ersten Zyklus an gedrosselt. Er warnt dich, wenn das passiert.
 
 Für ein **kleines Startguthaben von 5 USD** liegt eine fertige
 `config/agent.yaml` bei: Sparschwelle 1,50 USD, Stopp bei 0,25 USD,
-höchstens 0,50 USD pro Zyklus. Damit reicht das Guthaben für grob 10–50
-Durchläufe.
+höchstens 1,50 USD pro Zyklus.
+
+Die Obergrenze muss den **Geburtszyklus** tragen — der ist der teuerste,
+weil Recherche, Identität, Strategie und erster Post zusammenfallen. Ist
+sie zu eng, bricht er mittendrin ab, und die bereits bezahlte Arbeit
+bringt nichts. Spätere Zyklen kosten deutlich weniger.
+
+Die Websuche läuft bewusst auf `claude-sonnet-5` statt Opus: Seiten lesen
+und zusammenfassen braucht kein Spitzenmodell, kostet dort aber das
+Zweieinhalbfache.
 
 `TREASURY_START_USD` in der `.env` **überschreibt** den YAML-Wert. Lass die
 Zeile auskommentiert, solange du die Kasse über die YAML-Datei steuerst —
@@ -342,6 +350,6 @@ insta_agent/
 pytest
 ```
 
-119 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+125 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

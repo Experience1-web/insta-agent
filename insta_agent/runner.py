@@ -195,8 +195,16 @@ class Agent:
             return existing
 
         log.info("Kein Profil vorhanden - der Agent erfindet sich selbst")
-        analysis = run_market_research(self.brain, identity=None, focus=operator_hint)
-        self.store.set_json(KEY_ANALYSIS, analysis)
+
+        # Bricht der erste Lauf nach der Recherche ab, ist sie trotzdem
+        # bezahlt und gespeichert. Sie dann beim nächsten Versuch erneut
+        # einzukaufen, wäre das Geld zweimal ausgegeben.
+        analysis = self.analysis
+        if analysis is None:
+            analysis = run_market_research(self.brain, identity=None, focus=operator_hint)
+            self.store.set_json(KEY_ANALYSIS, analysis)
+        else:
+            log.info("Recherche aus dem Gedächtnis übernommen, spart einen teuren Aufruf")
 
         identity = invent_identity(self.brain, analysis, operator_hint=operator_hint)
         self.store.set_json(KEY_IDENTITY, identity)

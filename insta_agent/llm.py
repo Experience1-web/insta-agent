@@ -44,11 +44,8 @@ def unterstuetzt_effort(model: str) -> bool:
 
 # Server-seitige Websuche. Läuft bei Anthropic, es gibt nichts selbst
 # auszuführen; die Ergebnisse kommen als Blöcke in derselben Antwort.
-WEB_SEARCH_TOOL: dict[str, Any] = {
-    "type": "web_search_20260209",
-    "name": "web_search",
-    "max_uses": 6,
-}
+def web_search_tool(max_uses: int) -> dict[str, Any]:
+    return {"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}
 
 
 class ModelRefused(RuntimeError):
@@ -71,15 +68,22 @@ class Brain:
 
     # -- Modellwahl --------------------------------------------------------
 
-    def _output_config(self, model: str) -> dict[str, Any] | None:
+    def _output_config(self, model: str, task: str) -> dict[str, Any] | None:
         """Die Aufwandsstufe nur dort mitschicken, wo sie akzeptiert wird."""
-        return {"effort": self.config.effort} if unterstuetzt_effort(model) else None
+        if not unterstuetzt_effort(model):
+            return None
+        aufwand = self.config.research_effort if task == "research" else self.config.effort
+        return {"effort": aufwand}
 
     def _model_for(self, task: str) -> str:
-        """Im Sparbetrieb läuft alles auf dem günstigen Modell."""
+        """Jede Aufgabe bekommt das Modell, das sie wirklich braucht."""
         if self.treasury.state().mode is Mode.FRUGAL:
             return self.config.cheap_model
-        return self.config.cheap_model if task == "routine" else self.config.model
+        if task == "routine":
+            return self.config.cheap_model
+        if task == "research":
+            return self.config.research_model
+        return self.config.model
 
     def _book(self, model: str, response: Any, label: str) -> float:
         cost = cost_of_usage(model, response.usage)
@@ -122,7 +126,7 @@ class Brain:
                 "messages": [{"role": "user", "content": prompt}],
                 "output_format": schema,
             }
-            if konfig := self._output_config(attempt_model):
+            if konfig := self._output_config(attempt_model, task):
                 kwargs["output_config"] = konfig
 
             response = self.client.messages.parse(**kwargs)
@@ -152,7 +156,7 @@ class Brain:
         """Ein Textaufruf. Mit web_search recherchiert das Modell selbst."""
         self.treasury.check()
         model = self._model_for(task)
-        tools = [WEB_SEARCH_TOOL] if web_search else []
+        tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         total_cost = 0.0
@@ -166,7 +170,7 @@ class Brain:
                 "system": system,
                 "messages": messages,
             }
-            if konfig := self._output_config(model):
+            if konfig := self._output_config(model, task):
                 kwargs["output_config"] = konfig
             if tools:
                 kwargs["tools"] = tools

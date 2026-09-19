@@ -32,3 +32,63 @@ def test_die_gunstige_routine_nutzt_ein_modell_ohne_aufwandsstufe():
     config = LLMConfig()
     assert not unterstuetzt_effort(config.cheap_model)
     assert unterstuetzt_effort(config.model)
+
+
+# --- Modellwahl je Aufgabe ------------------------------------------------
+
+
+class FakeTreasury:
+    def __init__(self, modus):
+        self._modus = modus
+
+    def state(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(mode=self._modus)
+
+
+def _brain():
+    from insta_agent.config import LLMConfig
+    from insta_agent.economy.ledger import Mode
+    from insta_agent.llm import Brain
+
+    b = object.__new__(Brain)
+    b.config = LLMConfig()
+    b.treasury = FakeTreasury(Mode.NORMAL)
+    return b
+
+
+def test_die_recherche_nutzt_das_guenstigere_modell():
+    """Websuche war der teuerste Schritt - Seiten lesen kann auch Sonnet."""
+    b = _brain()
+    assert b._model_for("research") == b.config.research_model
+    assert b._model_for("research") != b.config.model
+
+
+def test_entscheidungen_laufen_auf_dem_grossen_modell():
+    b = _brain()
+    assert b._model_for("reasoning") == b.config.model
+
+
+def test_routine_laeuft_auf_dem_billigsten():
+    b = _brain()
+    assert b._model_for("routine") == b.config.cheap_model
+
+
+def test_im_sparbetrieb_laeuft_alles_billig():
+    from insta_agent.economy.ledger import Mode
+
+    b = _brain()
+    b.treasury = FakeTreasury(Mode.FRUGAL)
+    for aufgabe in ("reasoning", "research", "routine"):
+        assert b._model_for(aufgabe) == b.config.cheap_model
+
+
+def test_die_recherche_denkt_weniger_tief():
+    """Spart Denk-Token bei einem Schritt, der vor allem Lesen ist."""
+    b = _brain()
+    recherche = b._output_config(b.config.research_model, "research")
+    denken = b._output_config(b.config.model, "reasoning")
+
+    assert recherche == {"effort": "medium"}
+    assert denken == {"effort": "high"}
