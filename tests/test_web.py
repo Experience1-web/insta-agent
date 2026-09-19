@@ -207,3 +207,11 @@ def test_der_qr_code_enthaelt_die_volle_adresse():
 
     assert puffer.getvalue().startswith(b"\x89PNG")
     assert segno.make(adresse, error="m").matrix is not None
+
+
+def test_der_zustand_verraet_den_laufenden_stand(settings):
+    """Ohne diese Angabe merkt niemand, dass ein `git pull` nicht ankam."""
+    zustand = Steuerung(settings).zustand()
+
+    assert "version" in zustand
+    assert zustand["grenze_pro_zyklus"] == settings.economy.max_cost_per_cycle_usd

@@ -204,11 +204,37 @@ class Steuerung:
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
                 "handy_url": self.handy_url,
+                "version": version(),
+                "grenze_pro_zyklus": self.settings.economy.max_cost_per_cycle_usd,
                 "schluessel_da": bool(self.settings.anthropic_api_key),
                 "instagram_da": self.settings.instagram_ready,
             }
         finally:
             agent.close()
+
+
+def version() -> str:
+    """Welcher Stand gerade läuft.
+
+    Ohne diese Angabe lässt sich nicht erkennen, ob ein `git pull`
+    angekommen ist - man sieht nur, dass sich das Verhalten nicht
+    geändert hat, und sucht den Fehler an der falschen Stelle.
+    """
+    import subprocess
+
+    from .config import REPO_ROOT
+
+    try:
+        ergebnis = subprocess.run(
+            ["git", "log", "-1", "--format=%h vom %cd", "--date=format:%d.%m. %H:%M"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return ergebnis.stdout.strip() or "unbekannt"
+    except Exception:  # noqa: BLE001 - ohne git ist das kein Grund zu scheitern
+        return "unbekannt"
 
 
 def _verstaendlich(exc: Exception) -> str:
