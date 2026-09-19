@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from ..llm import Brain
 from ..models import MarketAnalysis
 from .prompts import PERSONA, identity_block, with_context
+
+log = logging.getLogger(__name__)
 
 
 def run_market_research(brain: Brain, *, identity=None, focus: str | None = None) -> MarketAnalysis:
@@ -38,12 +42,13 @@ herausfindest, schreib das hin, statt es zu erfinden.""",
         ),
     )
 
-    analysis = brain.structured(
-        schema=MarketAnalysis,
-        system=PERSONA,
-        label="Recherche ordnen",
-        task="routine",
-        prompt=f"""\
+    try:
+        analysis = brain.structured(
+            schema=MarketAnalysis,
+            system=PERSONA,
+            label="Recherche ordnen",
+            task="routine",
+            prompt=f"""\
 Bring deine eigene Recherche in die vorgegebene Struktur. Erfinde nichts
 dazu, was nicht im Text steht.
 
@@ -52,7 +57,18 @@ dazu, was nicht im Text steht.
 
 # Gefundene Quellen
 {chr(10).join(research.sources) or "keine"}""",
-    )
+        )
+    except Exception as exc:  # noqa: BLE001 - die Recherche war teuer
+        # Das Ordnen ist der billige Schritt, die Recherche der teure. Sie
+        # wegzuwerfen, weil das Sortieren hakt, wäre die schlechteste
+        # Reaktion - der Agent hat dafür schon bezahlt.
+        log.warning("Recherche ließ sich nicht ordnen (%s), nutze den Rohtext", exc)
+        analysis = MarketAnalysis(
+            summary=research.text[:4000] or "Keine verwertbare Recherche.",
+            trends=[],
+            content_opportunities=[],
+            confidence="low",
+        )
 
     # Die URLs kommen aus dem Tool, nicht aus dem Modell - also hier setzen.
     analysis.sources = research.sources

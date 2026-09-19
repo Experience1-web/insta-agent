@@ -247,3 +247,30 @@ def test_das_protokoll_haelt_den_zyklus_fest(agent):
     agent.run_cycle()
     arten = {row["kind"] for row in agent.store.recent_journal(50)}
     assert {"identity", "metrics", "cycle"} <= arten
+
+
+def test_eine_teure_recherche_geht_nicht_verloren(monkeypatch):
+    """Scheitert das billige Ordnen, bleibt die bezahlte Recherche erhalten."""
+    from insta_agent.brain.research import run_market_research
+    from insta_agent.llm import CallResult
+
+    class HalbKaputtesBrain:
+        """Die Websuche gelingt, das Strukturieren nicht."""
+
+        def text(self, **kwargs):
+            return CallResult(
+                text="Kurzvideos wachsen stark, Zitatkacheln sind übersättigt.",
+                cost_usd=0.49,
+                model="claude-opus-5",
+                sources=["https://beispiel.de/studie"],
+            )
+
+        def structured(self, **kwargs):
+            raise RuntimeError("This model does not support the effort parameter.")
+
+    analyse = run_market_research(HalbKaputtesBrain(), identity=None)
+
+    assert "Kurzvideos" in analyse.summary
+    assert analyse.sources == ["https://beispiel.de/studie"]
+    # Als unsicher gekennzeichnet, damit der Agent nicht zu viel darauf gibt.
+    assert analyse.confidence == "low"

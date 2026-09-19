@@ -22,6 +22,26 @@ log = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+# Nicht jedes Modell kennt die Aufwandsstufe. Haiku 4.5 und die 4.5er
+# Sonnets lehnen sie mit einem 400er ab. Deshalb eine Positivliste: Bei
+# einem unbekannten Modell wird der Parameter weggelassen, was höchstens
+# die Voreinstellung bedeutet - und nicht den Abbruch des Zyklus.
+EFFORT_MODELLE = (
+    "claude-fable-5",
+    "claude-mythos-5",
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+)
+
+
+def unterstuetzt_effort(model: str) -> bool:
+    return model.startswith(EFFORT_MODELLE)
+
+
 # Server-seitige Websuche. Läuft bei Anthropic, es gibt nichts selbst
 # auszuführen; die Ergebnisse kommen als Blöcke in derselben Antwort.
 WEB_SEARCH_TOOL: dict[str, Any] = {
@@ -50,6 +70,10 @@ class Brain:
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     # -- Modellwahl --------------------------------------------------------
+
+    def _output_config(self, model: str) -> dict[str, Any] | None:
+        """Die Aufwandsstufe nur dort mitschicken, wo sie akzeptiert wird."""
+        return {"effort": self.config.effort} if unterstuetzt_effort(model) else None
 
     def _model_for(self, task: str) -> str:
         """Im Sparbetrieb läuft alles auf dem günstigen Modell."""
@@ -91,14 +115,17 @@ class Brain:
         model = self._model_for(task)
 
         for attempt_model in (model, self.config.fallback_model):
-            response = self.client.messages.parse(
-                model=attempt_model,
-                max_tokens=self.config.max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": prompt}],
-                output_format=schema,
-                output_config={"effort": self.config.effort},
-            )
+            kwargs: dict[str, Any] = {
+                "model": attempt_model,
+                "max_tokens": self.config.max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": prompt}],
+                "output_format": schema,
+            }
+            if konfig := self._output_config(attempt_model):
+                kwargs["output_config"] = konfig
+
+            response = self.client.messages.parse(**kwargs)
             self._book(attempt_model, response, label)
             if self._refused(response):
                 log.warning("%s wurde von %s abgelehnt, weiche aus", label, attempt_model)
@@ -138,8 +165,9 @@ class Brain:
                 "max_tokens": self.config.max_tokens,
                 "system": system,
                 "messages": messages,
-                "output_config": {"effort": self.config.effort},
             }
+            if konfig := self._output_config(model):
+                kwargs["output_config"] = konfig
             if tools:
                 kwargs["tools"] = tools
 
