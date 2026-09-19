@@ -442,7 +442,9 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                         f"Grenze: {steuerung.settings.economy.max_cost_per_cycle_usd:.2f} USD pro Zyklus\n"
                     ).encode("utf-8"),
                 )
-            elif pfad.path == "/avatar":
+            elif pfad.path in ("/avatar", "/favicon.ico"):
+                # Auch als Symbol im Browsertab: Wer mehrere Fenster offen
+                # hat, erkennt seinen Mitarbeiter am Gesicht.
                 self._sende_avatar()
             elif pfad.path == "/qr":
                 self._sende_qr()

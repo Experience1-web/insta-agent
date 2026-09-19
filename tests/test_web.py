@@ -2,6 +2,7 @@
 
 import json
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 
 import pytest
 
@@ -580,3 +581,71 @@ def test_ohne_eigenes_portrait_und_ohne_profil_gibt_es_keins(settings, tmp_path,
     finally:
         server.shutdown()
         server.server_close()
+
+
+
+# --- Das Symbol im Browsertab ---------------------------------------------
+
+
+def _laufender_server(settings):
+    """Startet den echten Server auf einem freien Port."""
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None)
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_das_tabsymbol_kommt_vom_portrait(settings):
+    """Sonst fragt jeder Browser /favicon.ico an und bekommt einen 404.
+
+    Sichtbar wurde das als roter Fehler in der Browserkonsole. Nebenbei
+    erkennt man an einem eigenen Symbol, welcher Tab das Dashboard ist.
+    """
+    import urllib.request
+
+    from insta_agent.models import Identity
+    from insta_agent.runner import KEY_IDENTITY
+    from insta_agent.store import Store
+
+    store = Store(settings.db_path)
+    store.set_json(
+        KEY_IDENTITY,
+        Identity(
+            agent_name="Jonas Rieck",
+            agent_why="x",
+            handle="vieruhrfreitag",
+            display_name="Jonas Rieck",
+            motto="x",
+            niche="x",
+            target_audience="x",
+            tone_of_voice="x",
+            visual_identity="x",
+            content_pillars=["a", "b", "c"],
+            bio="x",
+            why_this_works="x",
+        ).model_dump(mode="json"),
+    )
+    store.close()
+
+    server = _laufender_server(settings)
+    try:
+        port = server.server_address[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/favicon.ico") as antwort:
+            assert antwort.status == 200
+            # PNG erkennt man an den ersten acht Bytes.
+            assert antwort.read(8) == b"\x89PNG\r\n\x1a\n"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_die_seite_verlangt_das_portrait_als_tabsymbol():
+    seite = (Path(__file__).resolve().parent.parent
+             / "insta_agent" / "web_page.html").read_text("utf-8")
+    assert '<link rel="icon" href="/avatar">' in seite
