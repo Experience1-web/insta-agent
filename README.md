@@ -56,6 +56,7 @@ insta-agent drafts       # was er geschrieben hat
 insta-agent money        # Kasse und Geschäftsideen
 insta-agent journal      # sein Arbeitsprotokoll
 insta-agent where        # wo seine Dateien auf deinem Rechner liegen
+insta-agent check        # prüft, ob die Zugangsdaten richtig eingetragen sind
 insta-agent earn 12.50 --category digital_product --note "2 Vorlagen verkauft"
 insta-agent run --cycles 7 --interval 3600   # eine Woche am Stück
 ```
@@ -214,6 +215,6 @@ insta_agent/
 pytest
 ```
 
-47 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+49 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

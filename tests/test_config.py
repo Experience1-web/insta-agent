@@ -126,3 +126,26 @@ def test_geschriebener_wert_wird_wieder_gelesen(tmp_path):
     set_env_value("ANTHROPIC_API_KEY", "sk-ant-rundlauf", path=env)
     _load_dotenv(env)
     assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-rundlauf"
+
+
+def test_zeilenumbruch_im_wert_wird_abgelehnt(tmp_path):
+    """Ein Umbruch würde die Datei zerreißen - lieber sofort scheitern."""
+    from insta_agent.config import set_env_value
+
+    env = tmp_path / ".env"
+    env.write_text("ANTHROPIC_API_KEY=sk-ant-...\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Zeilenumbruch"):
+        set_env_value("ANTHROPIC_API_KEY", "sk-ant-abc\ndef", path=env)
+
+    # Die Datei bleibt unangetastet.
+    assert env.read_text(encoding="utf-8") == "ANTHROPIC_API_KEY=sk-ant-...\n"
+
+
+def test_mehrzeilige_eingabe_wird_zu_einer_zeile_zusammengezogen():
+    """Was `insta-agent setup` mit einer Einfügung aus der Zwischenablage macht."""
+    roh = "sk-ant-abc123\ndef456\n"
+    assert "".join(roh.split()) == "sk-ant-abc123def456"
+
+    # Auch Leerzeichen und Tabs verschwinden.
+    assert "".join("  sk-ant-x y\tz ".split()) == "sk-ant-xyz"

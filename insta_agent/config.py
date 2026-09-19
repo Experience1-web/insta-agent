@@ -25,6 +25,13 @@ def set_env_value(key: str, value: str, path: Path | None = None) -> Path:
     wenn sie auskommentiert ist. So entstehen keine Doppeleinträge, über
     die man später stolpert.
     """
+    if "\n" in value or "\r" in value:
+        raise ValueError(
+            "Der Wert enthält einen Zeilenumbruch. Ein Eintrag in der .env muss "
+            "auf eine einzige Zeile passen - sonst landet der Rest als kaputte "
+            "Zeile in der Datei und wird beim Lesen stillschweigend verschluckt."
+        )
+
     target = path or ENV_PATH
     if not target.exists():
         target.write_text(

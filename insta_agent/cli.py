@@ -62,7 +62,14 @@ def setup() -> None:
     console.print("Deinen Schlüssel bekommst du unter console.anthropic.com → Settings → API keys.")
     console.print("[dim]Beim Eintippen bleibt er unsichtbar, das ist Absicht.[/dim]\n")
 
-    key = typer.prompt("API-Schlüssel", hide_input=True).strip()
+    roh = typer.prompt("API-Schlüssel", hide_input=True)
+
+    # Beim Einfügen aus der Zwischenablage kommen oft Zeilenumbrüche oder
+    # Leerzeichen mit. Ein API-Schlüssel enthält nie welche, also raus damit -
+    # sonst zerreißt ein Umbruch die .env und der Schlüssel geht verloren.
+    key = "".join(roh.split())
+    if key != roh.strip():
+        console.print("[dim]Leerzeichen und Zeilenumbrüche aus der Eingabe entfernt.[/dim]")
 
     if not key:
         console.print("[red]Nichts eingegeben, nichts geändert.[/red]")
@@ -86,7 +93,12 @@ def setup() -> None:
     if settings.anthropic_api_key == key:
         console.print("[green]Gegenprobe bestanden - der Agent findet den Schlüssel.[/green]")
     else:
-        console.print("[red]Der Schlüssel wurde geschrieben, aber nicht wieder eingelesen.[/red]")
+        console.print(
+            "[red]Der Schlüssel wurde geschrieben, aber nicht wieder eingelesen.[/red]\n"
+            f"Erwartet: {len(key)} Zeichen, gelesen: "
+            f"{len(settings.anthropic_api_key or '')} Zeichen.\n"
+            "Sieh mit [bold]insta-agent check[/bold] nach, was in der Datei steht."
+        )
         raise typer.Exit(1)
 
     console.print(
@@ -95,6 +107,65 @@ def setup() -> None:
         "[dim]Falls dabei ein Guthaben-Fehler kommt: unter console.anthropic.com "
         "→ Settings → Billing Guthaben aufladen.[/dim]"
     )
+
+
+@app.command()
+def check() -> None:
+    """Prüft, ob die Zugangsdaten richtig in der .env stehen.
+
+    Zeigt den Schlüssel nur verkürzt an - genug zum Erkennen, zu wenig zum
+    Missbrauchen.
+    """
+    if not ENV_PATH.exists():
+        console.print(f"[red]Es gibt noch keine .env unter {ENV_PATH}[/red]")
+        console.print("Leg sie an mit: [bold]insta-agent setup[/bold]")
+        raise typer.Exit(1)
+
+    zeilen = ENV_PATH.read_text(encoding="utf-8").splitlines()
+
+    # Zeilen ohne "=" und ohne "#" sind Bruchstücke eines zerrissenen Wertes.
+    kaputt = [
+        (nummer, zeile)
+        for nummer, zeile in enumerate(zeilen, 1)
+        if zeile.strip() and not zeile.strip().startswith("#") and "=" not in zeile
+    ]
+    if kaputt:
+        console.print("[red]Kaputte Zeilen in der .env gefunden:[/red]")
+        for nummer, zeile in kaputt:
+            console.print(f"  Zeile {nummer}: {zeile[:40]!r}")
+        console.print(
+            "\nDas passiert, wenn beim Einfügen ein Zeilenumbruch mitkam.\n"
+            "Lösch diese Zeilen oder trag den Schlüssel neu ein mit "
+            "[bold]insta-agent setup[/bold]."
+        )
+
+    settings = load_settings()
+    schluessel = settings.anthropic_api_key
+
+    table = Table(title="Zugangsdaten")
+    table.add_column("Was", style="bold")
+    table.add_column("Stand")
+
+    if not schluessel:
+        table.add_row("Claude API", "[red]fehlt[/red]")
+    elif not schluessel.startswith("sk-ant-"):
+        table.add_row("Claude API", f"[yellow]verdächtig: {schluessel[:10]}…[/yellow]")
+    else:
+        maskiert = f"{schluessel[:11]}…{schluessel[-4:]} ({len(schluessel)} Zeichen)"
+        table.add_row("Claude API", f"[green]{maskiert}[/green]")
+
+    table.add_row(
+        "Instagram",
+        "[green]verbunden[/green]" if settings.instagram_ready else "[dim]nicht nötig für Entwürfe[/dim]",
+    )
+    table.add_row(
+        "Veröffentlichen",
+        "[green]möglich[/green]" if settings.can_publish else "[dim]nur Entwürfe[/dim]",
+    )
+    console.print(table)
+
+    if schluessel and schluessel.startswith("sk-ant-") and not kaputt:
+        console.print("\n[green]Alles bereit. Starte mit:[/green] [bold]insta-agent run[/bold]")
 
 
 @app.command()
