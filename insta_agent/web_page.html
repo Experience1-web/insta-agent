@@ -96,6 +96,7 @@
 </header>
 
 <div id="warnbox"></div>
+<div id="handybox"></div>
 
 <h2>Kasse</h2>
 <div class="kacheln" id="kasse"></div>
@@ -205,6 +206,29 @@ function zeichne(d) {
       <p style="margin:8px 0 0">${esc(d.fehler)}</p></div>`;
   }
   $("warnbox").innerHTML = warn;
+
+  // Freigabe fürs Handy: den QR nur auf dem eigenen Rechner zeigen -
+  // wer schon auf dem Handy ist, braucht ihn nicht mehr.
+  const am_pc = ["127.0.0.1", "localhost"].includes(location.hostname);
+  $("handybox").innerHTML = (d.handy_url && am_pc) ? `
+    <h2>Aufs Handy holen</h2>
+    <div class="karte" style="display:flex; gap:20px; align-items:center; flex-wrap:wrap">
+      <img src="/qr" alt="QR-Code" width="180" height="180"
+           style="border-radius:8px; background:#fff">
+      <div style="flex:1; min-width:220px">
+        <p style="margin:0 0 10px"><strong>Mit der Handykamera scannen.</strong></p>
+        <p class="hinweis" style="margin:0 0 10px">
+          Danach merkt sich dein Handy den Zugang – leg dir die Seite auf den Startbildschirm.
+        </p>
+        <p class="hinweis" style="margin:0; word-break:break-all">
+          Oder abtippen: <code>${esc(d.handy_url)}</code>
+        </p>
+        <p class="hinweis" style="margin:10px 0 0">
+          Beide Geräte müssen im selben WLAN sein. Die Adresse enthält dein
+          Zugangswort – behandle sie wie ein Passwort.
+        </p>
+      </div>
+    </div>` : "";
 
   // Kasse
   const k = d.kasse;

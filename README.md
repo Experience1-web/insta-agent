@@ -84,10 +84,13 @@ Gebaut ohne Zusatzbibliotheken, nur mit Bordmitteln von Python.
 insta-agent web --host 0.0.0.0 --read-only
 ```
 
-Beim Start wird eine zweite Adresse angezeigt, die ein **Zugangswort**
-enthält. Die öffnest du einmal auf dem Handy; der Browser merkt sich das
-Wort, danach genügt die nackte Adresse. Am besten als Lesezeichen auf den
-Startbildschirm legen.
+Beim Start erscheint ein **QR-Code** — im Terminal und im Dashboard.
+Einmal mit der Handykamera scannen, fertig. Der Browser merkt sich den
+Zugang, danach genügt die nackte Adresse; am besten legst du sie dir auf
+den Startbildschirm.
+
+Wer lieber tippt: Die vollständige Adresse steht daneben. Sie enthält ein
+**Zugangswort**, behandle sie wie ein Passwort.
 
 `--read-only` blendet die Steuerung aus: Von unterwegs siehst du Kasse,
 Kurs und Beiträge, aber niemand kann einen Zyklus starten. Lass es weg,
@@ -293,6 +296,6 @@ insta_agent/
 pytest
 ```
 
-82 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+84 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

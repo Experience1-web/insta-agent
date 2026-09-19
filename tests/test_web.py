@@ -186,3 +186,24 @@ def test_der_takt_darf_trotz_lesemodus_arbeiten(settings):
     _, grund_takt = steuerung.starte(zyklen=1, hinweis=None, von_hand=False)
     assert "nachsehen" not in grund_takt.lower()
     assert "Schlüssel" in grund_takt
+
+
+# --- QR-Code fürs Handy ---------------------------------------------------
+
+
+def test_ohne_freigabe_gibt_es_keine_handy_adresse(settings):
+    assert Steuerung(settings).zustand()["handy_url"] is None
+
+
+def test_der_qr_code_enthaelt_die_volle_adresse():
+    """Sonst nützt das Scannen nichts - das Zugangswort muss mit drin sein."""
+    import io
+
+    import segno
+
+    adresse = "http://192.168.1.42:8765/?token=geheim123"
+    puffer = io.BytesIO()
+    segno.make(adresse, error="m").save(puffer, kind="png", scale=4)
+
+    assert puffer.getvalue().startswith(b"\x89PNG")
+    assert segno.make(adresse, error="m").matrix is not None

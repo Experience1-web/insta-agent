@@ -55,6 +55,8 @@ class Steuerung:
         self.settings = settings
         self.nur_lesen = nur_lesen
         self.auto_stunden = auto_stunden
+        self.handy_url: str | None = None
+        """Die vollständige Adresse fürs Handy, samt Zugangswort."""
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.protokoll = LaufProtokoll()
@@ -201,6 +203,7 @@ class Steuerung:
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
+                "handy_url": self.handy_url,
                 "schluessel_da": bool(self.settings.anthropic_api_key),
                 "instagram_da": self.settings.instagram_ready,
             }
@@ -284,10 +287,28 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 )
             elif pfad.path == "/api/zustand":
                 self._json(steuerung.zustand())
+            elif pfad.path == "/qr":
+                self._sende_qr()
             elif pfad.path == "/media":
                 self._sende_bild(parse_qs(pfad.query).get("name", [""])[0])
             else:
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
+
+        def _sende_qr(self) -> None:
+            """Die Handy-Adresse als QR-Code, damit niemand sie abtippen muss."""
+            if not steuerung.handy_url:
+                self._sende(404, "text/plain; charset=utf-8", b"Keine Freigabe aktiv")
+                return
+
+            import io
+
+            import segno
+
+            puffer = io.BytesIO()
+            segno.make(steuerung.handy_url, error="m").save(
+                puffer, kind="png", scale=6, border=2, dark="#111318", light="#ffffff"
+            )
+            self._sende(200, "image/png", puffer.getvalue())
 
         def _sende_bild(self, name: str) -> None:
             """Liefert ein Bild aus dem Medienordner.
@@ -363,16 +384,28 @@ def starte_server(
     steuerung.starte_takt()
     server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
 
+    if nach_aussen:
+        steuerung.handy_url = f"http://{eigene_ip()}:{port}/?token={token}"
+
     lokal = f"http://127.0.0.1:{port}"
     if oeffnen:
         threading.Timer(0.5, lambda: webbrowser.open(lokal)).start()
 
     print(f"\n  Auf diesem Rechner:  {lokal}")
-    if nach_aussen:
-        print(f"  Von anderen Geräten: http://{eigene_ip()}:{port}/?token={token}")
+    if nach_aussen and steuerung.handy_url:
+        print(f"  Von anderen Geräten: {steuerung.handy_url}")
         print("\n  Diese Adresse enthält dein Zugangswort - behandle sie wie ein Passwort.")
         if nur_lesen:
             print("  Nur-Lesen-Modus: von außen kann niemand einen Zyklus starten.")
+
+        print("\n  Oder scann das hier mit der Handykamera:\n")
+        try:
+            import segno
+
+            segno.make(steuerung.handy_url, error="m").terminal(compact=True)
+        except Exception:  # noqa: BLE001 - ohne QR bleibt die Adresse zum Abtippen
+            print("  (QR-Code nicht darstellbar - nimm die Adresse von oben.)")
+        print(f"\n  Der Code steht auch im Dashboard unter {lokal}")
     if auto_stunden > 0:
         print(f"\n  Arbeitstakt: alle {auto_stunden:g} Stunden von selbst.")
     print("\n  Zum Beenden: Strg+C\n")
