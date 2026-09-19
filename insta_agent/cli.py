@@ -261,6 +261,30 @@ def wallet(
 
 
 @app.command()
+def stopp(
+    port: int = typer.Option(8765, help="Port, auf dem das Dashboard läuft."),
+) -> None:
+    """Beendet ein laufendes Dashboard, dessen Fenster nicht mehr auffindbar ist.
+
+    Läuft noch ein altes, kann kein neues starten - und der Browser zeigt
+    weiter den alten Stand, ohne dass man den Grund sieht.
+    """
+    import socket
+
+    from .web import beende_dashboard
+
+    with socket.socket() as pruefung:
+        if pruefung.connect_ex(("127.0.0.1", port)) != 0:
+            console.print(f"[dim]Auf Port {port} läuft kein Dashboard.[/dim]")
+            return
+
+    beendet, meldung = beende_dashboard(port)
+    console.print(f"[{'green' if beendet else 'red'}]{meldung}[/]")
+    if not beendet:
+        raise typer.Exit(1)
+
+
+@app.command()
 def check() -> None:
     """Prüft, ob die Zugangsdaten richtig in der .env stehen.
 

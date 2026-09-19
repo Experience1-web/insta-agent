@@ -215,3 +215,25 @@ def test_der_zustand_verraet_den_laufenden_stand(settings):
 
     assert "version" in zustand
     assert zustand["grenze_pro_zyklus"] == settings.economy.max_cost_per_cycle_usd
+
+
+def test_ein_belegter_port_beendet_mit_klarer_meldung(settings, capsys):
+    """Startet nichts, sieht man im Browser weiter die alte Seite."""
+    import socket
+
+    from insta_agent.web import starte_server
+
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    port = blocker.getsockname()[1]
+
+    try:
+        with pytest.raises(SystemExit):
+            starte_server(settings, port=port, oeffnen=False)
+        ausgabe = capsys.readouterr().out
+        assert "belegt" in ausgabe
+        assert "Dashboard beenden" in ausgabe
+    finally:
+        blocker.close()

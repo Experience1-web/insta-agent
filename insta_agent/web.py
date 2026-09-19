@@ -213,6 +213,42 @@ class Steuerung:
             agent.close()
 
 
+def beende_dashboard(port: int) -> tuple[bool, str]:
+    """Beendet den Prozess, der den Port belegt.
+
+    Unter Windows über netstat und taskkill, sonst über lsof - beides
+    gehört zum System, es braucht kein Zusatzwerkzeug.
+    """
+    import subprocess
+    import sys
+
+    try:
+        if sys.platform == "win32":
+            netstat = subprocess.run(
+                ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10
+            )
+            pids = {
+                zeile.split()[-1]
+                for zeile in netstat.stdout.splitlines()
+                if f":{port} " in zeile and "LISTENING" in zeile
+            }
+            for pid in pids:
+                subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=10)
+        else:
+            lsof = subprocess.run(
+                ["lsof", "-ti", f"tcp:{port}"], capture_output=True, text=True, timeout=10
+            )
+            pids = {p for p in lsof.stdout.split() if p}
+            for pid in pids:
+                subprocess.run(["kill", "-9", pid], capture_output=True, timeout=10)
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Konnte das Dashboard nicht beenden: {exc}"
+
+    if not pids:
+        return False, f"Kein Prozess gefunden, der Port {port} belegt."
+    return True, f"Dashboard beendet ({len(pids)} Prozess(e) auf Port {port})."
+
+
 def version() -> str:
     """Welcher Stand gerade läuft.
 
@@ -408,7 +444,19 @@ def starte_server(
 
     steuerung = Steuerung(settings, nur_lesen=nur_lesen, auto_stunden=auto_stunden)
     steuerung.starte_takt()
-    server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
+
+    try:
+        server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
+    except OSError as exc:
+        # Sonst startet nichts, der Browser zeigt weiter die alte Seite, und
+        # niemand versteht, warum Änderungen nicht ankommen.
+        print(
+            f"\n  Port {port} ist belegt - es läuft schon ein Dashboard.\n"
+            f"\n  Schließ das andere schwarze Fenster und versuch es erneut."
+            f"\n  Findest du es nicht: 'Dashboard beenden' im Ordner windows.\n"
+            f"\n  ({exc})\n"
+        )
+        raise SystemExit(1) from exc
 
     if nach_aussen:
         steuerung.handy_url = f"http://{eigene_ip()}:{port}/?token={token}"
