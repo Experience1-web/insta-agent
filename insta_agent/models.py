@@ -154,6 +154,61 @@ class MonetizationPlan(BaseModel):
 
 
 # --------------------------------------------------------------------------
+# Gewinnorientierung: lohnt sich der Kurs noch?
+# --------------------------------------------------------------------------
+
+
+class Opportunity(BaseModel):
+    """Eine Möglichkeit, mehr zu verdienen - nüchtern durchgerechnet."""
+
+    name: str
+    description: str = Field(description="Worum es geht, in zwei Sätzen")
+    revenue_model: Literal[
+        "digital_product", "affiliate", "sponsorship", "service", "subscription", "other"
+    ]
+    value_if_it_works_usd: float = Field(
+        description="Umsatz in 90 Tagen, WENN es aufgeht. Nüchtern, nicht erhofft."
+    )
+    probability: float = Field(
+        description="Wie wahrscheinlich es aufgeht, zwischen 0 und 1", ge=0.0, le=1.0
+    )
+    days_to_first_dollar: int = Field(description="Bis zum ersten verdienten Dollar")
+    effort: Literal["low", "medium", "high"]
+    needs_new_audience: bool = Field(
+        description="Ob dafür eine andere Zielgruppe nötig wäre als die jetzige"
+    )
+    operator_must_do: list[str] = Field(
+        default_factory=list, description="Was ein Mensch übernehmen muss"
+    )
+    why: str = Field(description="Warum diese Schätzung realistisch ist")
+
+    @property
+    def expected_value_usd(self) -> float:
+        """Erwartungswert: was die Idee im Mittel einbringt.
+
+        Eine Idee mit 10 Prozent Chance auf 1000 USD ist wenig wert -
+        genau das macht diese Zahl sichtbar.
+        """
+        return self.value_if_it_works_usd * self.probability
+
+
+class OpportunityAssessment(BaseModel):
+    """Die regelmäßige Frage: weitermachen oder etwas anderes tun?"""
+
+    current_path_value_usd: float = Field(
+        description="Erwarteter Umsatz der nächsten 90 Tage, wenn alles bleibt wie es ist"
+    )
+    current_path_reasoning: str = Field(description="Wie diese Zahl zustande kommt")
+    opportunities: list[Opportunity] = Field(default_factory=list)
+    switching_cost: str = Field(
+        description="Was ein Wechsel kostet: verlorene Follower, verlorene Zeit, verlorener Ruf"
+    )
+    recommendation: Literal["weitermachen", "ergaenzen", "wechseln"]
+    reasoning: str = Field(description="Die Begründung, mit Zahlen")
+    confidence: Literal["low", "medium", "high"]
+
+
+# --------------------------------------------------------------------------
 # Interne Zustandsobjekte, nicht vom Modell befüllt
 # --------------------------------------------------------------------------
 

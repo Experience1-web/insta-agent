@@ -4,6 +4,7 @@ from .strategy import update_strategy
 from .content import create_post_draft
 from .reflection import reflect
 from .business import build_monetization_plan
+from .opportunity import assess_opportunities
 
 __all__ = [
     "invent_identity",
@@ -12,4 +13,5 @@ __all__ = [
     "create_post_draft",
     "reflect",
     "build_monetization_plan",
+    "assess_opportunities",
 ]

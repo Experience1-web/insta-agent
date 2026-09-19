@@ -18,6 +18,7 @@ from pathlib import Path
 import anthropic
 
 from .brain import (
+    assess_opportunities,
     build_monetization_plan,
     create_post_draft,
     invent_identity,
@@ -30,8 +31,17 @@ from .economy.ledger import BudgetExhausted, CycleBudgetExceeded, Mode, Treasury
 from .imaging import render_post_image
 from .instagram import InstagramClient, Publisher
 from .llm import Brain, ModelRefused
-from .models import CycleReport, Identity, MarketAnalysis, MonetizationPlan, Reflection, StrategyUpdate
+from .models import (
+    CycleReport,
+    Identity,
+    MarketAnalysis,
+    MonetizationPlan,
+    OpportunityAssessment,
+    Reflection,
+    StrategyUpdate,
+)
 from .store import Store
+from .wallet import hinweis_fuer_den_agenten
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +50,26 @@ KEY_STRATEGY = "strategy"
 KEY_ANALYSIS = "market_analysis"
 KEY_REFLECTION = "reflection"
 KEY_MONETIZATION = "monetization_plan"
+KEY_ASSESSMENT = "opportunity_assessment"
+KEY_LAST_PIVOT = "last_pivot_cycle"
+KEY_IDENTITY_HISTORY = "identity_history"
 
 # Recherche und Geschäftsplanung kosten Geld und ändern sich langsam -
 # deshalb nicht in jedem Zyklus.
 RESEARCH_EVERY = 7
 MONETIZATION_EVERY = 14
+
+# Wie oft der Agent prüft, ob sich sein Kurs noch lohnt.
+ASSESS_EVERY = 5
+
+# Ein Wechsel wirft die aufgebaute Reichweite weg. Er lohnt sich nur, wenn
+# die Alternative den jetzigen Weg deutlich schlägt - nicht knapp.
+PIVOT_FAKTOR = 2.0
+
+# Mindestabstand zwischen zwei Neuausrichtungen. Ohne diese Sperre wäre
+# jeder einzelne Wechsel für sich rational und die Summe ruinös: Ein
+# Account, der ständig die Nische tauscht, baut nie Publikum auf.
+PIVOT_MINDESTABSTAND = 10
 
 
 class Agent:
@@ -92,6 +117,16 @@ class Agent:
     @property
     def monetization(self) -> MonetizationPlan | None:
         return self.store.get_model(KEY_MONETIZATION, MonetizationPlan)
+
+    @property
+    def assessment(self) -> OpportunityAssessment | None:
+        return self.store.get_model(KEY_ASSESSMENT, OpportunityAssessment)
+
+    @property
+    def wallet_hinweis(self) -> str:
+        return hinweis_fuer_den_agenten(
+            self.settings.wallet_address, self.settings.wallet_chain
+        )
 
     # -- Kennzahlen --------------------------------------------------------
 
@@ -266,6 +301,10 @@ class Agent:
         self.store.set_json(KEY_STRATEGY, strategy)
         report.steps.append(f"Ziel: {strategy.current_goal}")
 
+        # Lohnt sich der Kurs noch? Nicht in jedem Zyklus - das kostet.
+        if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL:
+            identity = self._pruefe_kurs(cycle, identity, performance, report)
+
         self._produce_posts(cycle, identity, strategy, performance, report)
 
         # Geschäftsplanung in großem Takt - oder sofort, wenn das Geld knapp wird.
@@ -313,6 +352,126 @@ class Agent:
 
             recent.append(draft.caption)
 
+    def _pruefe_kurs(self, cycle: int, identity, performance: str, report: CycleReport):
+        """Rechnet nach, ob ein anderer Weg mehr einbringt.
+
+        Gibt die Identität zurück, mit der weitergearbeitet wird - die alte
+        oder eine neue.
+        """
+        letzter_wechsel = int(self.store.get_json(KEY_LAST_PIVOT) or 0)
+
+        bewertung = assess_opportunities(
+            self.brain,
+            identity=identity,
+            treasury_state=self.treasury.state(),
+            follower_count=int(self.store.latest_metric("followers") or 0),
+            performance=performance,
+            wallet_hinweis=self.wallet_hinweis,
+            zyklen_seit_wechsel=cycle - letzter_wechsel,
+        )
+        self.store.set_json(KEY_ASSESSMENT, bewertung)
+
+        beste = max(
+            bewertung.opportunities, key=lambda o: o.expected_value_usd, default=None
+        )
+        bester_wert = beste.expected_value_usd if beste else 0.0
+        report.steps.append(
+            f"Kursprüfung: jetziger Weg {bewertung.current_path_value_usd:.0f} USD, "
+            f"beste Alternative {bester_wert:.0f} USD → {bewertung.recommendation}"
+        )
+        self.store.log(
+            "assessment",
+            f"{bewertung.recommendation}: {bewertung.reasoning[:200]}",
+            cycle,
+            payload=bewertung.model_dump(mode="json"),
+        )
+
+        grund = self._wechsel_abgelehnt(bewertung, beste, cycle, letzter_wechsel)
+        if grund:
+            report.steps.append(f"Kein Wechsel: {grund}")
+            self.store.log("assessment", f"Wechsel abgelehnt: {grund}", cycle)
+            return identity
+
+        return self._wechsle(cycle, identity, bewertung, beste, report)
+
+    def _wechsel_abgelehnt(self, bewertung, beste, cycle: int, letzter_wechsel: int) -> str | None:
+        """Prüft die harten Bedingungen für einen Kurswechsel.
+
+        Der Agent darf wechseln - aber nicht aus einer Laune heraus. Jede
+        Bedingung hier hat einen Grund, der Geld kostet, wenn man sie
+        weglässt.
+        """
+        if bewertung.recommendation == "weitermachen":
+            return "er will bei seinem Kurs bleiben"
+        if bewertung.recommendation == "ergaenzen":
+            return "er will zusätzlich verdienen, ohne die Nische zu verlassen"
+
+        if beste is None:
+            return "keine Alternative benannt"
+
+        abstand = cycle - letzter_wechsel
+        if letzter_wechsel and abstand < PIVOT_MINDESTABSTAND:
+            return (
+                f"erst {abstand} Zyklen seit dem letzten Wechsel, "
+                f"Mindestabstand sind {PIVOT_MINDESTABSTAND}"
+            )
+
+        if bewertung.confidence == "low":
+            return "die eigene Einschätzung ist zu unsicher"
+
+        schwelle = max(bewertung.current_path_value_usd * PIVOT_FAKTOR, 1.0)
+        if beste.expected_value_usd < schwelle:
+            return (
+                f"die Alternative bringt im Mittel {beste.expected_value_usd:.0f} USD, "
+                f"nötig wären {schwelle:.0f} USD"
+            )
+
+        return None
+
+    def _wechsle(self, cycle: int, alt, bewertung, beste, report: CycleReport):
+        """Richtet den Agenten neu aus und bewahrt auf, was vorher war."""
+        verlauf = self.store.get_json(KEY_IDENTITY_HISTORY) or []
+        verlauf.append(
+            {
+                "zyklus": cycle,
+                "identitaet": alt.model_dump(mode="json"),
+                "grund_des_wechsels": bewertung.reasoning,
+                "neue_richtung": beste.name,
+            }
+        )
+        self.store.set_json(KEY_IDENTITY_HISTORY, verlauf)
+
+        analyse = run_market_research(self.brain, identity=alt, focus=beste.description)
+        self.store.set_json(KEY_ANALYSIS, analyse)
+
+        neu = invent_identity(
+            self.brain,
+            analyse,
+            operator_hint=(
+                f"Du richtest dich neu aus. Bisher warst du @{alt.handle} "
+                f"({alt.niche}). Du wechselst, weil: {bewertung.reasoning} "
+                f"Die neue Richtung ist: {beste.description} "
+                f"Behalte deinen Namen {alt.agent_name} - du bleibst dieselbe Person, "
+                "nur dein Geschäft ändert sich."
+            ),
+        )
+        neu.agent_name = alt.agent_name  # Die Person bleibt, die Marke wechselt.
+        neu.agent_why = alt.agent_why
+
+        self.store.set_json(KEY_IDENTITY, neu)
+        self.store.set_json(KEY_LAST_PIVOT, cycle)
+        # Der alte Kurs gilt nicht mehr, sonst plant er gegen sich selbst.
+        self.store.set_json(KEY_STRATEGY, None)
+
+        report.steps.append(f"Neuausrichtung: @{alt.handle} → @{neu.handle} ({beste.name})")
+        self.store.log(
+            "pivot",
+            f"@{alt.handle} → @{neu.handle}, weil: {bewertung.reasoning[:200]}",
+            cycle,
+            payload={"vorher": alt.handle, "nachher": neu.handle, "grund": bewertung.reasoning},
+        )
+        return neu
+
     def _plan_monetization(
         self, cycle: int, identity, performance: str, report: CycleReport
     ) -> None:
@@ -322,6 +481,7 @@ class Agent:
             treasury_state=self.treasury.state(),
             follower_count=int(self.store.latest_metric("followers") or 0),
             performance=performance,
+            wallet_hinweis=self.wallet_hinweis,
         )
         self.store.set_json(KEY_MONETIZATION, plan)
         self.store.log(

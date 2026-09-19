@@ -22,6 +22,7 @@ Was er entscheidet, entscheidet er allein. Du gibst ihm kein Thema vor
 | **Planen** | Setzt ein einziges messbares Ziel für sieben Tage und begründet jede Änderung. |
 | **Produzieren** | Schreibt Caption, Hook, Hashtags und einen Bauplan fürs Bild; rendert das Bild lokal. |
 | **Veröffentlichen** | Standard: Entwurf als Datei. Mit `--live`: echter Beitrag über die offizielle API. |
+| **Nachrechnen** | Alle 5 Zyklen: Lohnt sich der Kurs noch? Erwartungswert des jetzigen Wegs gegen Alternativen, abzüglich Wechselkosten. |
 | **Verdienen** | Alle 14 Zyklen (oder bei knapper Kasse): Geschäftsideen mit nüchterner Umsatzschätzung. |
 
 Alles liegt zwischen den Läufen in einer SQLite-Datei. Der Agent kann
@@ -148,6 +149,51 @@ dreimal einen bezahlten Zyklus aus — er arbeitet trotzdem nur einmal.
 
 Die Budgetbremse gilt weiter: Ist die Kasse leer, hält er an, statt
 weiterzulaufen.
+
+## Gewinnorientiert: wann er den Kurs wechselt
+
+Der Agent ist an keine Nische gebunden. Alle fünf Zyklen rechnet er nach,
+ob sich sein Weg noch lohnt — und zwar im **Erwartungswert**: was eine
+Sache einbringt, *wenn* sie aufgeht, mal der Wahrscheinlichkeit, dass sie
+aufgeht. Eine Idee mit 5 % Chance auf 10.000 USD ist 500 USD wert, nicht
+10.000. Wer das verwechselt, jagt Luftschlösser.
+
+Gewechselt wird nur, wenn **alle** Bedingungen erfüllt sind:
+
+| Bedingung | Warum |
+|---|---|
+| Er empfiehlt selbst „wechseln" | „Ergänzen" ist oft besser: Publikum behalten, trotzdem mehr verdienen |
+| Die Alternative schlägt den jetzigen Weg um Faktor 2 | Knapp besser rechtfertigt keine verlorene Reichweite |
+| Seine Einschätzung ist nicht „unsicher" | Auf Vermutungen wechselt man nicht |
+| Mindestens 10 Zyklen seit dem letzten Wechsel | Sonst ist jeder Wechsel für sich rational und die Summe ruinös |
+
+Beim Wechsel **bleibt seine Person** — nur die Marke ändert sich. Der
+alte Kurs samt Begründung landet im Verlauf, damit er später nachsehen
+kann, was er warum aufgegeben hat.
+
+Verdient er noch nichts, greift die Faktorregel nicht: Wer bei null steht,
+soll nicht wegen einer Multiplikation mit null festsitzen.
+
+## Zahlungsweg: Empfangen ja, Senden nein
+
+```bash
+insta-agent wallet --adresse 0x… --kette base
+```
+
+Der Agent bezieht die Adresse dann in seine Geschäftsplanung ein.
+
+**Er bekommt keine privaten Schlüssel und keine Wiederherstellungswörter.**
+Das ist keine Bevormundung, sondern eine Konsequenz aus seiner Arbeitsweise:
+Er liest bei der Recherche fremde Webseiten, und deren Text landet in
+seinem Kontext. Wer dort etwas unterbringt, kann versuchen, ihn zu
+Handlungen zu bewegen, die niemand wollte. Ein Agent ohne Schlüssel kann
+dabei nichts verlieren — einer mit Schlüssel alles.
+
+Der Befehl erkennt und verweigert deshalb private Schlüssel (64 Hexzeichen)
+und Wiederherstellungswörter (12–24 Wörter), falls die versehentlich in der
+Zwischenablage landen.
+
+Eingegangene Beträge trägst du mit `insta-agent earn` in seine Kasse ein.
 
 ## Die Kasse: was hier wirklich geht
 
@@ -296,6 +342,6 @@ insta_agent/
 pytest
 ```
 
-84 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+109 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

@@ -14,6 +14,7 @@ def build_monetization_plan(
     treasury_state,
     follower_count: int | None,
     performance: str,
+    wallet_hinweis: str = "",
 ) -> MonetizationPlan:
     followers = follower_count if follower_count is not None else 0
 
@@ -25,6 +26,7 @@ def build_monetization_plan(
             identity_block(identity),
             treasury_block(treasury_state),
             f"# Deine Reichweite\nFollower: {followers}\n{performance}",
+            wallet_hinweis,
             """\
 # Auftrag
 Du sollst dich selbst finanzieren. Deine Rechenzeit kostet Geld, und das

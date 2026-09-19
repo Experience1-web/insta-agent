@@ -207,6 +207,60 @@ def autostart(
 
 
 @app.command()
+def wallet(
+    adresse: str = typer.Option("", help="Empfangsadresse. NIEMALS der private Schlüssel."),
+    kette: str = typer.Option("base", help="ethereum, base, polygon, solana …"),
+    entfernen: bool = typer.Option(False, "--entfernen", help="Adresse wieder löschen."),
+    config: Path = typer.Option(None),
+) -> None:
+    """Hinterlegt eine Adresse, auf der Einnahmen ankommen können.
+
+    Nur die Empfangsadresse. Der Agent bekommt keine Schlüssel und kann
+    nichts senden - er liest bei seiner Recherche fremde Webseiten, und
+    deren Text landet in seinem Kontext.
+    """
+    from .config import set_env_value
+    from .wallet import maskiere, pruefe_adresse
+
+    settings = load_settings(config)
+
+    if entfernen:
+        set_env_value("WALLET_ADDRESS", "")
+        console.print("[green]Adresse entfernt.[/green]")
+        return
+
+    if not adresse:
+        if settings.wallet_address:
+            console.print(
+                Panel(
+                    f"Adresse: [bold]{maskiere(settings.wallet_address)}[/bold]\n"
+                    f"Kette:   {settings.wallet_chain or 'nicht angegeben'}\n\n"
+                    "[dim]Der Agent kann hierauf nur empfangen, nicht senden.[/dim]",
+                    title="Zahlungsweg",
+                )
+            )
+        else:
+            console.print("[yellow]Noch kein Zahlungsweg hinterlegt.[/yellow]")
+            console.print(
+                "Eintragen mit: [bold]insta-agent wallet --adresse 0x… --kette base[/bold]"
+            )
+        return
+
+    pruefung = pruefe_adresse(adresse, kette)
+    if not pruefung.ok:
+        console.print(f"[red]{pruefung.grund}[/red]")
+        raise typer.Exit(1)
+
+    set_env_value("WALLET_ADDRESS", adresse.strip())
+    set_env_value("WALLET_CHAIN", kette.strip())
+    console.print(f"[green]Zahlungsweg hinterlegt: {maskiere(adresse.strip())} auf {kette}[/green]")
+    console.print(
+        "\n[dim]Der Agent bezieht das ab jetzt in seine Geschäftsplanung ein. "
+        "Eingegangene Beträge trägst du mit `insta-agent earn` in seine Kasse ein.[/dim]"
+    )
+
+
+@app.command()
 def check() -> None:
     """Prüft, ob die Zugangsdaten richtig in der .env stehen.
 
