@@ -407,6 +407,19 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 )
             elif pfad.path == "/api/zustand":
                 self._json(steuerung.zustand())
+            elif pfad.path == "/version":
+                # Bewusst reiner Text ohne Javascript: Hieran lässt sich
+                # zweifelsfrei ablesen, welcher Server gerade antwortet.
+                self._sende(
+                    200,
+                    "text/plain; charset=utf-8",
+                    (
+                        f"insta-agent\n"
+                        f"Stand:  {version()}\n"
+                        f"Port:   {self.server.server_address[1]}\n"
+                        f"Grenze: {steuerung.settings.economy.max_cost_per_cycle_usd:.2f} USD pro Zyklus\n"
+                    ).encode("utf-8"),
+                )
             elif pfad.path == "/qr":
                 self._sende_qr()
             elif pfad.path == "/media":

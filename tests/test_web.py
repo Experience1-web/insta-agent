@@ -375,3 +375,33 @@ def test_ein_fremder_webserver_gilt_weiterhin_als_fremd():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_die_versionsseite_kommt_ohne_javascript_aus(settings):
+    """Zur Diagnose, wenn unklar ist, welcher Server gerade antwortet.
+
+    Reiner Text: kein Javascript, kein Zwischenspeicher, keine Zweifel.
+    """
+    import threading
+
+    from insta_agent.web import Steuerung, _handler_klasse
+    from http.server import ThreadingHTTPServer
+    import urllib.request
+
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None)
+    )
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/version", timeout=3) as a:
+            text = a.read().decode("utf-8")
+            assert a.headers.get("Content-Type", "").startswith("text/plain")
+            assert "no-store" in a.headers.get("Cache-Control", "")
+
+        assert "insta-agent" in text
+        assert f"Port:   {port}" in text
+        assert "Grenze:" in text
+    finally:
+        server.shutdown()
+        server.server_close()

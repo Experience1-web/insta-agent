@@ -157,7 +157,12 @@ let laeuftGerade = false;
 async function laden() {
   let d;
   try {
-    const antwort = await fetch("/api/zustand", { headers: kopf });
+    // Der Zeitstempel verhindert, dass der Browser eine alte Antwort aus
+    // seinem Speicher liefert, statt den Server zu fragen.
+    const antwort = await fetch(`/api/zustand?t=${Date.now()}`, {
+      headers: kopf,
+      cache: "no-store",
+    });
     if (antwort.status === 403) {
       $("zustand").innerHTML = '<span class="schlecht">Kein Zugang</span>';
       $("warnbox").innerHTML = `<div class="karte"><strong class="schlecht">Zugangswort fehlt</strong>
