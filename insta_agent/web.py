@@ -235,6 +235,28 @@ def pids_auf_port(netstat_ausgabe: str, port: int) -> set[str]:
     return gefunden
 
 
+def ist_unser_dashboard(port: int) -> bool:
+    """Fragt den Port, ob dort wirklich unser Dashboard antwortet.
+
+    Ohne diese Prüfung würde beim Aufräumen irgendein fremdes Programm
+    abgeschossen, das den Port zufällig belegt - im schlimmsten Fall etwas,
+    an dem gerade jemand arbeitet.
+    """
+    import json
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/zustand", timeout=2
+        ) as antwort:
+            daten = json.loads(antwort.read())
+    except Exception:  # noqa: BLE001 - alles andere ist eben nicht unseres
+        return False
+
+    # Diese Felder liefert nur unsere eigene Oberfläche.
+    return isinstance(daten, dict) and {"laeuft", "kasse", "version"} <= daten.keys()
+
+
 def beende_dashboard(port: int) -> tuple[bool, str]:
     """Beendet den Prozess, der den Port belegt.
 
@@ -464,6 +486,14 @@ def _binde_port(host: str, port: int, handler) -> ThreadingHTTPServer:
         return ThreadingHTTPServer((host, port), handler)
     except OSError:
         pass
+
+    if not ist_unser_dashboard(port):
+        print(
+            f"\n  Port {port} ist von einem anderen Programm belegt.\n"
+            f"  Das wird nicht beendet - starte das Dashboard auf einem\n"
+            f"  anderen Port, etwa:  insta-agent web --port {port + 1}\n"
+        )
+        raise SystemExit(1)
 
     print(f"\n  Port {port} war belegt - beende das alte Dashboard …")
     beendet, meldung = beende_dashboard(port)

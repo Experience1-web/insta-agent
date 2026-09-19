@@ -217,8 +217,12 @@ def test_der_zustand_verraet_den_laufenden_stand(settings):
     assert zustand["grenze_pro_zyklus"] == settings.economy.max_cost_per_cycle_usd
 
 
-def test_ein_belegter_port_beendet_mit_klarer_meldung(settings, capsys):
-    """Startet nichts, sieht man im Browser weiter die alte Seite."""
+def test_fremdes_programm_auf_dem_port_wird_nicht_abgeschossen(settings, capsys):
+    """Ein belegter Port heißt nicht, dass dort unser Dashboard läuft.
+
+    Ohne diese Unterscheidung würde das Aufräumen irgendein fremdes
+    Programm beenden - hier war es der Testlauf selbst.
+    """
     import socket
 
     from insta_agent.web import starte_server
@@ -233,8 +237,8 @@ def test_ein_belegter_port_beendet_mit_klarer_meldung(settings, capsys):
         with pytest.raises(SystemExit):
             starte_server(settings, port=port, oeffnen=False)
         ausgabe = capsys.readouterr().out
-        assert "belegt" in ausgabe
-        assert "Dashboard beenden" in ausgabe
+        assert "anderen Programm belegt" in ausgabe
+        assert "--port" in ausgabe, "es fehlt der Ausweg"
     finally:
         blocker.close()
 
