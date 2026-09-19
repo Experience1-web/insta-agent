@@ -45,6 +45,23 @@ ein und prüft anschließend selbst, ob der Agent ihn findet.
 Weißt du nicht mehr, wo etwas liegt? `insta-agent where` zeigt dir alle
 Pfade und sagt, was schon existiert.
 
+## Oberfläche im Browser
+
+Wer nicht im Terminal arbeiten mag:
+
+```bash
+insta-agent web
+```
+
+Der Browser öffnet sich von selbst. Dort siehst du Kasse, Profil, Kurs,
+alle Entwürfe samt fertigen Bildern und den Geschäftsplan — und startest
+den Agenten per Knopfdruck. Während er arbeitet, läuft sein Protokoll live
+mit.
+
+Gebaut ohne Zusatzbibliotheken, nur mit Bordmitteln von Python. Der Server
+lauscht ausschließlich auf `127.0.0.1`: Wer die Seite öffnen kann, kann
+Zyklen starten und damit Geld ausgeben — das gehört nicht ins Netz.
+
 Ohne Instagram-Zugangsdaten läuft der Agent vollständig im Trockenlauf: Er
 erfindet sich, plant, schreibt und rendert Bilder — er veröffentlicht nur
 nichts. Ergebnisse liegen in `out/drafts/` und `out/media/`.
@@ -188,6 +205,7 @@ sonst plant der Agent mit Geld, das nicht aufgeladen ist.
 ```
 insta_agent/
 ├── runner.py          Der Zyklus: messen → lernen → planen → produzieren
+├── web.py             Oberfläche im Browser, nur mit Bordmitteln
 ├── llm.py             Claude-Zugang mit Kostenerfassung bei jedem Aufruf
 ├── store.py           SQLite: Identität, Strategie, Posts, Zahlen, Ledger
 ├── models.py          Die Verträge, die Claude über Structured Outputs füllt
@@ -215,6 +233,6 @@ insta_agent/
 pytest
 ```
 
-58 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+62 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

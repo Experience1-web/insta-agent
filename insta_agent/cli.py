@@ -112,6 +112,35 @@ def setup() -> None:
 
 
 @app.command()
+def web(
+    port: int = typer.Option(8765, help="Auf welchem Port die Oberfläche läuft."),
+    open_browser: bool = typer.Option(
+        True, "--open/--no-open", help="Browser automatisch öffnen."
+    ),
+    config: Path = typer.Option(None),
+) -> None:
+    """Startet die Oberfläche im Browser - der bequeme Weg.
+
+    Dort siehst du Kasse, Profil, Kurs, Entwürfe samt Bildern und kannst
+    den Agenten per Knopfdruck arbeiten lassen. Das Terminal brauchst du
+    dann nur noch zum Starten dieses Befehls.
+    """
+    _setup_logging(False)
+    settings = load_settings(config)
+
+    if not settings.anthropic_api_key:
+        console.print(
+            "[yellow]Noch kein API-Schlüssel hinterlegt. Die Oberfläche startet "
+            "trotzdem, arbeiten kann der Agent damit aber nicht.[/yellow]\n"
+            "Trag ihn ein mit: [bold]insta-agent setup[/bold]\n"
+        )
+
+    from .web import starte_server
+
+    starte_server(settings, port=port, oeffnen=open_browser)
+
+
+@app.command()
 def check() -> None:
     """Prüft, ob die Zugangsdaten richtig in der .env stehen.
 
