@@ -1,10 +1,10 @@
 @echo off
-chcp 65001 >nul
+chcp 65001 > nul
 cd /d "%~dp0.."
-title insta-agent einrichten
 set PY=py
-where py >nul 2>&1
+where py > nul 2> nul
 if errorlevel 1 set PY=python
+title insta-agent einrichten
 echo.
 echo   Schritt 1 von 2: Programm installieren
 echo.

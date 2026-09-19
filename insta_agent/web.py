@@ -449,6 +449,42 @@ def eigene_ip() -> str:
         return "127.0.0.1"
 
 
+def _binde_port(host: str, port: int, handler) -> ThreadingHTTPServer:
+    """Belegt den Port und räumt dafür nötigenfalls ein altes Dashboard weg.
+
+    Ein noch laufendes altes Dashboard war der häufigste Stolperstein: Das
+    neue startete nicht, der Browser zeigte weiter den alten Stand, und von
+    außen sah es aus, als käme eine Aktualisierung nicht an. Das hier
+    aufzuräumen gehört nach Python - in einer Batch-Datei lässt es sich
+    nicht prüfen.
+    """
+    import time
+
+    try:
+        return ThreadingHTTPServer((host, port), handler)
+    except OSError:
+        pass
+
+    print(f"\n  Port {port} war belegt - beende das alte Dashboard …")
+    beendet, meldung = beende_dashboard(port)
+    print(f"  {meldung}")
+
+    if beendet:
+        # Das Betriebssystem braucht einen Moment, bis der Port frei ist.
+        for _ in range(20):
+            time.sleep(0.25)
+            try:
+                return ThreadingHTTPServer((host, port), handler)
+            except OSError:
+                continue
+
+    print(
+        f"\n  Der Port {port} lässt sich nicht belegen.\n"
+        f"  Schließ alle schwarzen Fenster dieses Programms und versuch es erneut.\n"
+    )
+    raise SystemExit(1)
+
+
 def starte_server(
     settings: Settings,
     port: int = 8765,
@@ -470,18 +506,7 @@ def starte_server(
     steuerung = Steuerung(settings, nur_lesen=nur_lesen, auto_stunden=auto_stunden)
     steuerung.starte_takt()
 
-    try:
-        server = ThreadingHTTPServer((host, port), _handler_klasse(steuerung, token))
-    except OSError as exc:
-        # Sonst startet nichts, der Browser zeigt weiter die alte Seite, und
-        # niemand versteht, warum Änderungen nicht ankommen.
-        print(
-            f"\n  Port {port} ist belegt - es läuft schon ein Dashboard.\n"
-            f"\n  Schließ das andere schwarze Fenster und versuch es erneut."
-            f"\n  Findest du es nicht: 'Dashboard beenden' im Ordner windows.\n"
-            f"\n  ({exc})\n"
-        )
-        raise SystemExit(1) from exc
+    server = _binde_port(host, port, _handler_klasse(steuerung, token))
 
     if nach_aussen:
         steuerung.handy_url = f"http://{eigene_ip()}:{port}/?token={token}"

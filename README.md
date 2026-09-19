@@ -50,6 +50,11 @@ du brauchst nur zu klicken:
 Ein schwarzes Fenster erscheint dabei trotzdem — es ist der laufende
 Server. Schließen beendet das Dashboard, das ist der Ausknopf.
 
+Läuft noch ein altes Dashboard, beendet der Start es selbst und übernimmt
+den Port. Die Dateien werden von `tools/erzeuge_startdateien.py` erzeugt
+und geprüft — von Hand geschrieben schlich sich Unix-Schreibweise ein, die
+auf Windows nur „Pfad nicht gefunden" ergab.
+
 ## Schnellstart
 
 ```bash
@@ -351,6 +356,6 @@ insta_agent/
 pytest
 ```
 
-130 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+154 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

@@ -1,8 +1,8 @@
 @echo off
-chcp 65001 >nul
+chcp 65001 > nul
 cd /d "%~dp0.."
 set PY=py
-where py >nul 2>&1
+where py > nul 2> nul
 if errorlevel 1 set PY=python
 echo.
 echo   Ab jetzt startet das Dashboard beim Hochfahren von selbst,
