@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .config import load_settings
+from .config import ENV_PATH, REPO_ROOT, load_settings, set_env_value
 from .runner import Agent
 
 app = typer.Typer(
@@ -42,6 +42,83 @@ def _agent(config: Path | None) -> Agent:
 
 
 # --------------------------------------------------------------------------
+
+
+@app.command()
+def setup() -> None:
+    """Richtet den Agenten ein: fragt nach dem API-Schlüssel und legt die .env an.
+
+    Der einfachste Weg. Du musst keine Datei suchen und keinen Editor
+    öffnen - dieser Befehl erledigt beides.
+    """
+    console.print(Panel("Einrichtung des Agenten", style="bold"))
+    console.print(f"Die Einstellungen kommen in diese Datei:\n  [bold]{ENV_PATH}[/bold]\n")
+
+    if ENV_PATH.exists():
+        console.print("[dim]Die Datei gibt es schon - sie wird ergänzt, nicht überschrieben.[/dim]\n")
+    else:
+        console.print("[dim]Die Datei gibt es noch nicht - sie wird jetzt angelegt.[/dim]\n")
+
+    console.print("Deinen Schlüssel bekommst du unter console.anthropic.com → Settings → API keys.")
+    console.print("[dim]Beim Eintippen bleibt er unsichtbar, das ist Absicht.[/dim]\n")
+
+    key = typer.prompt("API-Schlüssel", hide_input=True).strip()
+
+    if not key:
+        console.print("[red]Nichts eingegeben, nichts geändert.[/red]")
+        raise typer.Exit(1)
+    if not key.startswith("sk-ant-"):
+        console.print(
+            "[yellow]Achtung: Anthropic-Schlüssel fangen mit 'sk-ant-' an. "
+            "Deiner nicht - vermutlich hast du etwas anderes kopiert.[/yellow]"
+        )
+        if not typer.confirm("Trotzdem eintragen?", default=False):
+            raise typer.Exit(1)
+
+    path = set_env_value("ANTHROPIC_API_KEY", key)
+    console.print(f"\n[green]Eingetragen in {path}[/green]")
+
+    # Gegenprobe: wird der Schlüssel auch wirklich gelesen?
+    import os
+
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+    settings = load_settings()
+    if settings.anthropic_api_key == key:
+        console.print("[green]Gegenprobe bestanden - der Agent findet den Schlüssel.[/green]")
+    else:
+        console.print("[red]Der Schlüssel wurde geschrieben, aber nicht wieder eingelesen.[/red]")
+        raise typer.Exit(1)
+
+    console.print(
+        "\n[bold]Fertig.[/bold] Jetzt kannst du loslegen:\n"
+        "  [bold]insta-agent run[/bold]\n\n"
+        "[dim]Falls dabei ein Guthaben-Fehler kommt: unter console.anthropic.com "
+        "→ Settings → Billing Guthaben aufladen.[/dim]"
+    )
+
+
+@app.command()
+def where() -> None:
+    """Zeigt, wo die Dateien des Agenten auf deinem Rechner liegen."""
+    settings = load_settings()
+    table = Table(title="Wo liegt was")
+    table.add_column("Was", style="bold")
+    table.add_column("Wo")
+    table.add_column("Da?")
+
+    eintraege = [
+        ("Zugangsdaten (.env)", ENV_PATH),
+        ("Einstellungen", REPO_ROOT / "config" / "agent.yaml"),
+        ("Gedächtnis", settings.db_path),
+        ("Entwürfe", settings.draft_dir),
+        ("Bilder", settings.media_dir),
+    ]
+    for name, pfad in eintraege:
+        table.add_row(name, str(pfad), "ja" if Path(pfad).exists() else "noch nicht")
+
+    console.print(table)
+    if not ENV_PATH.exists():
+        console.print("\n[yellow]Die .env fehlt noch. Leg sie an mit:[/yellow] [bold]insta-agent setup[/bold]")
 
 
 @app.command()

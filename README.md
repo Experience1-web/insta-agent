@@ -34,9 +34,16 @@ Gedächtnis zu verlieren.
 
 ```bash
 pip install -e .
-cp .env.example .env          # ANTHROPIC_API_KEY eintragen, Rest darf leer bleiben
+insta-agent setup             # fragt nach deinem API-Schlüssel und legt die .env an
 insta-agent run
 ```
+
+`insta-agent setup` ist der einfache Weg: Du musst keine Datei suchen und
+keinen Editor öffnen. Der Befehl legt die `.env` an, trägt den Schlüssel
+ein und prüft anschließend selbst, ob der Agent ihn findet.
+
+Weißt du nicht mehr, wo etwas liegt? `insta-agent where` zeigt dir alle
+Pfade und sagt, was schon existiert.
 
 Ohne Instagram-Zugangsdaten läuft der Agent vollständig im Trockenlauf: Er
 erfindet sich, plant, schreibt und rendert Bilder — er veröffentlicht nur
@@ -48,6 +55,7 @@ insta-agent strategy     # sein Kurs für diese Woche
 insta-agent drafts       # was er geschrieben hat
 insta-agent money        # Kasse und Geschäftsideen
 insta-agent journal      # sein Arbeitsprotokoll
+insta-agent where        # wo seine Dateien auf deinem Rechner liegen
 insta-agent earn 12.50 --category digital_product --note "2 Vorlagen verkauft"
 insta-agent run --cycles 7 --interval 3600   # eine Woche am Stück
 ```
@@ -206,6 +214,6 @@ insta_agent/
 pytest
 ```
 
-43 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+47 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

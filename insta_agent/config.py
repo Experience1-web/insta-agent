@@ -13,6 +13,41 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO_ROOT / "config" / "agent.yaml"
 EXAMPLE_CONFIG = REPO_ROOT / "config" / "agent.example.yaml"
+ENV_PATH = REPO_ROOT / ".env"
+EXAMPLE_ENV = REPO_ROOT / ".env.example"
+
+
+def set_env_value(key: str, value: str, path: Path | None = None) -> Path:
+    """Trägt einen Wert in die .env ein - ersetzend, nicht anhängend.
+
+    Legt die Datei aus der Beispieldatei an, falls es sie noch nicht gibt.
+    Eine schon vorhandene Zeile mit diesem Schlüssel wird ersetzt, auch
+    wenn sie auskommentiert ist. So entstehen keine Doppeleinträge, über
+    die man später stolpert.
+    """
+    target = path or ENV_PATH
+    if not target.exists():
+        target.write_text(
+            EXAMPLE_ENV.read_text(encoding="utf-8") if EXAMPLE_ENV.exists() else "",
+            encoding="utf-8",
+        )
+
+    lines = target.read_text(encoding="utf-8").splitlines()
+    new_line = f"{key}={value}"
+    ersetzt = False
+
+    for index, raw in enumerate(lines):
+        blank = raw.strip().lstrip("#").strip()
+        if blank.startswith(f"{key}="):
+            lines[index] = new_line
+            ersetzt = True
+            break
+
+    if not ersetzt:
+        lines.append(new_line)
+
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return target
 
 
 def _load_dotenv(path: Path) -> None:

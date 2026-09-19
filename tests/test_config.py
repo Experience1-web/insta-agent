@@ -73,3 +73,56 @@ def test_keine_warnung_bei_stimmigen_schwellen(caplog):
             EconomyConfig(treasury_start_usd=5.0, low_balance_usd=1.5, halt_balance_usd=0.25)
         )
     assert caplog.text == ""
+
+
+# --- Schreiben in die .env ------------------------------------------------
+
+
+def test_platzhalter_wird_ersetzt_nicht_verdoppelt(tmp_path):
+    from insta_agent.config import set_env_value
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "# Kommentar\nANTHROPIC_API_KEY=sk-ant-...\nIG_USER_ID=\n", encoding="utf-8"
+    )
+    set_env_value("ANTHROPIC_API_KEY", "sk-ant-echt", path=env)
+
+    inhalt = env.read_text(encoding="utf-8")
+    assert inhalt.count("ANTHROPIC_API_KEY") == 1
+    assert "sk-ant-echt" in inhalt
+    assert "IG_USER_ID=" in inhalt  # andere Zeilen bleiben unangetastet
+
+
+def test_auskommentierte_zeile_wird_ersetzt(tmp_path):
+    """#TREASURY_START_USD=5.00 soll aktiviert, nicht dupliziert werden."""
+    from insta_agent.config import set_env_value
+
+    env = tmp_path / ".env"
+    env.write_text("#TREASURY_START_USD=5.00\n", encoding="utf-8")
+    set_env_value("TREASURY_START_USD", "12.00", path=env)
+
+    inhalt = env.read_text(encoding="utf-8")
+    assert inhalt.count("TREASURY_START_USD") == 1
+    assert inhalt.strip() == "TREASURY_START_USD=12.00"
+
+
+def test_neuer_schluessel_wird_angehaengt(tmp_path):
+    from insta_agent.config import set_env_value
+
+    env = tmp_path / ".env"
+    env.write_text("IG_USER_ID=123\n", encoding="utf-8")
+    set_env_value("ANTHROPIC_API_KEY", "sk-ant-neu", path=env)
+
+    inhalt = env.read_text(encoding="utf-8")
+    assert "IG_USER_ID=123" in inhalt
+    assert "ANTHROPIC_API_KEY=sk-ant-neu" in inhalt
+
+
+def test_geschriebener_wert_wird_wieder_gelesen(tmp_path):
+    """Die Gegenprobe, die `insta-agent setup` selbst durchführt."""
+    from insta_agent.config import _load_dotenv, set_env_value
+
+    env = tmp_path / ".env"
+    set_env_value("ANTHROPIC_API_KEY", "sk-ant-rundlauf", path=env)
+    _load_dotenv(env)
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-rundlauf"
