@@ -45,6 +45,7 @@ du brauchst nur zu klicken:
 | `5 - Nicht mehr mitstarten.bat` | Hebt das wieder auf |
 | `6 - Neue Version holen.bat` | Holt Änderungen und installiert sie |
 | `7 - Taeglich arbeiten und mitstarten.bat` | Alles zusammen: startet mit, ist im WLAN erreichbar, arbeitet täglich |
+| `8 - Dashboard beenden.bat` | Beendet ein hängendes Dashboard, dessen Fenster nicht auffindbar ist |
 
 Ein schwarzes Fenster erscheint dabei trotzdem — es ist der laufende
 Server. Schließen beendet das Dashboard, das ist der Ausknopf.
@@ -350,6 +351,6 @@ insta_agent/
 pytest
 ```
 
-125 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+130 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.

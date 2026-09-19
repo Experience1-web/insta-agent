@@ -237,3 +237,57 @@ def test_ein_belegter_port_beendet_mit_klarer_meldung(settings, capsys):
         assert "Dashboard beenden" in ausgabe
     finally:
         blocker.close()
+
+
+# --- Den belegenden Prozess finden ---------------------------------------
+
+DEUTSCHE_NETSTAT = """
+Aktive Verbindungen
+
+  Proto  Lokale Adresse         Remoteadresse          Status           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              ABHÖREN          1128
+  TCP    127.0.0.1:8765         0.0.0.0:0              ABHÖREN          9876
+  TCP    127.0.0.1:8765         127.0.0.1:54321        HERGESTELLT      9876
+  TCP    192.168.1.5:49711      104.18.2.1:443         HERGESTELLT      4444
+"""
+
+ENGLISCHE_NETSTAT = """
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    127.0.0.1:8765         0.0.0.0:0              LISTENING       9876
+  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING       4
+"""
+
+
+def test_deutscher_status_wird_gefunden():
+    """Genau hier scheiterte es: deutsches Windows schreibt "ABHÖREN"."""
+    from insta_agent.web import pids_auf_port
+
+    assert pids_auf_port(DEUTSCHE_NETSTAT, 8765) == {"9876"}
+
+
+def test_englischer_status_ebenso():
+    from insta_agent.web import pids_auf_port
+
+    assert pids_auf_port(ENGLISCHE_NETSTAT, 8765) == {"9876"}
+
+
+def test_fremde_ports_bleiben_unberuehrt():
+    from insta_agent.web import pids_auf_port
+
+    assert pids_auf_port(DEUTSCHE_NETSTAT, 443) == set()
+    assert pids_auf_port(DEUTSCHE_NETSTAT, 135) == {"1128"}
+
+
+def test_systemprozesse_werden_nie_beendet():
+    """PID 4 gehört Windows selbst - den abzuschießen wäre fatal."""
+    from insta_agent.web import pids_auf_port
+
+    assert "4" not in pids_auf_port(ENGLISCHE_NETSTAT, 445)
+
+
+def test_ein_port_der_nur_als_gegenstelle_vorkommt_zaehlt_nicht():
+    from insta_agent.web import pids_auf_port
+
+    assert pids_auf_port(DEUTSCHE_NETSTAT, 54321) == set()

@@ -213,6 +213,28 @@ class Steuerung:
             agent.close()
 
 
+def pids_auf_port(netstat_ausgabe: str, port: int) -> set[str]:
+    """Liest aus der netstat-Ausgabe, welcher Prozess den Port hält.
+
+    Bewusst ohne das Wort "LISTENING": Ein deutsches Windows schreibt dort
+    "ABHÖREN", ein französisches wieder etwas anderes. Stattdessen wird
+    die lokale Adresse geprüft - die sieht überall gleich aus.
+    """
+    gefunden: set[str] = set()
+    for zeile in netstat_ausgabe.splitlines():
+        teile = zeile.split()
+        if len(teile) < 4 or teile[0].upper() != "TCP":
+            continue
+        lokal = teile[1]
+        if not lokal.rsplit(":", 1)[-1] == str(port):
+            continue
+        pid = teile[-1]
+        # 0 und 4 gehören dem System und werden nie beendet.
+        if pid.isdigit() and pid not in ("0", "4"):
+            gefunden.add(pid)
+    return gefunden
+
+
 def beende_dashboard(port: int) -> tuple[bool, str]:
     """Beendet den Prozess, der den Port belegt.
 
@@ -225,13 +247,13 @@ def beende_dashboard(port: int) -> tuple[bool, str]:
     try:
         if sys.platform == "win32":
             netstat = subprocess.run(
-                ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10
+                ["netstat", "-ano", "-p", "TCP"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                errors="replace",
             )
-            pids = {
-                zeile.split()[-1]
-                for zeile in netstat.stdout.splitlines()
-                if f":{port} " in zeile and "LISTENING" in zeile
-            }
+            pids = pids_auf_port(netstat.stdout, port)
             for pid in pids:
                 subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=10)
         else:
@@ -317,6 +339,9 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             self.send_response(status)
             self.send_header("Content-Type", typ)
             self.send_header("Content-Length", str(len(koerper)))
+            # Ohne diesen Hinweis zeigt der Browser nach einer
+            # Aktualisierung weiter die alte Seite aus seinem Speicher.
+            self.send_header("Cache-Control", "no-store, must-revalidate")
             self.end_headers()
             self.wfile.write(koerper)
 
