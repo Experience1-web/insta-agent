@@ -170,9 +170,15 @@ class Steuerung:
             strategie = agent.strategy
             plan = agent.monetization
 
+            farben = {"hintergrund": "#111318", "akzent": "#E4572E"}
             entwuerfe = []
             for zeile in agent.store.recent_posts(limit=12):
                 daten = json.loads(zeile["draft_json"])
+                if not entwuerfe and (bild := daten.get("visual")):
+                    farben = {
+                        "hintergrund": bild.get("background_hex", farben["hintergrund"]),
+                        "akzent": bild.get("accent_hex", farben["akzent"]),
+                    }
                 entwuerfe.append(
                     {
                         "id": zeile["id"],
@@ -182,8 +188,21 @@ class Steuerung:
                         "hashtags": daten["hashtags"],
                         "bild": Path(zeile["image_path"]).name if zeile["image_path"] else None,
                         "zeitpunkt": daten.get("best_time_hint", ""),
+                        "erwartung": daten.get("expected_outcome", ""),
+                        "aufruf": daten.get("call_to_action", ""),
                     }
                 )
+
+            verlauf = [
+                {
+                    "zeit": z["occurred_at"][11:16],
+                    "datum": z["occurred_at"][:10],
+                    "art": z["kind"],
+                    "text": z["message"],
+                }
+                for z in agent.store.recent_journal(25)
+            ]
+            bewertung = agent.assessment
 
             return {
                 "laeuft": self.laeuft,
@@ -206,6 +225,9 @@ class Steuerung:
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
+                "farben": farben,
+                "verlauf": verlauf,
+                "bewertung": bewertung.model_dump(mode="json") if bewertung else None,
                 "handy_url": self.handy_url,
                 "version": version(),
                 "grenze_pro_zyklus": self.settings.economy.max_cost_per_cycle_usd,
@@ -420,12 +442,65 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                         f"Grenze: {steuerung.settings.economy.max_cost_per_cycle_usd:.2f} USD pro Zyklus\n"
                     ).encode("utf-8"),
                 )
+            elif pfad.path == "/avatar":
+                self._sende_avatar()
             elif pfad.path == "/qr":
                 self._sende_qr()
             elif pfad.path == "/media":
                 self._sende_bild(parse_qs(pfad.query).get("name", [""])[0])
             else:
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
+
+        def _buche_einnahme(self, rumpf: dict) -> None:
+            """Trägt eine Einnahme in die Kasse des Agenten ein.
+
+            Geld empfangen kann nur ein Mensch. Erst wenn er es hier
+            einträgt, sieht der Agent, dass er seine Kosten deckt.
+            """
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            try:
+                betrag = float(rumpf.get("betrag", 0))
+            except (TypeError, ValueError):
+                betrag = 0.0
+            if betrag <= 0:
+                self._json({"ok": False, "grund": "Der Betrag muss größer als null sein."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                agent.treasury.earn(
+                    betrag,
+                    str(rumpf.get("kategorie") or "other"),
+                    str(rumpf.get("notiz") or ""),
+                )
+                agent.store.log("revenue", f"Einnahme {betrag:.2f} USD über die Oberfläche")
+            finally:
+                agent.close()
+            self._json({"ok": True})
+
+        def _sende_avatar(self) -> None:
+            """Das Portrait des Agenten, aus seinem Namen gezeichnet."""
+            import io
+
+            from .imaging.avatar import render_avatar
+
+            zustand = steuerung.zustand()
+            identitaet = zustand.get("identitaet")
+            if not identitaet:
+                self._sende(404, "text/plain; charset=utf-8", b"Noch kein Profil")
+                return
+
+            farben = zustand.get("farben", {})
+            pfad = steuerung.settings.media_dir / "_portrait.png"
+            render_avatar(
+                identitaet["agent_name"],
+                pfad,
+                background_hex=farben.get("hintergrund", "#111318"),
+                accent_hex=farben.get("akzent", "#E4572E"),
+            )
+            self._sende(200, "image/png", pfad.read_bytes())
 
         def _sende_qr(self) -> None:
             """Die Handy-Adresse als QR-Code, damit niemand sie abtippen muss."""
@@ -463,14 +538,20 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
         def do_POST(self) -> None:  # noqa: N802
             if not self._zugang_erlaubt():
-                self._json({"gestartet": False, "grund": "Kein Zugang."}, 403)
+                self._json({"ok": False, "grund": "Kein Zugang."}, 403)
                 return
-            if urlparse(self.path).path != "/api/start":
+
+            pfad = urlparse(self.path).path
+            if pfad not in ("/api/start", "/api/einnahme"):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
 
             laenge = int(self.headers.get("Content-Length", 0))
             rumpf = json.loads(self.rfile.read(laenge) or b"{}")
+
+            if pfad == "/api/einnahme":
+                self._buche_einnahme(rumpf)
+                return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))
             hinweis = (rumpf.get("hinweis") or "").strip() or None

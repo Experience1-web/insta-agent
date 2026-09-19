@@ -405,3 +405,126 @@ def test_die_versionsseite_kommt_ohne_javascript_aus(settings):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --- Neue Bedienelemente --------------------------------------------------
+
+
+def test_eine_einnahme_laesst_sich_ueber_die_oberflaeche_buchen(settings):
+    """Schließt den Kreis: Geld empfängt ein Mensch, eintragen muss er es."""
+    import json
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.runner import Agent
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    settings.anthropic_api_key = "sk-ant-test"
+    steuerung = Steuerung(settings)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(steuerung, None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    try:
+        anfrage = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/einnahme",
+            data=json.dumps({"betrag": 12.5, "kategorie": "digital_product", "notiz": "Vorlage"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+            assert json.loads(antwort.read())["ok"] is True
+
+        agent = Agent(settings)
+        try:
+            zustand = agent.treasury.state()
+            assert zustand.earned_usd == 12.5
+            # Das Startkapital gilt weiterhin nicht als Verdienst.
+            assert zustand.seed_usd > 0
+        finally:
+            agent.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ein_betrag_von_null_wird_abgelehnt(settings):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    try:
+        anfrage = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/einnahme",
+            data=json.dumps({"betrag": 0}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            urllib.request.urlopen(anfrage, timeout=5)
+        assert fehler.value.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_im_lesemodus_kann_niemand_von_aussen_geld_buchen(settings):
+    """Sonst könnte jeder im WLAN die Kasse des Agenten verfälschen."""
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), _handler_klasse(Steuerung(settings, nur_lesen=True), None)
+    )
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    try:
+        anfrage = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/einnahme",
+            data=json.dumps({"betrag": 99}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            urllib.request.urlopen(anfrage, timeout=5)
+        assert fehler.value.code == 409
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_das_portrait_ist_eine_grafik_und_kein_foto():
+    """Ein erfundenes Gesicht würde Follower über den Absender täuschen."""
+    from pathlib import Path
+    import tempfile
+
+    from PIL import Image
+
+    from insta_agent.imaging.avatar import render_avatar
+
+    with tempfile.TemporaryDirectory() as ordner:
+        pfad = render_avatar("Jonas Rieck", Path(ordner) / "p.png", accent_hex="#F2C14E")
+        with Image.open(pfad) as bild:
+            assert bild.size == (512, 512)
+            assert bild.mode == "RGBA"  # rund freigestellt
+
+        # Gleicher Name, gleiches Bild - zwei Agenten sehen nie gleich aus.
+        zweites = render_avatar("Jonas Rieck", Path(ordner) / "p2.png", accent_hex="#F2C14E")
+        anderer = render_avatar("Mara Vogt", Path(ordner) / "p3.png", accent_hex="#F2C14E")
+        assert pfad.read_bytes() == zweites.read_bytes()
+        assert pfad.read_bytes() != anderer.read_bytes()

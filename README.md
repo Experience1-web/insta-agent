@@ -78,10 +78,22 @@ Wer nicht im Terminal arbeiten mag:
 insta-agent web
 ```
 
-Der Browser öffnet sich von selbst. Dort siehst du Kasse, Profil, Kurs,
-alle Entwürfe samt fertigen Bildern und den Geschäftsplan — und startest
-den Agenten per Knopfdruck. Während er arbeitet, läuft sein Protokoll live
-mit.
+Der Browser öffnet sich von selbst. Dort siehst du:
+
+- sein **Portrait**, aus seinem Namen und seinen Farben gezeichnet
+- **Kasse**, Profil, Wochenziel und sein Arbeitsprotokoll
+- alle **Entwürfe** samt fertigen Bildern — mit *Text kopieren* und
+  *Bild speichern*, den beiden Handgriffen zum Posten
+- seine **Chancenbewertung**: jetziger Weg gegen Alternativen, nach
+  Erwartungswert
+- ein Feld, um **Einnahmen einzutragen**, sobald welche ankommen
+
+Den Agenten startest du per Knopfdruck; während er arbeitet, läuft sein
+Protokoll live mit.
+
+Das Portrait ist bewusst eine **Grafik und kein Foto**. Der Account wird
+von fremden Menschen gesehen; ein fotorealistisches Gesicht einer Person,
+die es nicht gibt, würde sie glauben lassen, dort sitze ein Mensch.
 
 Gebaut ohne Zusatzbibliotheken, nur mit Bordmitteln von Python.
 
@@ -356,6 +368,6 @@ insta_agent/
 pytest
 ```
 
-154 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
+161 Tests, keiner braucht einen API-Schlüssel. Der Zyklus wird mit einem
 gefälschten Modell vollständig durchgespielt — inklusive Budgetbremse,
 Bilderzeugung und Entwurfsablage.
