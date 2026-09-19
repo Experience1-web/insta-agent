@@ -1,0 +1,30 @@
+[project]
+name = "insta-agent"
+version = "0.1.0"
+description = "Ein autonomer Agent, der einen Instagram-Account erfindet, bespielt, analysiert, monetarisiert und sein eigenes Budget verwaltet."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.40",
+    "pydantic>=2.6",
+    "httpx",
+    "PyYAML>=6.0",
+    "Pillow>=10.0",
+    "typer>=0.12",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+insta-agent = "insta_agent.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["insta_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

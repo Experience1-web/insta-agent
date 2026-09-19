@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Laufzeitzustand des Agenten - enthaelt Strategie, Ledger und Zugangsdaten
+.env
+state/*.db
+state/*.db-journal
+out/
+assets/generated/

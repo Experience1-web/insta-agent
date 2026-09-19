@@ -1,0 +1,245 @@
+"""Das Langzeitgedächtnis des Agenten: eine einzelne SQLite-Datei.
+
+Alles, was der Agent über sich, seinen Markt, seine Posts und sein Geld
+weiß, liegt hier. Ein Zyklus lädt den Zustand, denkt, schreibt zurück.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterator
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS kv (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS posts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at      TEXT NOT NULL,
+    published_at    TEXT,
+    ig_media_id     TEXT,
+    pillar          TEXT,
+    caption         TEXT NOT NULL,
+    hashtags        TEXT NOT NULL,
+    image_path      TEXT,
+    draft_json      TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'draft'
+);
+
+CREATE TABLE IF NOT EXISTS insights (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    captured_at   TEXT NOT NULL,
+    ig_media_id   TEXT,
+    metric        TEXT NOT NULL,
+    value         REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ledger (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at  TEXT NOT NULL,
+    kind         TEXT NOT NULL,           -- 'cost' oder 'revenue'
+    category     TEXT NOT NULL,
+    amount_usd   REAL NOT NULL,           -- Kosten negativ, Einnahmen positiv
+    note         TEXT,
+    meta         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS journal (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at  TEXT NOT NULL,
+    cycle        INTEGER,
+    kind         TEXT NOT NULL,
+    message      TEXT NOT NULL,
+    payload      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
+CREATE INDEX IF NOT EXISTS idx_insights_media ON insights(ig_media_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_kind ON ledger(kind);
+"""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class Store:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.executescript(SCHEMA)
+        self._conn.commit()
+
+    def close(self) -> None:
+        self._conn.close()
+
+    @contextmanager
+    def _tx(self) -> Iterator[sqlite3.Connection]:
+        try:
+            yield self._conn
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+    # -- Schlüssel/Wert: Identität, Strategie, letzte Analyse ------------
+
+    def set_json(self, key: str, value: Any) -> None:
+        payload = value.model_dump(mode="json") if hasattr(value, "model_dump") else value
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO kv(key, value, updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (key, json.dumps(payload, ensure_ascii=False), _now()),
+            )
+
+    def get_json(self, key: str) -> Any | None:
+        row = self._conn.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
+        return json.loads(row["value"]) if row else None
+
+    def get_model(self, key: str, model_cls: type) -> Any | None:
+        raw = self.get_json(key)
+        return model_cls.model_validate(raw) if raw is not None else None
+
+    # -- Posts -------------------------------------------------------------
+
+    def add_draft(self, draft: Any, image_path: str | None) -> int:
+        with self._tx() as conn:
+            cur = conn.execute(
+                "INSERT INTO posts(created_at, pillar, caption, hashtags, image_path, draft_json, status) "
+                "VALUES(?,?,?,?,?,?,'draft')",
+                (
+                    _now(),
+                    draft.pillar,
+                    draft.caption,
+                    json.dumps(draft.hashtags, ensure_ascii=False),
+                    image_path,
+                    json.dumps(draft.model_dump(mode="json"), ensure_ascii=False),
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def mark_published(self, post_id: int, ig_media_id: str) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET status='published', published_at=?, ig_media_id=? WHERE id=?",
+                (_now(), ig_media_id, post_id),
+            )
+
+    def pending_drafts(self, limit: int = 10) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM posts WHERE status='draft' ORDER BY id ASC LIMIT ?", (limit,)
+        ).fetchall()
+
+    def recent_posts(self, limit: int = 15) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM posts ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+    def published_count(self) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM posts WHERE status='published'"
+        ).fetchone()
+        return int(row["n"])
+
+    # -- Kennzahlen --------------------------------------------------------
+
+    def record_insight(self, metric: str, value: float, ig_media_id: str | None = None) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO insights(captured_at, ig_media_id, metric, value) VALUES(?,?,?,?)",
+                (_now(), ig_media_id, metric, float(value)),
+            )
+
+    def latest_metric(self, metric: str) -> float | None:
+        row = self._conn.execute(
+            "SELECT value FROM insights WHERE metric=? ORDER BY id DESC LIMIT 1", (metric,)
+        ).fetchone()
+        return float(row["value"]) if row else None
+
+    def metric_history(self, metric: str, limit: int = 30) -> list[tuple[str, float]]:
+        rows = self._conn.execute(
+            "SELECT captured_at, value FROM insights WHERE metric=? ORDER BY id DESC LIMIT ?",
+            (metric, limit),
+        ).fetchall()
+        return [(r["captured_at"], float(r["value"])) for r in reversed(rows)]
+
+    # -- Journal -----------------------------------------------------------
+
+    def log(self, kind: str, message: str, cycle: int | None = None, payload: Any = None) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO journal(occurred_at, cycle, kind, message, payload) VALUES(?,?,?,?,?)",
+                (
+                    _now(),
+                    cycle,
+                    kind,
+                    message,
+                    json.dumps(payload, ensure_ascii=False, default=str) if payload else None,
+                ),
+            )
+
+    def recent_journal(self, limit: int = 20) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM journal ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+    def next_cycle_number(self) -> int:
+        row = self._conn.execute("SELECT MAX(cycle) AS c FROM journal").fetchone()
+        return int((row["c"] or 0)) + 1
+
+    # -- Ledger (Details in economy/ledger.py) ----------------------------
+
+    def add_ledger_entry(
+        self, kind: str, category: str, amount_usd: float, note: str = "", meta: Any = None
+    ) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO ledger(occurred_at, kind, category, amount_usd, note, meta) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    _now(),
+                    kind,
+                    category,
+                    float(amount_usd),
+                    note,
+                    json.dumps(meta, ensure_ascii=False, default=str) if meta else None,
+                ),
+            )
+
+    def ledger_sum(self, kind: str | None = None) -> float:
+        if kind:
+            row = self._conn.execute(
+                "SELECT COALESCE(SUM(amount_usd), 0) AS s FROM ledger WHERE kind=?", (kind,)
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT COALESCE(SUM(amount_usd), 0) AS s FROM ledger"
+            ).fetchone()
+        return float(row["s"])
+
+    def ledger_sum_excluding(self, kind: str, category: str) -> float:
+        """Summe einer Art ohne eine bestimmte Kategorie.
+
+        Gebraucht, um das Startkapital des Betreibers von dem zu trennen,
+        was der Agent selbst verdient hat.
+        """
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(amount_usd), 0) AS s FROM ledger WHERE kind=? AND category<>?",
+            (kind, category),
+        ).fetchone()
+        return float(row["s"])
+
+    def ledger_entries(self, limit: int = 50) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            "SELECT * FROM ledger ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
