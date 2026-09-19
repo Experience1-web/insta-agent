@@ -528,3 +528,55 @@ def test_das_portrait_ist_eine_grafik_und_kein_foto():
         anderer = render_avatar("Mara Vogt", Path(ordner) / "p3.png", accent_hex="#F2C14E")
         assert pfad.read_bytes() == zweites.read_bytes()
         assert pfad.read_bytes() != anderer.read_bytes()
+
+
+def test_ein_eigenes_portrait_hat_vorrang(settings, tmp_path, monkeypatch):
+    """Das Dashboard sieht nur der Betreiber - er darf es gestalten."""
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    import insta_agent.web as web
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    # Ein eigenes Bild in einem nachgestellten Projektordner.
+    wurzel = tmp_path / "projekt"
+    (wurzel / "assets").mkdir(parents=True)
+    eigenes = b"\x89PNG\r\n\x1a\n" + b"mein-eigenes-bild"
+    (wurzel / "assets" / "portrait.png").write_bytes(eigenes)
+    monkeypatch.setattr("insta_agent.config.REPO_ROOT", wurzel)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/avatar", timeout=5) as antwort:
+            assert antwort.read() == eigenes
+            assert antwort.headers.get("Content-Type") == "image/png"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ohne_eigenes_portrait_und_ohne_profil_gibt_es_keins(settings, tmp_path, monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    wurzel = tmp_path / "leer"
+    (wurzel / "assets").mkdir(parents=True)
+    monkeypatch.setattr("insta_agent.config.REPO_ROOT", wurzel)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/avatar", timeout=5)
+        assert fehler.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()

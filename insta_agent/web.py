@@ -481,10 +481,23 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             self._json({"ok": True})
 
         def _sende_avatar(self) -> None:
-            """Das Portrait des Agenten, aus seinem Namen gezeichnet."""
-            import io
+            """Das Portrait des Agenten.
 
+            Liegt ein eigenes Bild unter assets/portrait.*, gilt das. Der
+            Betreiber soll sein Dashboard aussehen lassen dürfen, wie er
+            möchte - er ist der Einzige, der es sieht.
+            """
+            import mimetypes as mt
+
+            from .config import REPO_ROOT
             from .imaging.avatar import render_avatar
+
+            for endung in ("png", "jpg", "jpeg", "webp", "gif"):
+                eigenes = REPO_ROOT / "assets" / f"portrait.{endung}"
+                if eigenes.is_file():
+                    typ = mt.guess_type(eigenes.name)[0] or "image/png"
+                    self._sende(200, typ, eigenes.read_bytes())
+                    return
 
             zustand = steuerung.zustand()
             identitaet = zustand.get("identitaet")

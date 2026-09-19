@@ -13,3 +13,6 @@ state/*.db
 state/*.db-journal
 out/
 assets/generated/
+
+# Eigenes Portrait des Betreibers - bleibt auf seinem Rechner
+assets/portrait.*
