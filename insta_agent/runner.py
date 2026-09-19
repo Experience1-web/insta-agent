@@ -15,6 +15,8 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import anthropic
+
 from .brain import (
     build_monetization_plan,
     create_post_draft,
@@ -192,6 +194,21 @@ class Agent:
             report.halted_reason = str(exc)
             self.store.log("refusal", str(exc), cycle)
             log.error("%s", exc)
+        except anthropic.APIStatusError as exc:
+            # Fehler der Gegenseite in Klartext übersetzen - ein roher
+            # Traceback sagt niemandem, dass nur das Guthaben fehlt.
+            erklaerung = _erklaere_api_fehler(exc)
+            report.halted_reason = erklaerung
+            self.store.log("api_error", erklaerung, cycle, payload={"status": exc.status_code})
+            log.error("%s", erklaerung)
+        except anthropic.APIConnectionError as exc:
+            erklaerung = (
+                "Keine Verbindung zur Claude API. Prüfe deine Internetverbindung "
+                f"und versuch es gleich nochmal. ({exc})"
+            )
+            report.halted_reason = erklaerung
+            self.store.log("api_error", erklaerung, cycle)
+            log.error("%s", erklaerung)
 
         report.finished_at = datetime.now(timezone.utc)
         report.cost_usd = self.treasury.state().cycle_spent_usd
@@ -314,3 +331,33 @@ class Agent:
             payload=plan.model_dump(mode="json"),
         )
         report.steps.append(f"Geschäftsplan: {plan.recommended_now}")
+
+
+def _erklaere_api_fehler(exc: anthropic.APIStatusError) -> str:
+    """Übersetzt einen Fehler der Claude API in einen brauchbaren Hinweis."""
+    text = str(exc).lower()
+
+    if exc.status_code == 401:
+        return (
+            "Die Claude API weist den Schlüssel zurück. Entweder stimmt er nicht, "
+            "oder er wurde gelöscht oder ist abgelaufen. Leg unter "
+            "console.anthropic.com → Settings → API keys einen neuen an und trag "
+            "ihn mit `insta-agent setup` ein."
+        )
+    if exc.status_code == 400 and ("credit" in text or "balance" in text):
+        return (
+            "Das Guthaben deines Anthropic-Kontos ist aufgebraucht. Lad unter "
+            "console.anthropic.com → Settings → Billing etwas auf - das ist von "
+            "der internen Kasse des Agenten unabhängig, die zählt nur mit."
+        )
+    if exc.status_code == 429:
+        return (
+            "Zu viele Anfragen in kurzer Zeit. Warte ein paar Minuten und starte "
+            "den Zyklus erneut."
+        )
+    if exc.status_code >= 500:
+        return (
+            f"Die Claude API hat einen Serverfehler gemeldet ({exc.status_code}). "
+            "Das liegt nicht an dir - versuch es später nochmal."
+        )
+    return f"Die Claude API hat abgelehnt ({exc.status_code}): {exc}"
