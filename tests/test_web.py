@@ -1,6 +1,7 @@
 """Die Oberfläche darf keine Datei ausliefern, die ihr nicht gehört."""
 
 import json
+from http.server import BaseHTTPRequestHandler
 
 import pytest
 
@@ -217,15 +218,16 @@ def test_der_zustand_verraet_den_laufenden_stand(settings):
     assert zustand["grenze_pro_zyklus"] == settings.economy.max_cost_per_cycle_usd
 
 
-def test_fremdes_programm_auf_dem_port_wird_nicht_abgeschossen(settings, capsys):
-    """Ein belegter Port heißt nicht, dass dort unser Dashboard läuft.
+def test_belegter_port_fuehrt_zum_ausweichen_statt_zum_abbruch(capsys):
+    """Ein belegter Port darf den Start nie verhindern.
 
-    Ohne diese Unterscheidung würde das Aufräumen irgendein fremdes
-    Programm beenden - hier war es der Testlauf selbst.
+    Das Aufräumen scheiterte in der Praxis wiederholt. Ein Dashboard, das
+    dann gar nicht startet, ist das schlechteste Ergebnis - also wird
+    ausgewichen. Das fremde Programm bleibt dabei unangetastet.
     """
     import socket
 
-    from insta_agent.web import starte_server
+    from insta_agent.web import _binde_port
 
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -233,13 +235,23 @@ def test_fremdes_programm_auf_dem_port_wird_nicht_abgeschossen(settings, capsys)
     blocker.listen(1)
     port = blocker.getsockname()[1]
 
+    server = None
     try:
-        with pytest.raises(SystemExit):
-            starte_server(settings, port=port, oeffnen=False)
+        server = _binde_port("127.0.0.1", port, BaseHTTPRequestHandler)
+        gewaehlt = server.server_address[1]
+
+        assert gewaehlt != port, "es wurde nicht ausgewichen"
+        assert port < gewaehlt <= port + 20
+
         ausgabe = capsys.readouterr().out
         assert "anderen Programm belegt" in ausgabe
-        assert "--port" in ausgabe, "es fehlt der Ausweg"
+        assert f"Port {gewaehlt}" in ausgabe, "der neue Port wird nicht genannt"
+
+        # Das fremde Programm läuft weiter.
+        assert blocker.fileno() != -1
     finally:
+        if server:
+            server.server_close()
         blocker.close()
 
 

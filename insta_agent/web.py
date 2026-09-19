@@ -483,13 +483,13 @@ def eigene_ip() -> str:
 
 
 def _binde_port(host: str, port: int, handler) -> ThreadingHTTPServer:
-    """Belegt den Port und räumt dafür nötigenfalls ein altes Dashboard weg.
+    """Belegt den Wunschport - und weicht aus, wenn das nicht gelingt.
 
-    Ein noch laufendes altes Dashboard war der häufigste Stolperstein: Das
-    neue startete nicht, der Browser zeigte weiter den alten Stand, und von
-    außen sah es aus, als käme eine Aktualisierung nicht an. Das hier
-    aufzuräumen gehört nach Python - in einer Batch-Datei lässt es sich
-    nicht prüfen.
+    Ein altes Dashboard wird nach Möglichkeit beendet. Gelingt das nicht,
+    wird nicht aufgegeben, sondern der nächste freie Port genommen. Das
+    Aufräumen scheiterte in der Praxis wiederholt aus Gründen, die sich aus
+    der Ferne nicht klären ließen; ein Dashboard, das dann gar nicht
+    startet, ist das schlechtestmögliche Ergebnis.
     """
     import time
 
@@ -498,31 +498,34 @@ def _binde_port(host: str, port: int, handler) -> ThreadingHTTPServer:
     except OSError:
         pass
 
-    if not ist_unser_dashboard(port):
+    if ist_unser_dashboard(port):
+        print(f"\n  Port {port} war belegt - beende das alte Dashboard …")
+        beendet, meldung = beende_dashboard(port)
+        print(f"  {meldung}")
+        if beendet:
+            # Das Betriebssystem braucht einen Moment, bis der Port frei ist.
+            for _ in range(20):
+                time.sleep(0.25)
+                try:
+                    return ThreadingHTTPServer((host, port), handler)
+                except OSError:
+                    continue
+    else:
+        print(f"\n  Port {port} ist von einem anderen Programm belegt.")
+
+    for kandidat in range(port + 1, port + 21):
+        try:
+            server = ThreadingHTTPServer((host, kandidat), handler)
+        except OSError:
+            continue
         print(
-            f"\n  Port {port} ist von einem anderen Programm belegt.\n"
-            f"  Das wird nicht beendet - starte das Dashboard auf einem\n"
-            f"  anderen Port, etwa:  insta-agent web --port {port + 1}\n"
+            f"\n  Der alte Platz ließ sich nicht räumen - das Dashboard läuft\n"
+            f"  deshalb auf Port {kandidat}. Nimm die Adresse von unten,\n"
+            f"  nicht die aus einem alten Browser-Tab.\n"
         )
-        raise SystemExit(1)
+        return server
 
-    print(f"\n  Port {port} war belegt - beende das alte Dashboard …")
-    beendet, meldung = beende_dashboard(port)
-    print(f"  {meldung}")
-
-    if beendet:
-        # Das Betriebssystem braucht einen Moment, bis der Port frei ist.
-        for _ in range(20):
-            time.sleep(0.25)
-            try:
-                return ThreadingHTTPServer((host, port), handler)
-            except OSError:
-                continue
-
-    print(
-        f"\n  Der Port {port} lässt sich nicht belegen.\n"
-        f"  Schließ alle schwarzen Fenster dieses Programms und versuch es erneut.\n"
-    )
+    print(f"\n  Zwischen {port} und {port + 20} ist kein Platz frei.\n")
     raise SystemExit(1)
 
 
@@ -548,6 +551,7 @@ def starte_server(
     steuerung.starte_takt()
 
     server = _binde_port(host, port, _handler_klasse(steuerung, token))
+    port = server.server_address[1]
 
     if nach_aussen:
         steuerung.handy_url = f"http://{eigene_ip()}:{port}/?token={token}"
