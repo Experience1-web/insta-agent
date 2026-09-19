@@ -29,6 +29,9 @@ from .runner import Agent
 
 log = logging.getLogger(__name__)
 
+# Die Server-Kennung, an der sich ein laufendes Dashboard erkennen lässt.
+KENNUNG = "insta-agent"
+
 
 class LaufProtokoll(logging.Handler):
     """Sammelt die Meldungen des laufenden Zyklus für die Anzeige."""
@@ -241,6 +244,11 @@ def ist_unser_dashboard(port: int) -> bool:
     Ohne diese Prüfung würde beim Aufräumen irgendein fremdes Programm
     abgeschossen, das den Port zufällig belegt - im schlimmsten Fall etwas,
     an dem gerade jemand arbeitet.
+
+    Erkannt wird an der Server-Kennung, die jede bisherige Fassung
+    mitschickt. Nach einzelnen Feldern zu suchen ging schief: Ein älteres
+    Dashboard kennt die neuesten nicht, galt dadurch als fremd und lief
+    einfach weiter - genau der Fall, für den das Aufräumen gedacht war.
     """
     import json
     import urllib.request
@@ -249,12 +257,15 @@ def ist_unser_dashboard(port: int) -> bool:
         with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/api/zustand", timeout=2
         ) as antwort:
+            kennung = antwort.headers.get("Server", "")
+            if KENNUNG in kennung:
+                return True
             daten = json.loads(antwort.read())
     except Exception:  # noqa: BLE001 - alles andere ist eben nicht unseres
         return False
 
-    # Diese Felder liefert nur unsere eigene Oberfläche.
-    return isinstance(daten, dict) and {"laeuft", "kasse", "version"} <= daten.keys()
+    # Ersatzweise an den Feldern, die es seit der ersten Fassung gibt.
+    return isinstance(daten, dict) and {"laeuft", "kasse"} <= daten.keys()
 
 
 def beende_dashboard(port: int) -> tuple[bool, str]:

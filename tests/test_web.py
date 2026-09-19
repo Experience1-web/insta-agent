@@ -295,3 +295,71 @@ def test_ein_port_der_nur_als_gegenstelle_vorkommt_zaehlt_nicht():
     from insta_agent.web import pids_auf_port
 
     assert pids_auf_port(DEUTSCHE_NETSTAT, 54321) == set()
+
+
+def test_ein_aelteres_dashboard_wird_trotzdem_als_eigenes_erkannt():
+    """Der Fehler, der das Aufräumen wirkungslos machte.
+
+    Geprüft wurde auf ein Feld, das erst später dazukam. Ein älteres
+    Dashboard galt dadurch als fremdes Programm und lief weiter - obwohl
+    genau dafür aufgeräumt werden sollte.
+    """
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from insta_agent.web import ist_unser_dashboard
+
+    class AlteFassung(BaseHTTPRequestHandler):
+        server_version = "insta-agent"
+
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            # Bewusst ohne "version" - so sah die erste Fassung aus.
+            koerper = json.dumps({"laeuft": False, "kasse": {}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(koerper)))
+            self.end_headers()
+            self.wfile.write(koerper)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), AlteFassung)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        assert ist_unser_dashboard(port)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ein_fremder_webserver_gilt_weiterhin_als_fremd():
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from insta_agent.web import ist_unser_dashboard
+
+    class FremderDienst(BaseHTTPRequestHandler):
+        server_version = "nginx"
+        sys_version = ""
+
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"hi")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), FremderDienst)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        assert not ist_unser_dashboard(port)
+    finally:
+        server.shutdown()
+        server.server_close()
