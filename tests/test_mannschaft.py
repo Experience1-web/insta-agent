@@ -1,8 +1,8 @@
-"""Drei Rollen, drei Aufträge - und wer mit welchem Modell arbeitet.
+"""Vier Rollen, vier Aufträge - und wer mit welchem Modell arbeitet.
 
-Die Trennung ist der ganze Sinn: Wer schreibt, prüft nicht. Wer prüft,
-gestaltet nicht. Und welches Modell eine Rolle bekommt, gehört dem
-Betreiber in die Hand, nicht in den Quelltext.
+Die Trennung ist der ganze Sinn: Wer sucht, schreibt nicht. Wer schreibt,
+prüft nicht. Wer prüft, gestaltet nicht. Und welches Modell eine Rolle
+bekommt, gehört dem Betreiber in die Hand, nicht in den Quelltext.
 """
 
 from __future__ import annotations
@@ -45,12 +45,12 @@ def settings(tmp_path):
 # --- Die Aufstellung -------------------------------------------------------
 
 
-def test_alle_drei_rollen_haben_einen_eigenen_auftrag():
+def test_alle_rollen_haben_einen_eigenen_auftrag():
     auftraege = [r.aufgabe for r in ROLLEN if r.schluessel != "chef"]
 
-    assert len(ROLLEN) == 3
+    assert len(ROLLEN) == 4
     assert len(set(auftraege)) == len(auftraege)
-    assert len({r.name for r in ROLLEN if r.name}) == 2
+    assert len({r.name for r in ROLLEN if r.name}) == 3
 
 
 def test_ohne_identitaet_fehlt_der_chef(einstellungen):
@@ -58,7 +58,7 @@ def test_ohne_identitaet_fehlt_der_chef(einstellungen):
     leute = aufstellung(None, einstellungen)
 
     assert "chef" not in [m["schluessel"] for m in leute]
-    assert len(leute) == 2
+    assert len(leute) == len(ROLLEN) - 1
 
 
 def test_der_chef_bringt_namen_und_motto_aus_seiner_identitaet(einstellungen):
@@ -90,12 +90,13 @@ def test_eine_abgeschaltete_rolle_wird_als_solche_gezeigt(einstellungen):
 
 
 def test_pruefen_und_gestalten_laufen_nicht_auf_dem_teuersten_modell(einstellungen):
-    """Beides ist Nachschlagen und Vergleichen, keine kreative Arbeit."""
+    """Alles drei ist Nachschlagen und Vergleichen, keine kreative Arbeit."""
     leute = {m["schluessel"]: m for m in aufstellung(_identitaet(), einstellungen)}
 
     assert leute["chef"]["modell"] == einstellungen.llm.model
     assert leute["pruefung"]["modell"] == einstellungen.llm.research_model
     assert leute["bildsprache"]["modell"] == einstellungen.llm.research_model
+    assert leute["stoff"]["modell"] == einstellungen.llm.research_model
 
 
 def test_die_wahl_des_betreibers_sticht_die_voreinstellung(einstellungen):

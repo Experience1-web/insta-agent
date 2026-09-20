@@ -18,8 +18,9 @@ from __future__ import annotations
 import logging
 
 from ..llm import Brain
-from ..models import PostDraft, Pruefbericht
+from ..models import Fund, PostDraft, Pruefbericht
 from .prompts import PERSONA, identity_block, strategy_block, with_context
+from .stoff import fund_block
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def ueberarbeite_beitrag(
     bericht: Pruefbericht,
     max_hashtags: int = 20,
     modell: str | None = None,
+    fund: Fund | None = None,
 ) -> PostDraft:
     """Schreibt den Beitrag neu, sodass jeder Befund erledigt ist."""
     neu = brain.structured(
@@ -55,6 +57,7 @@ def ueberarbeite_beitrag(
         prompt=with_context(
             identity_block(identity),
             strategy_block(strategy),
+            fund_block(fund),
             f"""\
 # Dein Entwurf
 
@@ -92,6 +95,8 @@ Beitrag.
 
 Trägt die Aussage nach der Korrektur nicht mehr - weil die Zahl, auf der
 alles stand, falsch war -, dann schreib einen anderen Beitrag zum selben
+Fund. Der Fund bleibt: Beanstandet ist, was du daraus gemacht hast, nicht
+das, was gefunden wurde. Steht oben kein Fund, bleibst du beim
 Wochenziel. Ein schwacher Beitrag, der stimmt, ist besser als ein starker,
 der nicht stimmt. Ein starker, der stimmt, ist besser als beide.
 

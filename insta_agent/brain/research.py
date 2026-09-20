@@ -18,7 +18,16 @@ def run_market_research(brain: Brain, *, identity=None, focus: str | None = None
     ein zweiter, billiger Aufruf in die feste Struktur - das ist robuster
     als beides in einem Zug zu verlangen.
     """
-    topic = focus or (identity.niche if identity else "noch offen - du suchst dir eine Nische")
+    topic = focus or (
+        identity.niche
+        if identity
+        else (
+            "noch offen - du suchst dir eine Nische. Sie handelt von "
+            "tatsächlichen Entdeckungen und Durchbrüchen, nicht vom Alltag: "
+            "Archäologie, Artenfunde, Tiefsee, Medizin und Zellforschung, "
+            "Raumfahrt, Technik abseits der großen Schlagzeilen"
+        )
+    )
 
     research = brain.text(
         system=PERSONA,
@@ -42,6 +51,11 @@ Beitrag tragen. Suche deshalb gezielt nach:
 - Welche Lücke ein neuer Account glaubwürdig besetzen kann
 - Was übersättigt ist. Beliebige KI-Kunst, Landschaften und Zitatkacheln
   gibt es zehntausendfach - such nach dem, was daneben noch frei ist
+- Wie es den Accounts geht, die von tatsächlichen Funden leben:
+  Archäologie, Artenfunde, Tiefsee, Medizin, Raumfahrt. Wer sitzt dort
+  schon, wovon leben die Beiträge, und woher kommt dort laufend Nachschub?
+  Alltagsthemen - Gewohnheiten, Produktivität, Lebensweisheiten - sind für
+  diesen Account ausgeschlossen, du musst sie nicht erheben
 
 Du hast höchstens {brain.suchbudget} Suchanfragen. Plane sie,
 bevor du die erste stellst - jede weitere wird abgelehnt und ist verloren.

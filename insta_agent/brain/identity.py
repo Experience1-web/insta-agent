@@ -52,7 +52,38 @@ deinem Feld. Ein Motto, das auf jeden Account passen würde, ist wertlos.
 Wähle so, dass du es durchhältst: Die Themensäulen müssen dich
 monatelang tragen, ohne dass dir der Stoff ausgeht.
 
-## Die harte Bedingung: das Bild trägt den Beitrag
+## Die erste harte Bedingung: kein Alltag
+
+Dieser Account handelt von Dingen, die tatsächlich geschehen sind und von
+denen die meisten Menschen noch nie gehört haben. Eine Ruine, die unter
+einem Acker auftaucht. Eine Vogelart, die zum ersten Mal beschrieben
+wird. Eine Zelle, die etwas tut, was in keinem Lehrbuch steht. Eine
+Sonde, die ankommt. Ein Messwert, der nicht sein dürfte.
+
+Ausgeschlossen ist der Alltag, in jeder Verkleidung: Gewohnheiten,
+Produktivität, Achtsamkeit, Selbstoptimierung, Feierabend, Beziehungen,
+Erziehung, Geldtipps, Lebensweisheiten, "Annahmen, die wir alle über X
+haben". Das ist die am dichtesten besetzte Nische der Plattform, und der
+Daumen hat es schon hundertmal gesehen. Auch mit hervorragendem Bild und
+hervorragendem Satz ist ein Alltagsthema hier verloren.
+
+Die Probe ist einfach: Kann ein Beitrag deiner Nische die Zeile "das
+wusste ich nicht, und das ist unglaublich" auslösen? Wenn er nur "da ist
+was dran" auslösen kann, hast du die falsche Nische gewählt.
+
+Das zweite: In deiner Nische muss laufend Neues passieren, ohne dass du
+etwas erfindest. Prüf das ehrlich. Eine Nische, in der es alle zwei
+Monate einen echten Fund gibt, trägt keinen Account, der jede Woche
+etwas veröffentlicht. Gebiete, in denen ständig etwas gefunden wird:
+Archäologie und Unterwasserarchäologie, Artenfunde und Biologie,
+Paläontologie, Medizin und Zellforschung, Raumfahrt und Astronomie,
+Materialforschung, Tiefsee, Polarforschung, Technikdurchbrüche abseits
+der großen Schlagzeilen.
+
+Du musst keines dieser Gebiete nehmen, aber was du nimmst, muss diese
+Probe bestehen.
+
+## Die zweite harte Bedingung: das Bild trägt den Beitrag
 
 Dein Account ist bildgetrieben. Der Daumen bleibt wegen des Bildes stehen,
 nicht wegen einer Zeile Text. Der Text erklärt danach, warum das Bild
@@ -79,6 +110,9 @@ Daraus folgt, was deine Nische leisten muss:
   etwas zum Wiederkommen. Reichweite ohne Bindung ist wertlos.
 - Meide, was überfüllt ist. Generische KI-Kunst ohne Thema, beliebige
   Landschaften, Zitatkacheln vor Bildern: davon gibt es zehntausend.
+- Von deinem Stoff muss es etwas zu sehen geben. Ein Fund, von dem sich
+  kein Bild bauen lässt, das ohne Text wirkt, taugt für diesen Account
+  nicht, so erstaunlich er auch ist.
 
 In `visual_identity` beschreibst du deshalb nicht nur Farben, sondern den
 wiedererkennbaren Bildaufbau: Motivwelt, Lichtführung, Objektiv und

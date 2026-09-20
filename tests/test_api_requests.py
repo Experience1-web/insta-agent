@@ -16,6 +16,7 @@ from insta_agent.runner import Agent
 from test_cycle import (
     _analyse,
     _entwurf,
+    _fund,
     _geschaeftsplan,
     _gestaltungsurteil,
     _identitaet,
@@ -26,6 +27,7 @@ from test_cycle import (
 
 ANTWORTEN = {
     "MarketAnalysis": _analyse,
+    "Fund": _fund,
     "Identity": _identitaet,
     "StrategyUpdate": _strategie,
     "PostDraft": _entwurf,
@@ -130,9 +132,9 @@ def test_die_websuche_geht_an_das_guenstige_modell(agent_mit_mitschrift):
     agent.run_cycle()
 
     mit_suche = [a for a in client.anfragen if a.get("tools")]
-    # Dreimal wird nachgeschlagen: Marktrecherche, Bildsprache, Endprüfung.
-    # Alle drei gehen an das Recherchemodell, nicht an das teure.
-    assert len(mit_suche) == 3, "Recherche, Bildsprache und Endprüfung suchen je einmal"
+    # Viermal wird nachgeschlagen: Marktrecherche, Stoffsuche, Bildsprache,
+    # Endprüfung. Alle vier gehen an das Recherchemodell, nicht an das teure.
+    assert len(mit_suche) == 4, "Recherche, Stoff, Bildsprache und Endprüfung suchen je einmal"
     for anfrage in mit_suche:
         assert anfrage["model"] == agent.settings.llm.research_model
         assert anfrage["tools"][0]["type"] == "web_search_20260209"

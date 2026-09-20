@@ -20,7 +20,8 @@ Was er entscheidet, entscheidet er allein. Du gibst ihm kein Thema vor
 | **Lernen** | Liest seine eigenen Zahlen und trennt dabei, was er *weiß*, von dem, was er nur *vermutet*. |
 | **Recherchieren** | Alle 7 Zyklen (oder wenn der Kurs wackelt): Websuche nach Trends, Wettbewerb und Lücken. |
 | **Planen** | Setzt ein einziges messbares Ziel für sieben Tage und begründet jede Änderung. |
-| **Produzieren** | Schreibt Caption, Hook, Hashtags und einen Bauplan fürs Bild; rendert das Bild lokal. |
+| **Stoff suchen** | Vor jedem Beitrag: Websuche nach einem tatsächlichen Fund - eine Entdeckung, ein Artenfund, ein Durchbruch. Bewertet ihn von 1 bis 5 und sucht noch einmal, wenn er zu schwach ist. Alltagsthemen sind ausgeschlossen. |
+| **Produzieren** | Schreibt zu diesem Fund Caption, Hook, Hashtags und den Bildprompt; die Bildsprache schreibt den Prompt um, dann wird gemalt, dann prüft die Endprüfung jede Zahl und Quelle. |
 | **Veröffentlichen** | Standard: Entwurf als Datei. Mit `--live`: echter Beitrag über die offizielle API. |
 | **Nachrechnen** | Alle 5 Zyklen: Lohnt sich der Kurs noch? Erwartungswert des jetzigen Wegs gegen Alternativen, abzüglich Wechselkosten. |
 | **Verdienen** | Alle 14 Zyklen (oder bei knapper Kasse): Geschäftsideen mit nüchterner Umsatzschätzung. |

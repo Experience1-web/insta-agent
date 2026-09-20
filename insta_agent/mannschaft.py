@@ -1,9 +1,14 @@
 """Wer hier arbeitet - und womit.
 
-Der Betrieb besteht nicht aus einem Agenten, sondern aus drei Rollen mit
-verschiedenen Aufträgen: Einer schreibt, einer sieht auf die Gestaltung,
-einer prüft. Diese Trennung ist der ganze Sinn der Sache - wer schreibt,
-prüft nicht, und wer prüft, gestaltet nicht.
+Der Betrieb besteht nicht aus einem Agenten, sondern aus vier Rollen mit
+verschiedenen Aufträgen: Einer sucht den Stoff, einer schreibt, einer
+sieht auf die Gestaltung, einer prüft. Diese Trennung ist der ganze Sinn
+der Sache - wer schreibt, prüft nicht, und wer prüft, gestaltet nicht.
+
+Die Stoffsuche steht bewusst vor dem Schreiben. Wer schreibt, nimmt das
+Thema, das ihm gerade einfällt, und was einem einfällt, ist der eigene
+Alltag. Dagegen hilft kein besserer Satz, sondern nur ein besserer
+Fund.
 
 Hier steht, wer das ist, was ihn ausmacht, wie er aussieht und mit
 welchem Modell er arbeitet. Die Modellwahl ist bewusst nicht fest
@@ -23,6 +28,9 @@ from .brain import (
     PRUEFER_AUFGABE,
     PRUEFER_NAME,
     PRUEFER_ROLLE,
+    STOFF_AUFGABE,
+    STOFF_NAME,
+    STOFF_ROLLE,
 )
 
 # Wo die Modellwahl des Betreibers liegt.
@@ -74,6 +82,28 @@ CHEF = Rolle(
     rang="chef",
 )
 
+STOFF = Rolle(
+    schluessel="stoff",
+    name=STOFF_NAME,
+    rolle=STOFF_ROLLE,
+    aufgabe=STOFF_AUFGABE,
+    eigenschaften=(
+        "sucht, bevor jemand schreibt",
+        "verwirft Alltag ohne Nachsicht",
+        "will die Fundstelle sehen",
+        "misst am Daumen, nicht am Geschmack",
+    ),
+    aufgabenstufe="research",
+    bildwunsch=(
+        "a portrait of a person who hunts down stories for a living, leaning "
+        "forward slightly, alert and amused, cluttered archive shelves far out "
+        "of focus behind, warm low sun raking in from a window on the left, "
+        "one bright accent in the clothing, 50mm, shallow depth of field, "
+        "reportage portrait, curious rather than polished"
+    ),
+    abschaltbar="stoff_noetig",
+)
+
 BILDSPRACHE = Rolle(
     schluessel="bildsprache",
     name=GESTALTER_NAME,
@@ -117,7 +147,9 @@ ENDPRUEFUNG = Rolle(
     abschaltbar="pruefung_noetig",
 )
 
-ROLLEN: tuple[Rolle, ...] = (CHEF, BILDSPRACHE, ENDPRUEFUNG)
+# Die Reihenfolge ist die Reihenfolge der Arbeit: erst der Fund, dann
+# der Text, dann das Bild, dann die Prüfung.
+ROLLEN: tuple[Rolle, ...] = (CHEF, STOFF, BILDSPRACHE, ENDPRUEFUNG)
 NACH_SCHLUESSEL = {r.schluessel: r for r in ROLLEN}
 
 

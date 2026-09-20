@@ -84,6 +84,85 @@ class StrategyUpdate(BaseModel):
     )
 
 
+# --------------------------------------------------------------------------
+# Der Stoff - worüber überhaupt geschrieben wird
+# --------------------------------------------------------------------------
+
+
+class Fund(BaseModel):
+    """Ein Fund: die außergewöhnliche Sache, auf der ein Beitrag steht.
+
+    Die härteste Grenze dieses Accounts ist nicht der Text und nicht das
+    Bild, sondern das Thema. Ein Beitrag über den Alltag ist nicht zu
+    retten - egal wie gut geschrieben, egal wie schön fotografiert. Wer
+    gerade wischt, hat den Alltag schon, er braucht ihn nicht als Beitrag.
+
+    Deshalb steht am Anfang kein Schreibauftrag, sondern eine Suche: Was
+    ist tatsächlich geschehen, das jemanden den Daumen anhalten lässt?
+    """
+
+    titel: str = Field(description="Der Fund in einer Zeile, sachlich, ohne Reißerei")
+    gebiet: str = Field(
+        description="Archäologie, Artenfund, Medizin, Zellbiologie, Raumfahrt, Technik ..."
+    )
+    was_geschah: str = Field(
+        description="Was gefunden, entdeckt oder erreicht wurde, in zwei bis drei Sätzen"
+    )
+    das_detail: str = Field(
+        description=(
+            "Der eine Satz, bei dem jemand aufhört zu wischen. Eine Zahl, ein "
+            "Maß, ein Alter, ein Widerspruch - etwas Konkretes, nichts Gefühltes."
+        )
+    )
+    warum_aussergewoehnlich: str = Field(
+        description="Warum das kein Alltag ist, sondern selten - in zwei Sätzen"
+    )
+    warum_kaum_bekannt: str = Field(
+        default="",
+        description="Warum das noch kaum jemand mitbekommen hat",
+    )
+    wann: str = Field(description="Wann es geschah oder veröffentlicht wurde")
+    quellen: list[str] = Field(
+        default_factory=list,
+        description="Wo es steht: Veröffentlichung, Jahrgang, möglichst URL",
+    )
+    beleglage: Literal["gesichert", "gemeldet", "unbestaetigt"] = Field(
+        default="gemeldet",
+        description=(
+            "gesichert: in einer Fachveröffentlichung nachzulesen. gemeldet: "
+            "mehrere ernsthafte Medien berichten. unbestaetigt: eine einzelne "
+            "Quelle, mehr nicht - damit geht kein Beitrag hinaus."
+        ),
+    )
+    reiz: int = Field(
+        ge=1,
+        le=5,
+        description=(
+            "1: Alltag, das kennt jeder. 2: ganz nett, aber schon oft gesehen. "
+            "3: interessant, aber nicht atemberaubend. 4: man hält an und liest. "
+            "5: man schickt es sofort jemandem weiter."
+        ),
+    )
+    bildidee: str = Field(
+        description="Was man von diesem Fund zeigen kann, sodass es ohne Text wirkt"
+    )
+    verworfen: list[str] = Field(
+        default_factory=list,
+        description="Was du auch gefunden und als zu gewöhnlich verworfen hast",
+    )
+    gesucht_von: str = Field(default="", description="Wer gesucht hat")
+    mit_suche: bool = Field(default=True, description="Ob nachgeschlagen werden konnte")
+
+    @property
+    def taugt(self) -> bool:
+        """Ab vier ist es ein Fund. Darunter ist es ein Thema."""
+        return self.reiz >= 4
+
+    @property
+    def belegt(self) -> bool:
+        return self.beleglage in ("gesichert", "gemeldet")
+
+
 class VisualSpec(BaseModel):
     """Bauplan für das Bild. Wird lokal mit Pillow gerendert, kostet nichts."""
 

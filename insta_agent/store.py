@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS posts (
     draft_json      TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'draft',
     pruefung_json   TEXT,
-    gestaltung_json TEXT
+    gestaltung_json TEXT,
+    fund_json       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -90,7 +91,13 @@ class Store:
     # fasst eine bestehende Tabelle nicht an, also müssen sie einzeln
     # nachgezogen werden - sonst scheitert jede Datenbank, die es schon
     # vor der Änderung gab.
-    NACHGETRAGEN = {"posts": {"pruefung_json": "TEXT", "gestaltung_json": "TEXT"}}
+    NACHGETRAGEN = {
+        "posts": {
+            "pruefung_json": "TEXT",
+            "gestaltung_json": "TEXT",
+            "fund_json": "TEXT",
+        }
+    }
 
     def _ergaenze_spalten(self) -> None:
         for tabelle, spalten in self.NACHGETRAGEN.items():
@@ -203,6 +210,35 @@ class Store:
     def set_gestaltung(self, post_id: int, urteil: Any) -> None:
         """Hängt das Urteil der Bildsprache an den Entwurf."""
         self._haenge_an(post_id, "gestaltung_json", urteil)
+
+    def set_fund(self, post_id: int, fund: Any) -> None:
+        """Hängt den Fund an, auf dem der Beitrag steht.
+
+        Er überlebt eine Nachbesserung: Beanstandet wird der Text, nicht
+        der Fund. Und ohne ihn wüsste später niemand mehr, worauf der
+        Beitrag überhaupt beruht.
+        """
+        self._haenge_an(post_id, "fund_json", fund)
+
+    def letzte_funde(self, limit: int = 12) -> list[str]:
+        """Die Titel der zuletzt behandelten Funde.
+
+        Damit die Stoffsuche nicht zweimal dieselbe Ruine ausgräbt. Nur die
+        Titel, nicht die ganzen Funde: Es geht darum, Wiederholungen zu
+        vermeiden, nicht darum, alles noch einmal vorzulegen.
+        """
+        zeilen = self._conn.execute(
+            "SELECT fund_json FROM posts WHERE fund_json IS NOT NULL "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        titel = []
+        for zeile in zeilen:
+            try:
+                titel.append(json.loads(zeile["fund_json"])["titel"])
+            except (ValueError, KeyError, TypeError):
+                continue
+        return titel
 
     def _haenge_an(self, post_id: int, spalte: str, inhalt: Any) -> None:
         payload = inhalt.model_dump(mode="json") if hasattr(inhalt, "model_dump") else inhalt

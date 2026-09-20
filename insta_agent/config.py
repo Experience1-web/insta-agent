@@ -135,6 +135,11 @@ class PostingConfig:
     # nimmt im Feed nur Bilder zwischen 4:5 und 1.91:1 an - 9:16 liegt
     # ausserhalb und wuerde beschnitten.
     bildformat: str = "feed"
+    # Vor jedem Beitrag sucht die Stoffsuche den Fund, ueber den
+    # geschrieben wird. Abschalten spart einen Aufruf - und der Agent
+    # schreibt dann wieder ueber das, was ihm gerade einfaellt. Das ist
+    # erfahrungsgemaess Alltag.
+    stoff_noetig: bool = True
     # Die Bildsprache sieht sich den Prompt an, bevor gemalt wird, und
     # liefert die bessere Fassung. Abschalten spart einen Aufruf und
     # kostet den Unterschied zwischen eigenem Bild und Massenware.

@@ -11,6 +11,7 @@ from insta_agent.llm import CallResult
 from insta_agent.models import (
     BusinessIdea,
     Competitor,
+    Fund,
     Gestaltungsurteil,
     Identity,
     MarketAnalysis,
@@ -92,15 +93,18 @@ def _identitaet() -> Identity:
     return Identity(
         agent_name="Mara Vogt",
         agent_why="Ein Name, unter dem man mich ansprechen kann.",
-        handle="kleineschritte",
-        display_name="Kleine Schritte",
-        motto="Wer klein anfängt, hört nicht auf.",
-        niche="Gewohnheiten für Berufstätige",
-        target_audience="Berufstätige zwischen 25 und 40",
-        tone_of_voice="direkt, ohne Floskeln",
-        visual_identity="dunkle Flächen, harte Typografie, ein Akzentton",
-        content_pillars=["Gewohnheiten", "Fokus", "Rückschläge"],
-        bio="Kleine Schritte, jeden Tag.",
+        handle="fundbuch",
+        display_name="Fundbuch",
+        motto="Was diese Woche gefunden wurde und kaum jemand mitbekommen hat.",
+        niche="Funde und Entdeckungen aus Archäologie, Biologie und Raumfahrt",
+        target_audience="Neugierige zwischen 20 und 45",
+        tone_of_voice="nüchtern, staunend, ohne Ausrufezeichen",
+        visual_identity=(
+            "Fundorte im flachen Morgenlicht, 35 mm auf Augenhöhe, Staub und "
+            "Stein, gedämpfte Erdtöne mit einem kalten Akzent, ruhige Fläche oben"
+        ),
+        content_pillars=["Ausgrabungen", "Artenfunde", "Raumfahrt"],
+        bio="Funde, die es in keine Schlagzeile geschafft haben.",
         why_this_works="Die Nische ist groß und schlecht besetzt.",
     )
 
@@ -118,31 +122,56 @@ def _strategie() -> StrategyUpdate:
 
 def _entwurf() -> PostDraft:
     return PostDraft(
-        pillar="Gewohnheiten",
+        pillar="Ausgrabungen",
         # Das echte Modell liefert diese Felder - das Doppel muss es auch,
         # sonst laufen Bilderzeugung und Freigabe im Test ins Leere.
-        hook_text_on_screen="Du brauchst keinen neuen Plan.",
+        hook_text_on_screen="Zwölf Meter unter einem Rübenacker.",
         image_generation_prompt=(
-            "A single worn notebook on a dark wooden table, one cold window "
-            "light from the left, deep shadows, 35mm film grain, no text, "
-            "no logos, empty space in the upper third, vertical 9:16"
+            "A trench cut into a beet field at first light, cut stone edges "
+            "half exposed in wet clay, low sun raking from the left, long "
+            "shadows, 35mm film grain, no text, no logos, empty space in the "
+            "upper third, vertical 9:16"
         ),
-        body_text="Du brauchst einen kleineren.",
-        first_comment_prompt="Welcher Plan von dir ist schon dreimal gescheitert?",
-        hook="Du brauchst keinen neuen Plan.",
-        caption="Du brauchst keinen neuen Plan.\n\nDu brauchst einen kleineren.",
-        hashtags=["gewohnheiten", "fokus"],
+        body_text="Der Bagger hielt an, weil die Schaufel auf Stein traf.",
+        first_comment_prompt="Was würdest du ausgraben, wenn du einen Bagger hättest?",
+        hook="Zwölf Meter unter einem Rübenacker.",
+        caption=(
+            "Zwölf Meter unter einem Rübenacker.\n\nDer Bagger hielt an, weil "
+            "die Schaufel auf Stein traf."
+        ),
+        hashtags=["archaeologie", "fund"],
         call_to_action="Speichere das für Montag.",
         visual=VisualSpec(
-            headline="Du brauchst keinen neuen Plan.",
-            subline="Du brauchst einen kleineren",
-            body_lines=["Fünf Minuten statt einer Stunde"],
+            headline="Zwölf Meter unter einem Rübenacker.",
+            subline="Der Bagger hielt an",
+            body_lines=["Gefunden bei Routinearbeiten"],
             background_hex="#111318",
             text_hex="#F5F5F0",
             accent_hex="#E4572E",
         ),
         best_time_hint="Montag 8 Uhr",
         expected_outcome="mehr Speicherungen als sonst",
+    )
+
+
+def _fund() -> Fund:
+    """Was die Stoffsuche mitbringt: kein Alltag, belegt, mit Bildidee."""
+    return Fund(
+        titel="Römisches Kellergewölbe unter einem Rübenacker gefunden",
+        gebiet="Archäologie",
+        was_geschah=(
+            "Bei Leitungsarbeiten stieß ein Bagger auf ein intaktes Gewölbe, "
+            "zwölf Meter unter der Oberfläche."
+        ),
+        das_detail="Die Deckenkonstruktion trägt seit 1800 Jahren ohne Mörtel.",
+        warum_aussergewoehnlich="Intakte Gewölbe dieser Bauart sind nördlich der Alpen selten.",
+        warum_kaum_bekannt="Die Grabung lief bisher ohne Presse.",
+        wann="März 2026",
+        quellen=["Archäologisches Korrespondenzblatt 2026"],
+        beleglage="gesichert",
+        reiz=5,
+        bildidee="Der aufgebrochene Grabungsschnitt im Morgenlicht, Stein gegen nasse Erde.",
+        verworfen=["Ein weiterer Münzfund - davon gibt es Dutzende"],
     )
 
 
@@ -202,6 +231,7 @@ def _geschaeftsplan() -> MonetizationPlan:
 
 _ANTWORTEN = {
     MarketAnalysis: _analyse,
+    Fund: _fund,
     Identity: _identitaet,
     StrategyUpdate: _strategie,
     PostDraft: _entwurf,
@@ -241,7 +271,7 @@ def test_erster_zyklus_erfindet_das_profil_und_legt_einen_entwurf_ab(agent):
     report = agent.run_cycle()
 
     assert report.halted_reason is None
-    assert agent.identity.motto == "Wer klein anfängt, hört nicht auf."
+    assert agent.identity.motto == _identitaet().motto
     assert agent.strategy.current_goal.startswith("In sieben Tagen")
 
     # Ein Entwurf mit Bild, aber nichts veröffentlicht.

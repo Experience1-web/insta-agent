@@ -2,16 +2,59 @@
 
 Reihenfolge der Aufmerksamkeit: Bild mit Hook-Text, erste Caption-Zeile,
 Fließtext, Aufruf. Der erste Kommentar startet die Diskussion.
+
+Geschrieben wird nicht über das, was gerade einfällt, sondern über den
+Fund, den die Stoffsuche mitbringt. Der Unterschied ist der ganze
+Account: Was einem einfällt, ist der eigene Alltag, und den hat der
+Daumen schon.
 """
 
 from __future__ import annotations
 
 from ..llm import Brain
-from ..models import PostDraft
+from ..models import Fund, PostDraft
 from .prompts import PERSONA, identity_block, strategy_block, with_context
+from .stoff import fund_block
 
 MAX_CAPTION = 2200
 MAX_HOOK_WOERTER = 7
+
+# Mit Fund ist das Thema gesetzt, ohne Fund muss er es selbst
+# hochziehen - und beides braucht einen anderen Auftrag.
+AUFTRAG_MIT_FUND = """\
+# Auftrag
+Schreib den Beitrag zu diesem Fund.
+
+Das Thema steht damit fest, und du wechselst es nicht. Deine Arbeit ist
+nicht, etwas Interessantes zu finden - das ist getan -, sondern es so zu
+erzählen, dass jemand anhält. Der Fund trägt den Beitrag, deine Sätze
+tragen den Fund.
+
+Drei Dinge, an denen solche Beiträge scheitern:
+
+- Du biegst die Sache zum Lebensratschlag. "Was diese Ruine uns über
+  Neuanfänge lehrt" ist wieder Alltag, nur mit Kulisse. Lass die Sache
+  die Sache sein.
+- Du machst mehr daraus, als belegt ist. Der Fund ist erstaunlich genug.
+  Steht dort `unbestaetigt`, schreibst du das hinein, statt es zu
+  verschweigen - als offene Frage ist er immer noch stark.
+- Du zeigst eine Metapher statt der Sache. Das Bild zeigt den Fund: den
+  Ort, den Gegenstand, den Maßstab, den Moment. Die Bildidee der
+  Stoffsuche ist dein Ausgangspunkt, nicht dein ganzer Prompt.
+
+Das Detail, das anhält, gehört in die ersten Sekunden, nicht in den
+letzten Absatz. Und irgendwo im Text steht in einem Satz, woher man das
+weiß: Veröffentlichung, Jahr, Ort. Wer Erstaunliches behauptet, wird
+nachgeschlagen - lieber lieferst du die Fundstelle gleich mit."""
+
+AUFTRAG_OHNE_FUND = """\
+# Auftrag
+Schreibe den nächsten Beitrag. Er zahlt auf dein Wochenziel ein.
+
+Diesmal kommt kein Fund von der Stoffsuche - such dir das Thema selbst.
+Es gilt dieselbe Schwelle: etwas tatsächlich Geschehenes, das die meisten
+noch nie gehört haben, und von dem es etwas zu sehen gibt. Kein Alltag,
+keine Gewohnheiten, keine Lebensweisheit."""
 
 
 def _kuerze_auf_woerter(text: str, hoechstens: int) -> str:
@@ -28,12 +71,15 @@ def create_post_draft(
     recent_captions: list[str],
     max_hashtags: int,
     performance_note: str = "",
+    fund: Fund | None = None,
 ) -> PostDraft:
     already_used = (
         "\n".join(f"- {c[:120]}" for c in recent_captions)
         if recent_captions
         else "Noch nichts veröffentlicht - das hier wird dein erster Post."
     )
+
+    auftrag = AUFTRAG_MIT_FUND if fund is not None else AUFTRAG_OHNE_FUND
 
     draft = brain.structured(
         schema=PostDraft,
@@ -42,11 +88,11 @@ def create_post_draft(
         prompt=with_context(
             identity_block(identity),
             strategy_block(strategy),
+            fund_block(fund),
             f"# Deine letzten Posts, wiederhole dich nicht\n{already_used}",
             f"# Was deine Zahlen sagen\n{performance_note}" if performance_note else "",
             f"""\
-# Auftrag
-Schreibe den nächsten Beitrag. Er zahlt auf dein Wochenziel ein.
+{auftrag}
 
 ## image_generation_prompt - das Wichtigste an diesem Beitrag
 Der Daumen bleibt wegen des Bildes stehen. Alles andere kommt danach.

@@ -229,6 +229,12 @@ class Steuerung:
                             if zeile["pruefung_json"]
                             else None
                         ),
+                        # Der Fund, auf dem der Beitrag steht. None
+                        # heißt: Der Agent hat sich das Thema selbst
+                        # gesucht - das ist die schwächere Herkunft.
+                        "fund": (
+                            json.loads(zeile["fund_json"]) if zeile["fund_json"] else None
+                        ),
                         # Was die Bildsprache vor dem Malen gesagt hat.
                         "gestaltung": (
                             json.loads(zeile["gestaltung_json"])

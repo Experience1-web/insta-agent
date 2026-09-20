@@ -732,6 +732,59 @@ function pruef_marke(pr) {
   return `<span class="marke ${klasse}">${text}${zahl ? " · " + zahl : ""}</span>`;
 }
 
+/** Der Reiz des Fundes als Marke: ab 4 hält jemand deswegen an.
+ *  Ohne Fund gar keine Marke - dann hat sich der Agent das Thema selbst
+ *  gesucht, und genau das war das alte Problem. */
+function reiz_marke(f) {
+  if (!f) return '<span class="marke ungeprueft">ohne Fund</span>';
+  const klasse = f.reiz >= 4 ? "gepruft" : f.reiz <= 2 ? "mangel" : "";
+  return `<span class="marke ${klasse}">Reiz ${f.reiz}/5</span>`;
+}
+
+const BELEGLAGE = {
+  gesichert: ["gepruft", "gesichert", "Steht in einer Fachveröffentlichung."],
+  gemeldet: ["", "gemeldet", "Mehrere ernsthafte Quellen berichten davon."],
+  unbestaetigt: ["mangel", "unbestätigt",
+    "Eine einzelne Quelle, mehr nicht – so etwas gehört als offene Frage in den Beitrag, nicht als Tatsache."],
+};
+
+/** Woher der Beitrag kommt. Das Wichtigste im ganzen Popup: Steht hier
+ *  nichts Außergewöhnliches, hilft auch der beste Satz nicht mehr. */
+function fund_html(f) {
+  if (!f) {
+    return `<p class="hinweis">Zu diesem Beitrag gibt es keinen Fund – das Thema
+      hat sich der Agent selbst ausgedacht. Das ist die schwächere Herkunft:
+      Was einem einfällt, ist meistens Alltag.</p>`;
+  }
+  const [klasse, beleg, erklaerung] = BELEGLAGE[f.beleglage] || BELEGLAGE.gemeldet;
+  return `
+    <p><b>${esc(f.titel)}</b></p>
+    <p>${esc(f.was_geschah)}</p>
+    <p class="zitat">„${esc(f.das_detail)}"</p>
+    <div style="margin:10px 0">
+      ${reiz_marke(f)}
+      <span class="marke ${klasse}">${esc(beleg)}</span>
+      ${f.gebiet ? `<span class="marke">${esc(f.gebiet)}</span>` : ""}
+      ${f.wann ? `<span class="marke">${esc(f.wann)}</span>` : ""}
+    </div>
+    <p class="hinweis" style="margin:-4px 0 10px">${erklaerung}</p>
+    ${f.warum_aussergewoehnlich ? `<p><b>Warum das kein Alltag ist:</b>
+      ${esc(f.warum_aussergewoehnlich)}</p>` : ""}
+    ${f.warum_kaum_bekannt ? `<p><b>Warum es kaum jemand kennt:</b>
+      ${esc(f.warum_kaum_bekannt)}</p>` : ""}
+    ${(f.quellen || []).length ? `<div class="feldkopf" style="margin-top:12px">
+        <span>Fundstellen</span></div>
+      <ul>${f.quellen.map(q => q.startsWith("http")
+        ? `<li><a href="${esc(q)}" target="_blank" rel="noopener noreferrer">${esc(q)}</a></li>`
+        : `<li>${esc(q)}</li>`).join("")}</ul>` : ""}
+    ${(f.verworfen || []).length ? `<div class="feldkopf" style="margin-top:12px">
+        <span>Auch gefunden und weggelegt</span></div>
+      <ul>${f.verworfen.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : ""}
+    ${!f.mit_suche ? `<p class="hinweis">Diesmal ohne Websuche gesucht – es konnte
+      nichts nachgeschlagen werden.</p>` : ""}
+    <p class="hinweis" style="margin-top:14px">Gefunden von ${esc(f.gesucht_von || "?")}.</p>`;
+}
+
 /** Das Niveau der Bildsprache als Marke: 1 bis 5, ab 4 ist es gut. */
 function niveau_marke(g) {
   if (!g) return "";
@@ -814,7 +867,8 @@ function zeichne_mannschaft(d) {
         </button>`).join("")}
     </div>
     <p class="hinweis" style="margin:12px 0 0">
-      Drei getrennte Aufträge: Wer schreibt, prüft nicht. Wer prüft, gestaltet nicht.
+      Vier getrennte Aufträge: Wer sucht, schreibt nicht. Wer schreibt, prüft nicht.
+      Wer prüft, gestaltet nicht.
       <button class="winzig" id="portraitsmalen">Porträts malen lassen</button>
     </p>`;
 
@@ -1227,8 +1281,8 @@ function zeichne_beitraege(d) {
             : `<p class="leerhinweis">Noch kein Bild –<br>es blieb bei der Typografie</p>`}
           <div class="marken">
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
+            ${reiz_marke(p.fund)}
             ${pruef_marke(p.pruefung)}
-            ${niveau_marke(p.gestaltung)}
           </div>
         </div>
         <div class="inhalt">
@@ -1262,9 +1316,15 @@ function zeige_beitrag(p) {
        src="/media?name=${encodeURIComponent(p.bild)}${anhang}" alt="">` : ""}
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
+      ${reiz_marke(p.fund)}
       ${pruef_marke(p.pruefung)}
       ${niveau_marke(p.gestaltung)}
       ${p.saeule ? `<span class="marke">${esc(p.saeule)}</span>` : ""}
+    </div>
+
+    <div class="feld">
+      <div class="feldkopf"><span>Der Fund, auf dem das steht</span></div>
+      ${fund_html(p.fund)}
     </div>
     ${p.bildtext ? `<div class="feld">
       <div class="feldkopf">

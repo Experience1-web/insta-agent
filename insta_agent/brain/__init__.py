@@ -12,6 +12,13 @@ from .gestaltung import (
     pruefe_gestaltung,
 )
 from .opportunity import assess_opportunities
+from .stoff import (
+    STOFF_AUFGABE,
+    STOFF_NAME,
+    STOFF_ROLLE,
+    finde_stoff,
+    fund_block,
+)
 from .pruefung import (
     PRUEFER_AUFGABE,
     PRUEFER_NAME,
@@ -37,4 +44,9 @@ __all__ = [
     "GESTALTER_NAME",
     "GESTALTER_ROLLE",
     "GESTALTER_AUFGABE",
+    "finde_stoff",
+    "fund_block",
+    "STOFF_NAME",
+    "STOFF_ROLLE",
+    "STOFF_AUFGABE",
 ]

@@ -23,6 +23,7 @@ from .brain import (
     build_monetization_plan,
     create_post_draft,
     erneuere_bildsprache,
+    finde_stoff,
     invent_identity,
     pruefe_beitrag,
     pruefe_gestaltung,
@@ -39,6 +40,7 @@ from .instagram import InstagramClient, Publisher
 from .llm import Brain, ModelRefused
 from .models import (
     CycleReport,
+    Fund,
     Identity,
     MarketAnalysis,
     MonetizationPlan,
@@ -417,6 +419,10 @@ class Agent:
                 report.steps.append(f"Weitere Posts abgebrochen: {exc}")
                 break
 
+            # Erst der Stoff, dann der Text. Andersherum schreibt der
+            # Agent über das, was ihm einfällt - und was einem einfällt,
+            # ist der eigene Alltag.
+            fund = self._suche_stoff(report)
             draft = create_post_draft(
                 self.brain,
                 identity=identity,
@@ -424,6 +430,7 @@ class Agent:
                 recent_captions=recent,
                 max_hashtags=self.settings.posting.max_hashtags,
                 performance_note=performance,
+                fund=fund,
             )
             if not draft.visual.footer.strip():
                 draft.visual.footer = f"@{identity.handle}"
@@ -446,6 +453,8 @@ class Agent:
             if erzeugt := self._erzeuge_bild(draft, basis, identity, report):
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
+            if fund is not None:
+                self.store.set_fund(post_id, fund)
             if gestaltung is not None:
                 self.store.set_gestaltung(post_id, gestaltung)
             bericht = self._pruefe(post_id, draft, identity, report)
@@ -593,6 +602,13 @@ class Agent:
         if not bericht.beanstandet and bericht.darf_raus:
             return {"ok": False, "grund": "Hier hat die Endprüfung nichts beanstandet."}
 
+        # Der Fund gehört mit: Nachgebessert wird der Text, nicht das
+        # Thema. Ohne ihn würde die Nachbesserung womöglich bei etwas
+        # anderem landen - und die Stoffsuche wäre umsonst bezahlt.
+        fund = (
+            Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
+        )
+
         self.treasury.check()
         neu = ueberarbeite_beitrag(
             self.brain,
@@ -602,6 +618,7 @@ class Agent:
             bericht=bericht,
             max_hashtags=self.settings.posting.max_hashtags,
             modell=self._modell("chef"),
+            fund=fund,
         )
         if not neu.visual.footer.strip():
             neu.visual.footer = f"@{identity.handle}"
@@ -710,6 +727,75 @@ class Agent:
             f"Entwurf {post_id}: {bericht.urteil} - {bericht.zusammenfassung}",
         )
         return bericht
+
+    def _suche_stoff(self, report: CycleReport) -> Fund | None:
+        """Sucht den Fund, auf dem der nächste Beitrag steht.
+
+        Gibt None zurück, wenn die Stoffsuche abgeschaltet ist oder
+        scheitert. Dann schreibt der Agent selbst ein Thema - schwächer,
+        aber besser als ein Zyklus ohne Beitrag.
+
+        Ist der Fund zu schwach, wird genau einmal nachgesetzt. Jede
+        weitere Runde kostet so viel wie die erste, und wer zweimal nichts
+        findet, findet auch beim dritten Mal nichts. Bei knapper Kasse
+        entfällt der zweite Anlauf.
+        """
+        if not self.settings.posting.stoff_noetig:
+            return None
+
+        bisherige = self.store.letzte_funde(limit=12)
+        mit_suche = self.treasury.state().mode is Mode.NORMAL
+        fund = None
+        try:
+            fund = finde_stoff(
+                self.brain,
+                identity=self.identity,
+                strategy=self.strategy,
+                bisherige=bisherige,
+                mit_suche=mit_suche,
+                modell=self._modell("stoff"),
+            )
+            if not fund.taugt and mit_suche:
+                report.steps.append(
+                    f"Stoff zu schwach (Reiz {fund.reiz}/5): {fund.titel} - noch einmal gesucht"
+                )
+                zweiter = finde_stoff(
+                    self.brain,
+                    identity=self.identity,
+                    strategy=self.strategy,
+                    bisherige=bisherige,
+                    mit_suche=mit_suche,
+                    modell=self._modell("stoff"),
+                    nachsetzen=fund,
+                )
+                # Der bessere von beiden, nicht einfach der zweite: Auch
+                # der Nachschlag kann schwächer ausfallen.
+                if zweiter.reiz >= fund.reiz:
+                    fund = zweiter
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Stoffsuche fehlgeschlagen: %s", exc)
+            report.steps.append(f"Stoffsuche fehlgeschlagen: {exc}")
+            self.store.log("stoff_error", str(exc))
+            return fund
+
+        report.steps.append(
+            f"Stoff: {fund.titel} (Reiz {fund.reiz}/5, {fund.beleglage})"
+        )
+        self.store.log(
+            "stoff",
+            f"{fund.titel} - Reiz {fund.reiz}/5, {fund.beleglage}"
+            + (f", verworfen: {len(fund.verworfen)}" if fund.verworfen else ""),
+        )
+        if not fund.taugt:
+            # Der Beitrag entsteht trotzdem, aber im Protokoll steht, dass
+            # er auf schwachem Stoff steht. Ein Zyklus ohne Beitrag wäre
+            # teurer als ein mittelmäßiger Beitrag.
+            report.steps.append(
+                f"Achtung: bester Fund nur Reiz {fund.reiz}/5 - der Beitrag trägt womöglich nicht"
+            )
+        return fund
 
     def _gestalte(self, draft, identity, report: CycleReport):
         """Lässt die Bildsprache über den geplanten Beitrag sehen.
