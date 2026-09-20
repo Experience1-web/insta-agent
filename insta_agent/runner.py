@@ -475,6 +475,56 @@ class Agent:
 
             recent.append(draft.caption)
 
+    def bild_neu(self, post_id: int) -> dict:
+        """Malt das Bild eines Entwurfs neu, ohne den Text anzufassen.
+
+        Gedacht fuer den Fall, dass einem das Bild einfach nicht gefaellt.
+        Die Bildsprache schreibt den Prompt vorher neu - ein zweiter Wurf
+        mit demselben Prompt sieht meist fast gleich aus, und "gefaellt mir
+        nicht" meint fast immer den Einfall, nicht den Zufall.
+
+        Der Pruefbericht bleibt stehen: Er gilt fuer Zahlen und Quellen,
+        und die haben sich nicht geaendert.
+        """
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur bei einem Entwurf lässt sich das Bild tauschen."}
+
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        lauf = CycleReport(started_at=datetime.now(timezone.utc))
+        self.treasury.check()
+
+        gestaltung = self._gestalte(draft, identity, lauf)
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        basis = f"{stamp}-neu-{post_id}"
+        bild = render_post_image(
+            draft.visual,
+            self.settings.media_dir / f"{basis}.png",
+            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+        )
+        gemalt = self._erzeuge_bild(draft, basis, identity, lauf)
+        if gemalt:
+            bild = gemalt
+
+        self.store.setze_bild(post_id, draft, str(bild))
+        if gestaltung is not None:
+            self.store.set_gestaltung(post_id, gestaltung)
+        self.store.log("bild_neu", f"Entwurf {post_id}: Bild neu gemalt")
+
+        return {
+            "ok": True,
+            "gemalt": bool(gemalt),
+            "niveau": gestaltung.niveau if gestaltung else None,
+            "schritte": lauf.steps,
+        }
+
     def _bessere_nach(self, post_id: int, bericht, report: CycleReport):
         """Lässt beanstandete Beiträge selbst nachbessern, begrenzt oft.
 

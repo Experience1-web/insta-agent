@@ -1237,6 +1237,7 @@ function zeichne_beitraege(d) {
           ${p.status === "draft" ? `<div class="knopfreihe">
             ${zu_bessern(p) ? `<button class="klein warn"
                data-nachbessern="${p.id}">Nachbessern</button>` : ""}
+            <button class="klein" data-bildneu="${p.id}">Bild neu</button>
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
             <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>
           </div>` : ""}
@@ -1317,6 +1318,7 @@ function zeige_beitrag(p) {
       ${p.status === "draft" ? `
         ${zu_bessern(p) ? `<button class="klein warn"
            data-nachbessern="${p.id}">Nachbessern</button>` : ""}
+        <button class="klein" data-bildneu="${p.id}">Bild neu</button>
         <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
         <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>` : ""}
       <button class="klein" data-text="${esc(volltext(p))}">Text kopieren</button>
@@ -1336,6 +1338,31 @@ function zu_bessern(p) {
 
 /** Freigeben und Verwerfen - auf der Karte wie im Popup. */
 function verdrahte_entscheidungen(bereich) {
+  for (const knopf of bereich.querySelectorAll("[data-bildneu]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm(
+        "Jo sieht sich den Bildeinfall neu an und malt das Bild noch einmal. " +
+        "Der Text bleibt, wie er ist – auch die Endprüfung gilt weiter.\n\n" +
+        "Das kostet ein paar Cent und dauert etwa eine Minute.\n\nWeitermachen?")) return;
+
+      knopf.disabled = true;
+      knopf.textContent = "malt …";
+      schliesse_popup();
+      const ergebnis = await sende("/api/bildneu", { id: Number(knopf.dataset.bildneu) });
+      if (!ergebnis.ok) {
+        alert(ergebnis.grund || "Das hat nicht geklappt.");
+      } else if (!ergebnis.gemalt) {
+        alert("Es blieb bei der typografischen Fassung. Der Grund steht im Arbeitsprotokoll " +
+              "– meist ist das Tageskontingent des Bilddienstes aufgebraucht.");
+      } else if (ergebnis.niveau) {
+        alert(`Neu gemalt. Jo gibt dem Einfall ${ergebnis.niveau} von 5.`);
+      }
+      gezeichnet.beitraege = null;
+      laden();
+    };
+  }
+
   for (const knopf of bereich.querySelectorAll("[data-nachbessern]")) {
     knopf.onclick = async e => {
       e.stopPropagation();

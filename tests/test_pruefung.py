@@ -441,3 +441,63 @@ def test_ein_freigegebener_beitrag_wird_nicht_mehr_angefasst(agent_mit_doppel, m
 
     assert not ergebnis["ok"]
     assert "Entwurf" in ergebnis["grund"]
+
+
+# --- Nur das Bild tauschen -------------------------------------------------
+
+
+def test_ein_neues_bild_laesst_den_text_in_ruhe(agent_mit_doppel):
+    """Wem das Bild nicht gefaellt, will nicht den ganzen Beitrag neu."""
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    alter_text, altes_bild = entwurf["caption"], entwurf["image_path"]
+
+    ergebnis = agent.bild_neu(entwurf["id"])
+
+    assert ergebnis["ok"]
+    danach = agent.store.get_post(entwurf["id"])
+    assert danach["caption"] == alter_text
+    assert danach["image_path"] != altes_bild
+
+
+def test_der_pruefbericht_bleibt_beim_bildtausch_stehen(agent_mit_doppel):
+    """Die Endpruefung sieht Zahlen an, nicht Bilder - sie gilt weiter."""
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    vorher = entwurf["pruefung_json"]
+    assert vorher
+
+    agent.bild_neu(entwurf["id"])
+
+    assert agent.store.get_post(entwurf["id"])["pruefung_json"] == vorher
+
+
+def test_beim_bildtausch_sieht_die_bildsprache_noch_einmal_hin(agent_mit_doppel, monkeypatch):
+    """Ein zweiter Wurf mit demselben Prompt sieht fast gleich aus."""
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+
+    gesehen = {"n": 0}
+    echte = agent_mit_doppel.__class__._gestalte
+
+    def zaehlend(self, *a, **k):
+        gesehen["n"] += 1
+        return echte(self, *a, **k)
+
+    monkeypatch.setattr(agent.__class__, "_gestalte", zaehlend)
+    agent.bild_neu(entwurf["id"])
+
+    assert gesehen["n"] == 1
+
+
+def test_ein_veroeffentlichter_beitrag_bekommt_kein_neues_bild(agent_mit_doppel):
+    """Was draussen ist, aendert sich nicht mehr unter der Hand."""
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    agent.store.freigeben(entwurf["id"])
+
+    assert not agent.bild_neu(entwurf["id"])["ok"]

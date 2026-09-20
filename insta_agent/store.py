@@ -177,6 +177,25 @@ class Store:
             )
             return cur.rowcount > 0
 
+    def setze_bild(self, post_id: int, draft: Any, image_path: str) -> bool:
+        """Tauscht nur das Bild eines Entwurfs aus, Text und Befunde bleiben.
+
+        Der Prüfbericht gilt weiter: Die Endprüfung sieht sich Zahlen und
+        Quellen an, nicht das Bild. Ihn hier zu loeschen wuerde eine
+        gueltige Pruefung wegwerfen und eine neue kosten.
+        """
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE posts SET image_path=?, draft_json=?, gestaltung_json=NULL "
+                "WHERE id=? AND status='draft'",
+                (
+                    image_path,
+                    json.dumps(draft.model_dump(mode="json"), ensure_ascii=False),
+                    post_id,
+                ),
+            )
+            return cur.rowcount > 0
+
     def set_pruefung(self, post_id: int, bericht: Any) -> None:
         """Hängt den Bericht der Endprüfung an den Entwurf."""
         self._haenge_an(post_id, "pruefung_json", bericht)
