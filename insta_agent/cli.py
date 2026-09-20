@@ -488,6 +488,10 @@ def _bereits_heute(agent) -> float | None:
         return agent.abrechnung.kosten_seit(datetime.now(timezone.utc))
     except Exception as exc:  # noqa: BLE001 - kein Grund, den Eintrag zu verlieren
         console.print(f"[yellow]Abrechnung nicht erreichbar:[/yellow] {exc}")
+        console.print(
+            "[dim]Der Stand wird trotzdem eingetragen. Falls es am Schluessel"
+            " liegt:\n  insta-agent kasse --schluessel[/dim]"
+        )
         return None
 
 
@@ -508,7 +512,10 @@ def _admin_schluessel_eintragen(set_env_value) -> None:
     console.print(
         Panel(
             "Damit er seinen Kontostand selbst nachrechnet, braucht er Lesezugriff\n"
-            "auf die Abrechnung. Dafuer gibt es einen eigenen Schluessel.\n\n"
+            "auf die Abrechnung.\n\n"
+            "[bold]Meistens ist das hier gar nicht noetig:[/bold] Zuerst wird immer\n"
+            "der Schluessel versucht, den du schon hast. Darf der es, bist du fertig.\n"
+            "Nur wenn er abgewiesen wird, brauchst du einen eigenen.\n\n"
             "[bold]So kommst du daran:[/bold]\n"
             "  1. console.anthropic.com oeffnen\n"
             "  2. Settings -> Admin keys -> Create Admin key\n"

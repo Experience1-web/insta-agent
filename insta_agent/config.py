@@ -206,6 +206,19 @@ class Settings:
     """Zugangswort für die Oberfläche, sobald sie über 127.0.0.1 hinaus lauscht."""
 
     @property
+    def abrechnung_schluessel(self) -> str | None:
+        """Der Schlüssel, mit dem die Abrechnung gelesen wird.
+
+        Zuerst der eigens dafür eingetragene. Ohne den wird der normale
+        API-Schlüssel versucht: Ist er persönlich und nicht auf einen
+        Arbeitsbereich beschränkt, darf er die Abrechnung lesen - dann
+        braucht es gar keinen zweiten Schlüssel. Darf er es nicht, kommt
+        eine Absage und es bleibt beim Eintragen von Hand. Etwas kaputt
+        gehen kann dabei nicht: Es ist ein lesender Aufruf.
+        """
+        return self.admin_api_key or self.anthropic_api_key
+
+    @property
     def instagram_ready(self) -> bool:
         return bool(self.ig_user_id and self.ig_access_token)
 

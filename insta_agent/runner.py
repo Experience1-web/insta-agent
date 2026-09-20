@@ -82,9 +82,9 @@ class Agent:
 
         from .economy.abrechnung import baue_abrechnung
 
-        # Ohne Admin-Schlüssel bleibt es beim Schätzen - kein Fehler, nur
-        # ungenauer.
-        self.abrechnung = baue_abrechnung(settings.admin_api_key)
+        # Ohne brauchbaren Schlüssel bleibt es beim Schätzen - kein Fehler,
+        # nur ungenauer.
+        self.abrechnung = baue_abrechnung(settings.abrechnung_schluessel)
         self.brain = Brain(settings.llm, self.treasury, settings.anthropic_api_key)
 
         self.ig: InstagramClient | None = None
