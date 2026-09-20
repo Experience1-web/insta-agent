@@ -355,10 +355,11 @@ def check() -> None:
     elif settings.bild.anbieter == "lokal":
         table.add_row("Bilder", f"[green]eigener Rechner[/green] unter {settings.bild.token}")
     else:
+        preis = settings.bild.kosten_pro_bild_usd
         table.add_row(
             "Bilder",
             f"[green]{settings.bild.anbieter}[/green] · "
-            f"{settings.bild.kosten_pro_bild_usd:.3f} USD je Bild",
+            + (f"{preis:.3f} USD je Bild" if preis > 0 else "kostenloses Kontingent"),
         )
 
     table.add_row(
@@ -460,7 +461,7 @@ def bilder(
     config: Path = typer.Option(None),
     loeschen: bool = typer.Option(False, "--loeschen", help="Bilderzeugung wieder abschalten"),
 ) -> None:
-    """Richtet ein, wer die Bilder malt - der eigene Rechner oder ein Anbieter.
+    """Richtet ein, wer die Bilder malt.
 
     Claude erzeugt keine Bilder. Ohne diese Einrichtung bleibt es bei der
     typografischen Fassung.
@@ -476,54 +477,79 @@ def bilder(
     console.print(
         Panel(
             "Der Agent schreibt die Bildbeschreibung selbst. Malen lassen muss\n"
-            "er sie woanders - Claude kann das nicht. Du hast zwei Wege:\n\n"
-            "[bold]1  Eigener Rechner[/bold]  - kostet nichts ausser Strom\n"
-            "   Du brauchst eine NVIDIA-Grafikkarte mit mindestens 8 GB und\n"
-            "   ein laufendes Bildprogramm (AUTOMATIC1111, Forge oder\n"
-            "   SD.Next), gestartet mit  --api.\n"
-            "   Ein Bild dauert dann 20 bis 60 Sekunden.\n\n"
-            "[bold]2  Anbieter (Replicate)[/bold]  - wenige Cent je Bild\n"
-            "   Kein Aufbau, keine Grafikkarte noetig, bessere Qualitaet.\n"
-            "   Konto auf replicate.com, dort ein Guthaben hinterlegen.",
+            "er sie woanders - Claude kann das nicht.\n\n"
+            "[bold]1  Google Gemini[/bold]  [green]kostenlos moeglich[/green]\n"
+            "   Schluessel auf aistudio.google.com, ohne Zahlungsdaten.\n"
+            "   Google gibt ein Freikontingent pro Tag - knapp, aber fuer\n"
+            "   ein paar Beitraege reicht es. Ist es aufgebraucht, bleibt es\n"
+            "   bis zum naechsten Tag bei der Typografie.\n\n"
+            "[bold]2  Eigener Rechner[/bold]  [green]dauerhaft kostenlos[/green]\n"
+            "   Braucht eine NVIDIA-Karte ab 8 GB und ein laufendes\n"
+            "   Bildprogramm (AUTOMATIC1111, Forge, SD.Next) mit --api.\n"
+            "   Einmal aufbauen, danach keine Grenzen.\n\n"
+            "[bold]3  Replicate[/bold]  wenige Cent je Bild\n"
+            "   Kein Aufbau, keine Grenzen, beste Qualitaet.",
             title="Wer malt die Bilder?",
         )
     )
 
-    wahl = typer.prompt("Welcher Weg? [1/2]", default="1").strip()
+    wahl = typer.prompt("Welcher Weg? [1/2/3]", default="1").strip()[:1]
 
-    if wahl.startswith("1"):
+    if wahl == "2":
         adresse = typer.prompt("Adresse des Bildprogramms", default="http://127.0.0.1:7860")
         set_env_value("BILD_ANBIETER", "lokal")
         set_env_value("BILD_TOKEN", adresse.strip().rstrip("/"))
         set_env_value("BILD_KOSTEN", "0")
         modell = typer.prompt(
-            "Name der Modelldatei (leer lassen fuer die aktuell geladene)", default=""
+            "Name der Modelldatei (leer lassen fuer die geladene)", default=""
         ).strip()
         set_env_value("BILD_MODELL", modell)
         console.print(
             "\n[green]Eingetragen.[/green] Lass das Bildprogramm laufen, wenn der "
-            "Agent arbeitet.\n[dim]Pruefen: insta-agent check[/dim]"
+            "Agent arbeitet."
         )
+        _bild_fertig()
         return
 
-    roh = typer.prompt("Schluessel von replicate.com", hide_input=True)
+    if wahl == "3":
+        token = _frag_schluessel("Schluessel von replicate.com")
+        set_env_value("BILD_ANBIETER", "replicate")
+        set_env_value("BILD_TOKEN", token)
+        set_env_value("BILD_MODELL", "black-forest-labs/flux-1.1-pro")
+        preis = typer.prompt("Kosten pro Bild in USD (steht auf der Preisseite)", default="0.04")
+        try:
+            float(preis)
+        except ValueError:
+            console.print("[yellow]Keine Zahl - Voreinstellung bleibt.[/yellow]")
+        else:
+            set_env_value("BILD_KOSTEN", preis)
+        _bild_fertig()
+        return
+
+    token = _frag_schluessel("Schluessel von aistudio.google.com")
+    set_env_value("BILD_ANBIETER", "gemini")
+    set_env_value("BILD_TOKEN", token)
+    set_env_value("BILD_MODELL", "gemini-2.5-flash-image")
+    set_env_value("BILD_KOSTEN", "0")
+    console.print(
+        "\n[dim]Falls du dort spaeter Zahlungsdaten hinterlegst, trag die Kosten\n"
+        "pro Bild mit `insta-agent bilder` neu ein - sonst rechnet er mit null.[/dim]"
+    )
+    _bild_fertig()
+
+
+def _frag_schluessel(frage: str) -> str:
+    """Fragt einen Schluessel ab und raeumt Einfuege-Unfaelle weg."""
+    roh = typer.prompt(frage, hide_input=True)
     # Mehrzeiliges Einfuegen zerlegt den Schluessel sonst still.
     token = "".join(roh.split()).strip("\"'")
     if not token:
         console.print("[yellow]Nichts eingetragen.[/yellow]")
         raise typer.Exit(1)
+    return token
 
-    set_env_value("BILD_ANBIETER", "replicate")
-    set_env_value("BILD_TOKEN", token)
 
-    preis = typer.prompt("Kosten pro Bild in USD (steht auf der Preisseite)", default="0.04")
-    try:
-        float(preis)
-    except ValueError:
-        console.print("[yellow]Keine Zahl - ich lasse die Voreinstellung stehen.[/yellow]")
-    else:
-        set_env_value("BILD_KOSTEN", preis)
-
+def _bild_fertig() -> None:
     console.print(
         "\n[green]Eingetragen.[/green] Ab dem naechsten Zyklus malt er seine "
         "Bilder selbst.\n[dim]Pruefen: insta-agent check[/dim]"

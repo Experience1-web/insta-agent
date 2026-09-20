@@ -60,6 +60,29 @@ def _lege_schleier(bild: Image.Image, oben: int, unten: int, staerke: int = 190)
     bild.paste(dunkel, (0, oben), schleier)
 
 
+def _auf_hochformat(bild: Image.Image) -> Image.Image:
+    """Bringt jedes Bild auf 9:16 - durch Beschneiden, nie durch Zerren.
+
+    Die Anbieter liefern unterschiedliche Seitenverhältnisse; manche
+    können 9:16 gar nicht. Einfach auf die Zielgröße zu strecken würde
+    Gesichter und Geraden verziehen, und das sieht man sofort. Deshalb
+    wird auf Überdeckung skaliert und mittig beschnitten.
+    """
+    if bild.size == STORY:
+        return bild
+
+    ziel_b, ziel_h = STORY
+    faktor = max(ziel_b / bild.width, ziel_h / bild.height)
+    neu_b, neu_h = round(bild.width * faktor), round(bild.height * faktor)
+    bild = bild.resize((neu_b, neu_h), Image.LANCZOS)
+
+    links = (neu_b - ziel_b) // 2
+    # Etwas oberhalb der Mitte beschneiden: Im Hochformat liegt das Motiv
+    # meist über der Mitte, und oben steht ohnehin der Hook.
+    oben = max(0, int((neu_h - ziel_h) * 0.4))
+    return bild.crop((links, oben, links + ziel_b, oben + ziel_h))
+
+
 def lege_hook_auf(
     quelle: Path,
     ziel: Path,
@@ -69,9 +92,7 @@ def lege_hook_auf(
     handle: str = "",
 ) -> Path:
     """Schreibt den Hook auf das erzeugte Bild und speichert das Ergebnis."""
-    bild = Image.open(quelle).convert("RGB")
-    if bild.size != STORY:
-        bild = bild.resize(STORY, Image.LANCZOS)
+    bild = _auf_hochformat(Image.open(quelle).convert("RGB"))
 
     breite, hoehe = bild.size
     zeichnung = ImageDraw.Draw(bild)

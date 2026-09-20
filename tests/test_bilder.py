@@ -422,3 +422,143 @@ def test_lokal_erzeugte_bilder_kosten_nichts(agent):
     assert [z for z in agent.store.ledger_entries(50) if z["category"] == "image"] == []
     # Das Bild ist trotzdem da.
     assert Path(agent.store.pending_drafts()[0]["image_path"]).exists()
+
+
+# --- Der kostenlose Weg mit Schluessel: Gemini ----------------------------
+
+from insta_agent.imaging.generator import (  # noqa: E402
+    GeminiGenerator,
+    _gemini_bilddaten,
+    _gemini_fehler,
+)
+
+
+def _gemini(handler) -> GeminiGenerator:
+    g = GeminiGenerator("geheim", "gemini-2.5-flash-image")
+    g.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return g
+
+
+def _bildantwort() -> dict:
+    return {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {"text": "Hier ist dein Bild"},
+                        {"inlineData": {"mimeType": "image/png",
+                                        "data": base64.b64encode(PNG).decode()}},
+                    ]
+                }
+            }
+        ]
+    }
+
+
+def test_gemini_speichert_das_bild(tmp_path):
+    ziel = _gemini(lambda r: httpx.Response(200, json=_bildantwort())).erzeuge(
+        "a lighthouse", tmp_path / "b.png"
+    )
+    assert ziel.read_bytes() == PNG
+
+
+def test_das_bild_wird_auch_zwischen_textteilen_gefunden():
+    """Gemini schickt oft erst Text und dann das Bild."""
+    assert _gemini_bilddaten(_bildantwort()) == base64.b64encode(PNG).decode()
+
+
+def test_beide_schreibweisen_werden_verstanden():
+    """Die Schnittstelle nutzt inlineData und inline_data nebeneinander."""
+    mit_unterstrich = {
+        "candidates": [{"content": {"parts": [{"inline_data": {"data": "abc"}}]}}]
+    }
+    assert _gemini_bilddaten(mit_unterstrich) == "abc"
+
+
+def test_eine_antwort_ganz_ohne_bild_gibt_none():
+    nur_text = {"candidates": [{"content": {"parts": [{"text": "Das mache ich nicht."}]}}]}
+    assert _gemini_bilddaten(nur_text) is None
+    assert _gemini_bilddaten({}) is None
+
+
+def test_ein_abgelehnter_prompt_wird_erklaert(tmp_path):
+    nur_text = {"candidates": [{"content": {"parts": [{"text": "Nein."}]}}]}
+
+    with pytest.raises(Bildfehler, match="abgelehnt"):
+        _gemini(lambda r: httpx.Response(200, json=nur_text)).erzeuge("x", tmp_path / "b.png")
+
+
+def test_ein_aufgebrauchtes_freikontingent_wird_erklaert():
+    text = _gemini_fehler(httpx.Response(429, json={"error": {"message": "quota"}}))
+    assert "kostenlose Kontingent" in text and "Morgen" in text
+
+
+def test_ein_falscher_schluessel_wird_erklaert():
+    for code in (401, 403):
+        assert "Schlüssel" in _gemini_fehler(httpx.Response(code, json={}))
+
+
+def test_ein_abgelehnter_formatwunsch_wird_ohne_ihn_wiederholt(tmp_path):
+    """Aeltere Bildmodelle kennen aspectRatio nicht - das darf nichts kosten."""
+    versuche = []
+
+    def antworte(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        koerper = _json.loads(request.content)
+        versuche.append("imageConfig" in koerper["generationConfig"])
+        if versuche[-1]:
+            return httpx.Response(400, json={"error": {"message": "Unknown field imageConfig"}})
+        return httpx.Response(200, json=_bildantwort())
+
+    ziel = _gemini(antworte).erzeuge("x", tmp_path / "b.png")
+
+    assert versuche == [True, False]
+    assert ziel.read_bytes() == PNG
+
+
+def test_der_formatwunsch_wird_zuerst_gestellt(tmp_path):
+    gesehen = {}
+
+    def antworte(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        gesehen.update(_json.loads(request.content)["generationConfig"])
+        return httpx.Response(200, json=_bildantwort())
+
+    _gemini(antworte).erzeuge("x", tmp_path / "b.png")
+
+    assert gesehen["imageConfig"]["aspectRatio"] == "9:16"
+    assert gesehen["responseModalities"] == ["IMAGE"]
+
+
+# --- Jedes Format wird zurechtgeschnitten, nie gezerrt --------------------
+
+
+@pytest.mark.parametrize("masse", [(1024, 1024), (1920, 1080), (792, 1408), (1080, 1920)])
+def test_jedes_seitenverhaeltnis_wird_beschnitten_statt_gezerrt(tmp_path, masse):
+    """Nicht jeder Anbieter kann 9:16. Zerren sieht man sofort."""
+    from insta_agent.imaging.overlay import _auf_hochformat
+
+    quelle = tmp_path / "roh.png"
+    Image.new("RGB", masse, (40, 40, 40)).save(quelle)
+
+    assert _auf_hochformat(Image.open(quelle)).size == (1080, 1920)
+
+
+def test_beim_beschneiden_bleibt_der_bildausschnitt_unverzerrt(tmp_path):
+    """Ein Kreis muss ein Kreis bleiben."""
+    from insta_agent.imaging.overlay import _auf_hochformat
+
+    quadrat = Image.new("RGB", (1024, 1024), (0, 0, 0))
+    from PIL import ImageDraw
+
+    ImageDraw.Draw(quadrat).ellipse([(312, 312), (712, 712)], fill=(255, 255, 255))
+
+    zugeschnitten = _auf_hochformat(quadrat)
+    # Der Kreis wird um denselben Faktor skaliert - Breite und Hoehe der
+    # weissen Flaeche muessen im selben Verhaeltnis zueinander stehen.
+    weiss = zugeschnitten.convert("L").point(lambda w: 255 if w > 128 else 0)
+    kasten = weiss.getbbox()
+    breite, hoehe = kasten[2] - kasten[0], kasten[3] - kasten[1]
+    assert abs(breite - hoehe) < 12, f"verzerrt: {breite}x{hoehe}"

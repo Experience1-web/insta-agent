@@ -239,7 +239,97 @@ class LokalerGenerator:
         return ziel
 
 
+class GeminiGenerator:
+    """Googles Bildmodell über die Gemini-Schnittstelle.
+
+    Interessant, weil Google ein kostenloses Kontingent anbietet: Für ein
+    paar Bilder am Tag genügt ein Schlüssel ohne Zahlungsdaten. Die
+    Grenzen sind knapp und Google ändert sie - wer verlässlich viele
+    Bilder braucht, ist beim bezahlten Weg oder lokal besser aufgehoben.
+
+    Nicht jedes Bildmodell nimmt einen Seitenverhältnis-Wunsch entgegen.
+    Wird er abgelehnt, fragen wir ohne ihn noch einmal - das Zuschneiden
+    auf 9:16 passiert ohnehin beim Beschriften.
+    """
+
+    name = "gemini"
+    BASIS = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    def __init__(self, token: str, modell: str, *, timeout: float = 120.0) -> None:
+        self.token = token
+        self.modell = modell or "gemini-2.5-flash-image"
+        self.client = httpx.Client(
+            timeout=timeout, headers={"x-goog-api-key": token, "Content-Type": "application/json"}
+        )
+
+    def close(self) -> None:
+        self.client.close()
+
+    def _frage(self, prompt: str, mit_format: bool) -> httpx.Response:
+        koerper: dict[str, object] = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"]},
+        }
+        if mit_format:
+            koerper["generationConfig"]["imageConfig"] = {"aspectRatio": "9:16"}
+        return self.client.post(f"{self.BASIS}/{self.modell}:generateContent", json=koerper)
+
+    def erzeuge(self, prompt: str, ziel: Path) -> Path:
+        antwort = self._frage(prompt, mit_format=True)
+        if antwort.status_code == 400:
+            # Ältere Bildmodelle kennen den Formatwunsch nicht.
+            log.debug("Formatwunsch abgelehnt, frage ohne ihn nach")
+            antwort = self._frage(prompt, mit_format=False)
+
+        if antwort.status_code >= 400:
+            raise Bildfehler(_gemini_fehler(antwort))
+
+        daten = _gemini_bilddaten(antwort.json())
+        if daten is None:
+            raise Bildfehler(
+                "Google lieferte kein Bild. Oft heißt das, dass der Prompt "
+                "abgelehnt wurde - formulier ihn harmloser."
+            )
+
+        import base64
+
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_bytes(base64.b64decode(daten))
+        log.info("Bild erzeugt (Gemini): %s", ziel.name)
+        return ziel
+
+
+def _gemini_bilddaten(antwort: dict) -> str | None:
+    """Sucht die Bilddaten in der Antwort - sie stehen zwischen Textteilen."""
+    for kandidat in antwort.get("candidates") or []:
+        for teil in (kandidat.get("content") or {}).get("parts") or []:
+            # Die Schnittstelle nutzt beide Schreibweisen.
+            roh = teil.get("inlineData") or teil.get("inline_data")
+            if roh and roh.get("data"):
+                return roh["data"]
+    return None
+
+
+def _gemini_fehler(antwort: httpx.Response) -> str:
+    if antwort.status_code in (401, 403):
+        return (
+            "Google weist den Schlüssel zurück. Leg einen neuen an unter "
+            "aistudio.google.com und trag ihn mit `insta-agent bilder` ein."
+        )
+    if antwort.status_code == 429:
+        return (
+            "Das kostenlose Kontingent bei Google ist für heute aufgebraucht. "
+            "Morgen geht es weiter - oder du hinterlegst dort Zahlungsdaten."
+        )
+    try:
+        meldung = antwort.json().get("error", {}).get("message") or antwort.text
+    except Exception:  # noqa: BLE001 - die Fehlermeldung darf nie selbst scheitern
+        meldung = antwort.text
+    return f"Google antwortete mit {antwort.status_code}: {str(meldung)[:200]}"
+
+
 ANBIETER: dict[str, type] = {
+    "gemini": GeminiGenerator,
     "replicate": ReplicateGenerator,
     "lokal": LokalerGenerator,
 }
