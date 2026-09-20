@@ -282,7 +282,10 @@ class GeminiGenerator:
             antwort = self._frage(prompt, mit_format=False)
 
         if antwort.status_code >= 400:
-            raise Bildfehler(_gemini_fehler(antwort))
+            grund = _gemini_fehler(antwort)
+            if antwort.status_code == 429:
+                raise KontingentErschoepft(grund)
+            raise Bildfehler(grund)
 
         daten = _gemini_bilddaten(antwort.json())
         if daten is None:
@@ -308,6 +311,15 @@ def _gemini_bilddaten(antwort: dict) -> str | None:
             if roh and roh.get("data"):
                 return roh["data"]
     return None
+
+
+class KontingentErschoepft(Bildfehler):
+    """Der Bilddienst kann heute nicht mehr - erst morgen wieder.
+
+    Eigener Typ, weil daraus etwas folgt: Weitere Versuche im selben Lauf
+    scheitern genauso, und alles, was nur fuer das Bild gedacht war, waere
+    vergebene Arbeit.
+    """
 
 
 def _gemini_fehler(antwort: httpx.Response) -> str:

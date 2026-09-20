@@ -287,3 +287,46 @@ def agent_mit_doppel(tmp_path, monkeypatch):
     a = Agent(settings)
     yield a
     a.close()
+
+
+# --- Kein Bild, keine Bildsprache -----------------------------------------
+
+
+def test_ohne_kontingent_wird_die_bildsprache_nicht_mehr_bezahlt(agent_mit_doppel, monkeypatch):
+    """Ihr Ergebnis ist ein Bildprompt. Ohne Bild waere das Arbeit fuer nichts."""
+    agent = agent_mit_doppel
+    agent.settings.posting.posts_per_day = 2
+
+    from insta_agent.imaging.generator import KontingentErschoepft
+
+    class LeeresKontingent:
+        def erzeuge(self, prompt, ziel):
+            raise KontingentErschoepft("Fuer heute aufgebraucht")
+
+    agent.bildgenerator = LeeresKontingent()
+    agent.settings.bild.token = "probe"
+
+    bericht = agent.run_cycle()
+
+    uebersprungen = [s for s in bericht.steps if "Bildsprache uebersprungen" in s]
+    assert uebersprungen, "der zweite Beitrag soll sie nicht mehr aufrufen"
+    # Der erste Beitrag wird noch gestaltet - vorher weiss es niemand.
+    assert any("Bildsprache: Niveau" in s for s in bericht.steps)
+
+
+def test_ein_gewoehnlicher_bildfehler_haelt_die_bildsprache_nicht_auf(agent_mit_doppel):
+    """Ein Aussetzer ist kein Tageslimit - beim naechsten Bild kann es klappen."""
+    agent = agent_mit_doppel
+    agent.settings.posting.posts_per_day = 2
+
+    class WackligerDienst:
+        def erzeuge(self, prompt, ziel):
+            raise RuntimeError("Netz kurz weg")
+
+    agent.bildgenerator = WackligerDienst()
+    agent.settings.bild.token = "probe"
+
+    bericht = agent.run_cycle()
+
+    assert not [s for s in bericht.steps if "Bildsprache uebersprungen" in s]
+    assert len([s for s in bericht.steps if "Bildsprache: Niveau" in s]) == 2

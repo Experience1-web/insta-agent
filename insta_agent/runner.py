@@ -31,7 +31,7 @@ from .brain import (
 from .config import Settings
 from .economy.ledger import BudgetExhausted, CycleBudgetExceeded, Mode, Treasury
 from .imaging import FEED, STORY, lege_hook_auf, render_post_image
-from .imaging.generator import baue_generator
+from .imaging.generator import KontingentErschoepft, baue_generator
 from .instagram import InstagramClient, Publisher
 from .llm import Brain, ModelRefused
 from .models import (
@@ -301,6 +301,8 @@ class Agent:
         report = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.begin_cycle()
         self._kasse_nachfuehren()
+        # Gilt nur fuer diesen Lauf: Morgen ist das Kontingent wieder da.
+        self._bilder_heute_aus: str | None = None
 
         try:
             self._run_cycle_inner(cycle, report, operator_hint)
@@ -526,6 +528,11 @@ class Agent:
         """
         if not self.settings.posting.gestaltung_noetig:
             return None
+        if getattr(self, "_bilder_heute_aus", None):
+            # Ihr Ergebnis ist ein ueberarbeiteter Bildprompt. Ohne Bild
+            # waere das bezahlte Arbeit fuer nichts.
+            report.steps.append("Bildsprache uebersprungen - heute wird nicht mehr gemalt")
+            return None
         try:
             urteil = pruefe_gestaltung(
                 self.brain,
@@ -572,6 +579,15 @@ class Agent:
         roh = self.settings.media_dir / f"{basis}-roh.png"
         try:
             self.bildgenerator.erzeuge(draft.image_generation_prompt, roh)
+        except KontingentErschoepft as exc:
+            # Fuer heute ist Schluss. Das gilt auch fuer die naechsten
+            # Beitraege in diesem Lauf - und fuer die Bildsprache, deren
+            # ueberarbeiteter Prompt sonst umsonst bezahlt waere.
+            self._bilder_heute_aus = str(exc)
+            log.warning("Bilderzeugung fehlgeschlagen: %s", exc)
+            report.steps.append(f"Bild nicht erzeugt ({exc}) - Typografie bleibt")
+            self.store.log("image_error", str(exc))
+            return None
         except Exception as exc:  # noqa: BLE001 - jeder Fehler ist hier verkraftbar
             log.warning("Bilderzeugung fehlgeschlagen: %s", exc)
             report.steps.append(f"Bild nicht erzeugt ({exc}) - Typografie bleibt")
