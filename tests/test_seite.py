@@ -64,3 +64,18 @@ def test_fremder_text_wird_nie_ungeprueft_eingesetzt():
     # Im Warnkasten wird erst escaped und danach erst verschönert.
     stelle = QUELLE.index("const text = esc(d.fehler)")
     assert "replace(/`([^`]+)`/g" in QUELLE[stelle : stelle + 200]
+
+
+def test_die_seite_sagt_wie_der_weg_zum_beitrag_gerade_laeuft():
+    """Drei Schalter, drei Sätze - der Betreiber soll nicht raten müssen."""
+    assert "function arbeitsweise(d)" in QUELLE
+    for zustand in ["malt_selbst", "freigabe_noetig", "kann_posten"]:
+        assert f"d.{zustand}" in QUELLE
+
+
+def test_der_autopilot_wird_sichtbar_gemacht():
+    """Wer die Freigabe abschaltet, muss das auf der Seite sehen."""
+    stelle = QUELLE.index("function arbeitsweise(d)")
+    abschnitt = QUELLE[stelle : stelle + 900]
+    assert "Autopilot" in abschnitt
+    assert 'class="warnung"' in abschnitt

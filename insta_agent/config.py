@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+log = logging.getLogger(__name__)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO_ROOT / "config" / "agent.yaml"
 EXAMPLE_CONFIG = REPO_ROOT / "config" / "agent.example.yaml"
@@ -131,8 +133,36 @@ class PostingConfig:
     max_hashtags: int = 20
     # "story" ist 9:16 fuer Reels, "feed" ist 4:5 fuer den normalen Beitrag.
     bildformat: str = "story"
+    # Solange True, geht nur nach draussen, was der Betreiber freigegeben hat.
+    # Auf False wird jeder geschriebene Beitrag sofort veroeffentlicht -
+    # das gehoert erst eingeschaltet, wenn die Beitraege verlaesslich taugen.
+    freigabe_noetig: bool = True
     # Ohne --live veröffentlicht der Agent nichts, er schreibt nur Entwürfe.
     live: bool = False
+
+
+@dataclass(slots=True)
+class BildConfig:
+    """Der Dienst, der die Bilder malt.
+
+    Claude erzeugt keine Bilder. Für einen bildgetriebenen Account braucht
+    es deshalb einen zweiten Anbieter mit eigenem Schlüssel und eigenem
+    Guthaben. Ohne Schlüssel bleibt es bei der typografischen Fassung -
+    das ist kein Fehler, nur weniger.
+    """
+
+    anbieter: str = "replicate"
+    modell: str = "black-forest-labs/flux-1.1-pro"
+    token: str | None = None
+    # Was ein Bild beim Anbieter kostet. Steht auf dessen Preisseite und
+    # ändert sich dort, nicht hier - deshalb einstellbar statt fest
+    # verdrahtet. Der Agent bucht diesen Betrag in seine Kasse, sonst
+    # wüsste er nicht, was ein Beitrag ihn wirklich kostet.
+    kosten_pro_bild_usd: float = 0.04
+
+    @property
+    def aktiv(self) -> bool:
+        return bool(self.token)
 
 
 @dataclass(slots=True)
@@ -140,6 +170,7 @@ class Settings:
     llm: LLMConfig = field(default_factory=LLMConfig)
     economy: EconomyConfig = field(default_factory=EconomyConfig)
     posting: PostingConfig = field(default_factory=PostingConfig)
+    bild: BildConfig = field(default_factory=BildConfig)
 
     db_path: Path = REPO_ROOT / "state" / "agent.db"
     media_dir: Path = REPO_ROOT / "out" / "media"
@@ -186,8 +217,17 @@ def load_settings(config_path: Path | None = None) -> Settings:
         _merge(settings.llm, raw.get("llm"))
         _merge(settings.economy, raw.get("economy"))
         _merge(settings.posting, raw.get("posting"))
+        _merge(settings.bild, raw.get("bild"))
 
     settings.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    settings.bild.token = os.getenv("BILD_TOKEN") or os.getenv("REPLICATE_API_TOKEN") or None
+    if modell := os.getenv("BILD_MODELL"):
+        settings.bild.modell = modell
+    if preis := os.getenv("BILD_KOSTEN"):
+        try:
+            settings.bild.kosten_pro_bild_usd = float(preis)
+        except ValueError:
+            log.warning("BILD_KOSTEN ist keine Zahl (%r) - Voreinstellung bleibt", preis)
     settings.ig_user_id = os.getenv("IG_USER_ID") or None
     settings.ig_access_token = os.getenv("IG_ACCESS_TOKEN") or None
     settings.meta_app_id = os.getenv("META_APP_ID") or None

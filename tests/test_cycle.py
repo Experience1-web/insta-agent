@@ -101,6 +101,16 @@ def _strategie() -> StrategyUpdate:
 def _entwurf() -> PostDraft:
     return PostDraft(
         pillar="Gewohnheiten",
+        # Das echte Modell liefert diese Felder - das Doppel muss es auch,
+        # sonst laufen Bilderzeugung und Freigabe im Test ins Leere.
+        hook_text_on_screen="Du brauchst keinen neuen Plan.",
+        image_generation_prompt=(
+            "A single worn notebook on a dark wooden table, one cold window "
+            "light from the left, deep shadows, 35mm film grain, no text, "
+            "no logos, empty space in the upper third, vertical 9:16"
+        ),
+        body_text="Du brauchst einen kleineren.",
+        first_comment_prompt="Welcher Plan von dir ist schon dreimal gescheitert?",
         hook="Du brauchst keinen neuen Plan.",
         caption="Du brauchst keinen neuen Plan.\n\nDu brauchst einen kleineren.",
         hashtags=["gewohnheiten", "fokus"],

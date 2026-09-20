@@ -217,3 +217,39 @@ def test_neuanfang_laesst_veroeffentlichtes_in_ruhe(agent):
     assert agent.store.published_count() == 1
     veroeffentlicht = [z for z in agent.store.recent_posts(10) if z["status"] == "published"]
     assert veroeffentlicht[0]["ig_media_id"] == "ig-1"
+
+
+# --- Autopilot ------------------------------------------------------------
+
+
+def test_ohne_freigabepflicht_geht_der_beitrag_von_selbst_raus(agent):
+    """Der Schalter für später: wenn die Beiträge verlässlich taugen."""
+    agent.settings.posting.freigabe_noetig = False
+
+    agent.run_cycle()
+    assert agent.store.pending_drafts() == []
+    assert len(agent.store.approved_drafts()) == 1
+
+    agent.run_cycle()
+    assert len(agent.publisher.veroeffentlicht) == 1
+
+
+def test_die_freigabepflicht_ist_die_voreinstellung():
+    """Niemand soll ungewollt in den Autopiloten rutschen."""
+    from insta_agent.config import PostingConfig
+
+    assert PostingConfig().freigabe_noetig is True
+
+
+def test_der_autopilot_umgeht_das_verwerfen_nicht(agent):
+    """Was der Betreiber verworfen hat, bleibt verworfen."""
+    agent.run_cycle()
+    agent.store.verwerfen(agent.store.pending_drafts()[0]["id"])
+
+    agent.settings.posting.freigabe_noetig = False
+    agent.run_cycle()
+
+    # Nur der neue Beitrag geht raus, nicht der verworfene.
+    assert len(agent.publisher.veroeffentlicht) == 0
+    agent.run_cycle()
+    assert len(agent.publisher.veroeffentlicht) == 1

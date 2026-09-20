@@ -552,6 +552,21 @@ function zeichne_protokoll(d) {
   if (unten) p.scrollTop = p.scrollHeight;
 }
 
+/** Sagt in drei Sätzen, wie der Weg vom Entwurf zum Beitrag gerade läuft. */
+function arbeitsweise(d) {
+  return [
+    d.malt_selbst
+      ? `Er malt seine Bilder selbst (${geld(d.bildkosten)} je Bild).`
+      : "Ohne Bilddienst bleibt es bei der typografischen Fassung.",
+    d.freigabe_noetig
+      ? "Du entscheidest über jeden Beitrag."
+      : '<b class="warnung">Autopilot: er veröffentlicht ohne Rückfrage.</b>',
+    d.kann_posten
+      ? "Freigegebenes geht beim nächsten Zyklus von selbst hinaus."
+      : "Veröffentlichen geht noch nicht – bis der Instagram-Zugang steht, lädst du von Hand hoch.",
+  ].join(" ");
+}
+
 const MARKEN = {
   draft:     ["",     "wartet auf dich"],
   approved:  ["warm", "freigegeben"],
@@ -590,11 +605,7 @@ function zeichne_beitraege(d) {
 
   $("postbox").innerHTML = `
     <h2>Seine Arbeit</h2>
-    <p class="hinweis" style="margin:-6px 0 16px">${
-      d.kann_posten
-        ? "Er schreibt, du entscheidest. Was du freigibst, veröffentlicht er bei seinem nächsten Zyklus selbst."
-        : "Er schreibt, du entscheidest. Freigegebene Beiträge wartet er ab, bis der Instagram-Zugang steht – bis dahin lädst du sie von Hand hoch."
-    }</p>
+    <p class="hinweis" style="margin:-6px 0 16px">${arbeitsweise(d)}</p>
     <div class="gitter beitraege">${d.entwuerfe.map(p => `
       <article class="beitrag">
         ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"

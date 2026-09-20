@@ -238,6 +238,9 @@ class Steuerung:
                 "instagram_da": self.settings.instagram_ready,
                 # Ob ein freigegebener Beitrag auch wirklich rausgehen kann.
                 "kann_posten": self.settings.can_publish,
+                "malt_selbst": self.settings.bild.aktiv,
+                "bildkosten": self.settings.bild.kosten_pro_bild_usd,
+                "freigabe_noetig": self.settings.posting.freigabe_noetig,
             }
         finally:
             agent.close()

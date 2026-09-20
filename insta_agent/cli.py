@@ -439,6 +439,61 @@ def run(
 
 
 @app.command()
+def bilder(
+    config: Path = typer.Option(None),
+    loeschen: bool = typer.Option(False, "--loeschen", help="Schlüssel wieder entfernen"),
+) -> None:
+    """Trägt den Schlüssel des Bilddienstes ein, damit er selbst Bilder malt.
+
+    Claude erzeugt keine Bilder. Ohne diesen zweiten Schlüssel bleibt es
+    bei der typografischen Fassung.
+    """
+    from .config import set_env_value
+
+    if loeschen:
+        set_env_value("BILD_TOKEN", "")
+        console.print("[green]Entfernt.[/green] Es bleibt bei der Typografie.")
+        return
+
+    console.print(
+        Panel(
+            "Der Agent schreibt die Bildbeschreibung selbst. Malen lassen muss\n"
+            "er sie woanders - Claude kann das nicht.\n\n"
+            "[bold]So kommst du an den Schlüssel:[/bold]\n"
+            "  1. replicate.com öffnen und ein Konto anlegen\n"
+            "  2. Unter Account → API tokens einen Schlüssel erzeugen\n"
+            "  3. Dort ein kleines Guthaben hinterlegen\n\n"
+            "[dim]Ein Bild kostet je nach Modell wenige Cent. Was genau, steht\n"
+            "auf der Preisseite des Anbieters - trag es unten ein, damit der\n"
+            "Agent weiß, was ihn ein Beitrag kostet.[/dim]",
+            title="Bilder erzeugen lassen",
+        )
+    )
+
+    roh = typer.prompt("Schlüssel", hide_input=True)
+    # Mehrzeiliges Einfügen zerlegt den Schlüssel sonst still.
+    token = "".join(roh.split()).strip("\"'")
+    if not token:
+        console.print("[yellow]Nichts eingetragen.[/yellow]")
+        raise typer.Exit(1)
+
+    set_env_value("BILD_TOKEN", token)
+
+    preis = typer.prompt("Kosten pro Bild in USD", default="0.04")
+    try:
+        float(preis)
+    except ValueError:
+        console.print("[yellow]Keine Zahl - ich lasse die Voreinstellung stehen.[/yellow]")
+    else:
+        set_env_value("BILD_KOSTEN", preis)
+
+    console.print(
+        "\n[green]Eingetragen.[/green] Ab dem nächsten Zyklus malt er seine "
+        "Bilder selbst.\n[dim]Prüfen: insta-agent check[/dim]"
+    )
+
+
+@app.command()
 def neustart(
     config: Path = typer.Option(None),
     ja: bool = typer.Option(False, "--ja", help="Ohne Rückfrage durchführen"),

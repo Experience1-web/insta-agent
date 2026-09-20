@@ -28,7 +28,8 @@ from .brain import (
 )
 from .config import Settings
 from .economy.ledger import BudgetExhausted, CycleBudgetExceeded, Mode, Treasury
-from .imaging import FEED, STORY, render_post_image
+from .imaging import FEED, STORY, lege_hook_auf, render_post_image
+from .imaging.generator import baue_generator
 from .instagram import InstagramClient, Publisher
 from .llm import Brain, ModelRefused
 from .models import (
@@ -92,9 +93,16 @@ class Agent:
             live=settings.posting.live,
         )
 
+        # Ohne Schlüssel bleibt es bei der Typografie - kein Fehler, nur weniger.
+        self.bildgenerator = baue_generator(
+            settings.bild.anbieter, settings.bild.token, settings.bild.modell
+        )
+
     def close(self) -> None:
         if self.ig:
             self.ig.close()
+        if self.bildgenerator is not None and hasattr(self.bildgenerator, "close"):
+            self.bildgenerator.close()
         self.store.close()
 
     # -- Zustand laden -----------------------------------------------------
@@ -375,20 +383,76 @@ class Agent:
                 draft.visual.footer = f"@{identity.handle}"
 
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            basis = f"{stamp}-{cycle}-{index}"
+
+            # Immer zuerst die typografische Fassung. Sie kostet nichts und
+            # ist die Rückfallebene, wenn der Bilddienst streikt - so steht
+            # am Ende jedes Zyklus ein fertiger Beitrag, nie eine Lücke.
             image_path = render_post_image(
                 draft.visual,
-                self.settings.media_dir / f"{stamp}-{cycle}-{index}.png",
+                self.settings.media_dir / f"{basis}.png",
                 groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
             )
+            if erzeugt := self._erzeuge_bild(draft, basis, identity, report):
+                image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
 
-            # Bewusst nicht sofort veröffentlichen: Jeder Beitrag wartet auf
-            # das Ja des Betreibers. Erst der nächste Zyklus schickt raus,
-            # was freigegeben wurde.
             report.drafts_written.append(str(image_path))
-            report.steps.append(f"Entwurf {post_id} wartet auf Freigabe")
+            if self.settings.posting.freigabe_noetig:
+                # Der Normalfall: Der Beitrag wartet auf das Ja des
+                # Betreibers. Erst der nächste Zyklus schickt raus, was
+                # freigegeben wurde.
+                report.steps.append(f"Entwurf {post_id} wartet auf Freigabe")
+            else:
+                # Autopilot: Der Betreiber hat die Freigabepflicht
+                # abgeschaltet. Dann geht der Beitrag mit dem nächsten
+                # Zyklus von selbst hinaus.
+                self.store.freigeben(post_id)
+                report.steps.append(f"Entwurf {post_id} automatisch freigegeben")
 
             recent.append(draft.caption)
+
+    def _erzeuge_bild(self, draft, basis: str, identity, report: CycleReport) -> Path | None:
+        """Lässt das Bild malen und legt den Hook darüber.
+
+        Gibt None zurück, wenn es nicht geklappt hat - dann bleibt es bei
+        der Typografie. Ein fehlendes Bild darf nie den Zyklus kosten.
+        """
+        if self.bildgenerator is None or not draft.image_generation_prompt.strip():
+            return None
+
+        roh = self.settings.media_dir / f"{basis}-roh.png"
+        try:
+            self.bildgenerator.erzeuge(draft.image_generation_prompt, roh)
+        except Exception as exc:  # noqa: BLE001 - jeder Fehler ist hier verkraftbar
+            log.warning("Bilderzeugung fehlgeschlagen: %s", exc)
+            report.steps.append(f"Bild nicht erzeugt ({exc}) - Typografie bleibt")
+            self.store.log("image_error", str(exc))
+            return None
+
+        # Erst buchen, wenn wirklich ein Bild da ist.
+        self.treasury.charge(
+            self.settings.bild.kosten_pro_bild_usd,
+            category="image",
+            note=f"Bild ({self.settings.bild.modell})",
+        )
+
+        fertig = self.settings.media_dir / f"{basis}-fertig.png"
+        try:
+            lege_hook_auf(
+                roh,
+                fertig,
+                text=draft.bildtext,
+                spec=draft.visual,
+                handle=f"@{identity.handle}",
+            )
+        except Exception as exc:  # noqa: BLE001 - lieber ohne Schrift als gar nicht
+            log.warning("Hook konnte nicht aufgelegt werden: %s", exc)
+            report.steps.append("Bild erzeugt, Hook-Text konnte nicht aufgelegt werden")
+            return roh
+
+        report.steps.append("Bild erzeugt und beschriftet")
+        return fertig
 
     def _veroeffentliche_freigegebenes(self, report: CycleReport) -> None:
         """Schickt raus, was der Betreiber freigegeben hat.
