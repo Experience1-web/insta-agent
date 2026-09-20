@@ -109,6 +109,24 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "9 - Neu anfangen.bat": f"""{KOPF}
+title Neu anfangen
+echo.
+echo   Der Agent sucht sich eine neue Nische, einen neuen Namen
+echo   und eine neue Strategie.
+echo.
+echo   Seine Kasse, sein Arbeitsprotokoll und die schon geschriebenen
+echo   Beitraege bleiben erhalten.
+echo.
+echo   Gleich kommt eine Rueckfrage. Tippe  j  und druecke Enter.
+echo   Wenn du es dir anders ueberlegst: n  und Enter.
+echo.
+%PY% -m insta_agent.cli neustart
+echo.
+echo   Danach: Doppelklick auf  2 - Dashboard starten
+echo   und dort auf  Starten  druecken.
+echo.
+pause""",
     "8 - Dashboard beenden.bat": f"""{KOPF}
 echo.
 echo   Beendet ein laufendes Dashboard, dessen Fenster nicht auffindbar ist.
