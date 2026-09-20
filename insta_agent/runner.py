@@ -418,7 +418,16 @@ class Agent:
         Gibt None zurück, wenn es nicht geklappt hat - dann bleibt es bei
         der Typografie. Ein fehlendes Bild darf nie den Zyklus kosten.
         """
-        if self.bildgenerator is None or not draft.image_generation_prompt.strip():
+        if self.bildgenerator is None:
+            # Nur melden, wenn der Betreiber einen Dienst eingerichtet hat -
+            # sonst ist die Typografie ja die bewusste Wahl.
+            if self.settings.bild.aktiv:
+                report.steps.append("Bilddienst eingerichtet, aber nicht aufgebaut")
+                self.store.log("image_error", "Der Bilddienst liess sich nicht aufbauen")
+            return None
+
+        if not draft.image_generation_prompt.strip():
+            report.steps.append("Kein Bild-Prompt geschrieben - Typografie bleibt")
             return None
 
         roh = self.settings.media_dir / f"{basis}-roh.png"

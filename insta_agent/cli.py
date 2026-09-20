@@ -557,6 +557,63 @@ def _bild_fertig() -> None:
 
 
 @app.command()
+def bildtest(config: Path = typer.Option(None)) -> None:
+    """Erzeugt ein einzelnes Probebild und sagt genau, was dabei passiert.
+
+    Gedacht fuer den Fall, dass im Zyklus kein Bild herauskam und man
+    nicht weiss, woran es lag.
+    """
+    from .imaging.generator import baue_generator
+
+    settings = load_settings(config)
+
+    console.print(f"Anbieter: [bold]{settings.bild.anbieter}[/bold]")
+    console.print(f"Modell:   [bold]{settings.bild.modell or '(voreingestellt)'}[/bold]")
+    if settings.bild.token:
+        sichtbar = settings.bild.token
+        if settings.bild.anbieter != "lokal":
+            sichtbar = f"{sichtbar[:6]}…{sichtbar[-4:]} ({len(sichtbar)} Zeichen)"
+        console.print(f"Zugang:   [bold]{sichtbar}[/bold]")
+    else:
+        console.print("Zugang:   [red]keiner hinterlegt[/red]")
+
+    generator = baue_generator(
+        settings.bild.anbieter, settings.bild.token, settings.bild.modell
+    )
+    if generator is None:
+        console.print(
+            "\n[red]Es wurde gar kein Bilddienst aufgebaut.[/red]\n"
+            "Richte ihn ein mit: [bold]insta-agent bilder[/bold]"
+        )
+        raise typer.Exit(1)
+
+    ziel = settings.media_dir / "probebild.png"
+    console.print("\n[dim]Erzeuge ein Probebild, das dauert einen Moment ...[/dim]")
+
+    try:
+        generator.erzeuge(
+            "A single weathered wooden chair in an empty room, one shaft of cold "
+            "morning light from a tall window, deep shadows, 35mm film grain, "
+            "muted blue and amber, no text, no logos, vertical 9:16",
+            ziel,
+        )
+    except Exception as exc:  # noqa: BLE001 - hier ist der Fehler das Ergebnis
+        console.print(f"\n[red]Kein Bild.[/red]\n{exc}")
+        raise typer.Exit(1) from None
+    finally:
+        if hasattr(generator, "close"):
+            generator.close()
+
+    groesse = ziel.stat().st_size
+    console.print(
+        f"\n[green]Bild erzeugt.[/green] {groesse // 1024} KB\n"
+        f"Es liegt hier: [bold]{ziel}[/bold]\n"
+        "[dim]Mach es auf und schau es dir an - dann weisst du, dass die "
+        "Kette steht.[/dim]"
+    )
+
+
+@app.command()
 def neustart(
     config: Path = typer.Option(None),
     ja: bool = typer.Option(False, "--ja", help="Ohne Rückfrage durchführen"),
