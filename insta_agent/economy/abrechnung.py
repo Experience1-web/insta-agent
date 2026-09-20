@@ -127,10 +127,11 @@ def _in_dollar(posten: dict) -> float:
 
 def _lesbar(antwort: httpx.Response) -> str:
     if antwort.status_code in (401, 403):
+        # Welcher Schlüssel das war, weiß diese Stelle nicht - die Meldung
+        # muss deshalb für beide Fälle stimmen.
         return (
-            "Der Admin-Schlüssel wird zurückgewiesen. Einzelkonten haben keinen "
-            "Zugang zur Abrechnungs-Schnittstelle - dann bleibt es beim "
-            "Eintragen von Hand mit `insta-agent kasse <Betrag>`."
+            "Dieser Schlüssel darf die Abrechnung nicht lesen. Dafür braucht es "
+            "einen Admin-Schlüssel: platform.claude.com/settings/admin-keys"
         )
     if antwort.status_code == 404:
         return (

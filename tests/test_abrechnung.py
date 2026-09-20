@@ -149,10 +149,12 @@ def test_fremde_waehrung_wird_uebergangen():
     assert _abrechnung(antworte).kosten_seit(JETZT) == 0.0
 
 
-def test_ein_einzelkonto_bekommt_eine_verstaendliche_antwort():
+def test_ein_zurueckgewiesener_schluessel_sagt_wo_es_weitergeht():
+    """Die Meldung muss fuer beide Schluesselarten stimmen - sie weiss nicht,
+    welcher gerade versucht wurde."""
     a = _abrechnung(lambda r: httpx.Response(403, json={"error": "forbidden"}))
 
-    with pytest.raises(Abrechnungsfehler, match="Einzelkonten"):
+    with pytest.raises(Abrechnungsfehler, match="admin-keys"):
         a.kosten_seit(JETZT)
 
 
