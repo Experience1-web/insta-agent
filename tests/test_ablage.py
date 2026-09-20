@@ -8,6 +8,7 @@ beim nächsten Zyklus erneut versucht.
 from __future__ import annotations
 
 import base64
+import io
 from pathlib import Path
 
 import httpx
@@ -21,6 +22,7 @@ from insta_agent.instagram.ablage import (
     _lesbar,
     baue_ablage,
 )
+from insta_agent.instagram.aufbereiten import fuer_instagram
 
 
 def _bild(pfad: Path) -> Path:
@@ -59,8 +61,14 @@ def test_das_bild_geht_wirklich_mit(tmp_path):
 
     assert gesehen["key"] == "geheim"
     assert gesehen["name"] == "beitrag"
-    # Die Bilddaten müssen die des echten Bildes sein.
-    assert base64.b64decode(gesehen["image"]) == pfad.read_bytes()
+    # Hochgeladen wird das echte Bild - aber als JPEG, denn nur das nimmt
+    # Instagram an. Die Datei auf der Platte bleibt, wie sie war.
+    hochgeladen = base64.b64decode(gesehen["image"])
+    assert hochgeladen == fuer_instagram(pfad)
+    assert hochgeladen[:2] == b"\xff\xd8"
+    with Image.open(io.BytesIO(hochgeladen)) as kopie:
+        assert kopie.format == "JPEG"
+        assert kopie.size == (8, 8)
 
 
 def test_die_bilder_bleiben_nicht_fuer_immer_liegen(tmp_path):
@@ -172,7 +180,8 @@ def test_ein_eigener_oeffentlicher_ordner_hat_vorrang(tmp_path):
 
     adresse = verlag._public_url(_bild(tmp_path / "b.png"))
 
-    assert adresse == "https://eigener.test/bilder/b.png"
+    # Auch hier geht die JPEG-Fassung hinaus, nicht das PNG.
+    assert adresse == "https://eigener.test/bilder/b-ig.jpg"
     assert ablage.hochgeladen == []
 
 

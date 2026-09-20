@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..models import PostDraft
+from .aufbereiten import fuer_instagram
 from .client import GraphAPIError, InstagramClient
 
 log = logging.getLogger(__name__)
@@ -71,7 +72,25 @@ class Publisher:
         except ValueError:
             # Bild liegt außerhalb des veröffentlichten Ordners.
             return None
+        # Auch aus dem eigenen Ordner muss ein JPEG kommen, sonst lehnt
+        # Instagram es ab. Neben das Bild wird die Fassung dafür gelegt.
+        try:
+            relative = self._lege_jpeg_bereit(image_path, relative)
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Bild konnte nicht aufbereitet werden: %s", exc)
+            return None
         return f"{self.public_base_url}/{relative.as_posix()}"
+
+    def _lege_jpeg_bereit(self, image_path: Path, relative: Path) -> Path:
+        """Schreibt die Instagram-Fassung neben das Bild und gibt ihren Pfad zurück.
+
+        Immer eine eigene Datei: das Original bleibt unberührt, auch wenn es
+        selbst schon ein JPEG ist - das Seitenverhältnis kann trotzdem
+        ausserhalb liegen.
+        """
+        name = f"{image_path.stem}-ig.jpg"
+        image_path.with_name(name).write_bytes(fuer_instagram(image_path))
+        return relative.with_name(name)
 
     def publish(self, draft: PostDraft, image_path: Path) -> PublishResult:
         caption = self.full_caption(draft)

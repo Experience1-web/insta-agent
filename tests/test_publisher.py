@@ -1,5 +1,7 @@
 """Ohne ausdrückliches Live-Schalten darf nichts nach außen gehen."""
 
+from PIL import Image
+
 from insta_agent.instagram.publisher import Publisher
 
 
@@ -68,7 +70,7 @@ def test_live_mit_allem_noetigen_veroeffentlicht(tmp_path, draft):
     media_dir = tmp_path / "media"
     media_dir.mkdir(parents=True)
     image = media_dir / "bild.png"
-    image.write_bytes(b"png")
+    Image.new("RGB", (1080, 1350), (10, 10, 10)).save(image)
 
     publisher = _publisher(
         tmp_path, live=True, client=client, public_base_url="https://beispiel.de/m/"
@@ -77,7 +79,10 @@ def test_live_mit_allem_noetigen_veroeffentlicht(tmp_path, draft):
 
     assert result.published is True
     assert result.ig_media_id == "media-99"
-    assert client.calls[0][1] == "https://beispiel.de/m/bild.png"
+    # Hinausgegangen ist die JPEG-Fassung - nur die nimmt Instagram an.
+    assert client.calls[0][1] == "https://beispiel.de/m/bild-ig.jpg"
+    assert (media_dir / "bild-ig.jpg").is_file()
+    assert image.read_bytes()[:4] == b"\x89PNG"
 
 
 def test_bild_ausserhalb_des_medienordners_wird_abgelehnt(tmp_path, draft):

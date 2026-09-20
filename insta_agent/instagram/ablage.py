@@ -20,6 +20,8 @@ from typing import Protocol
 
 import httpx
 
+from .aufbereiten import fuer_instagram
+
 log = logging.getLogger(__name__)
 
 # Einen Tag. Lange genug, dass ein fehlgeschlagener Beitrag im nächsten
@@ -62,13 +64,15 @@ class ImgbbAblage:
         if not bild.is_file():
             raise Ablagefehler(f"Das Bild gibt es nicht: {bild}")
 
+        # Instagram nimmt nur JPEG in einem bestimmten Rahmen an. Der
+        # lokale Entwurf bleibt, wie er ist - nur was hinausgeht, wird
+        # umgerechnet.
+        daten = fuer_instagram(bild)
+
         antwort = self.client.post(
             self.ADRESSE,
             params={"key": self.token, "expiration": str(HALTBARKEIT_SEKUNDEN)},
-            data={
-                "image": base64.b64encode(bild.read_bytes()).decode(),
-                "name": bild.stem,
-            },
+            data={"image": base64.b64encode(daten).decode(), "name": bild.stem},
         )
         if antwort.status_code >= 400:
             raise Ablagefehler(_lesbar(antwort))

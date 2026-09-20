@@ -131,8 +131,10 @@ class PostingConfig:
     # Lokale Uhrzeiten, zu denen der Agent veröffentlichen darf.
     preferred_hours: list[int] = field(default_factory=lambda: [8, 12, 18])
     max_hashtags: int = 20
-    # "story" ist 9:16 fuer Reels, "feed" ist 4:5 fuer den normalen Beitrag.
-    bildformat: str = "story"
+    # "feed" ist 4:5, "story" ist 9:16. Voreinstellung ist feed: Instagram
+    # nimmt im Feed nur Bilder zwischen 4:5 und 1.91:1 an - 9:16 liegt
+    # ausserhalb und wuerde beschnitten.
+    bildformat: str = "feed"
     # Solange True, geht nur nach draussen, was der Betreiber freigegeben hat.
     # Auf False wird jeder geschriebene Beitrag sofort veroeffentlicht -
     # das gehoert erst eingeschaltet, wenn die Beitraege verlaesslich taugen.
