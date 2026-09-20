@@ -32,7 +32,7 @@ import logging
 
 from ..llm import Brain
 from ..models import Fund
-from .prompts import identity_block, strategy_block, with_context
+from .prompts import identity_block, persona_mit, strategy_block, with_context
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +141,19 @@ Knapp. Keine Einleitung, keine Zusammenfassung, kein Abwägen von
 Möglichkeiten. Ein Fund, bewertet, belegt, mit Bildidee."""
 
 
+def _wer(person: dict | None, standard: str) -> tuple[str, str]:
+    """Name und Haltung dieser Person - oder die Voreinstellung."""
+    person = person or {}
+    return (person.get("name") or standard, person.get("haltung") or "")
+
+
+def stoff_persona(name: str = STOFF_NAME, haltung: str = "") -> str:
+    """Die Persona unter dem Namen, den der Betreiber vergeben hat."""
+    return persona_mit(
+        STOFF_PERSONA, name=name or STOFF_NAME, standardname=STOFF_NAME, haltung=haltung
+    )
+
+
 def _auftrag(
     *,
     bisher: list[str],
@@ -194,6 +207,7 @@ def finde_stoff(
     mit_suche: bool = True,
     modell: str | None = None,
     nachsetzen: Fund | None = None,
+    person: dict | None = None,
 ) -> Fund:
     """Sucht den Fund, auf dem der nächste Beitrag steht.
 
@@ -201,6 +215,7 @@ def finde_stoff(
     zweites Mal gesucht, mit dem Verworfenen im Gepäck, damit nicht
     derselbe Fund mit einer freundlicheren Note zurückkommt.
     """
+    person_name, haltung = _wer(person, STOFF_NAME)
     hinweis_suche = (
         f"Du darfst bis zu {brain.suchbudget} Websuchen stellen. Nutz sie: "
         "Ein Fund, den du nicht nachgeschlagen hast, ist keiner, sondern "
@@ -216,7 +231,7 @@ def finde_stoff(
 
     fund = brain.structured(
         schema=Fund,
-        system=STOFF_PERSONA,
+        system=stoff_persona(person_name, haltung),
         label="Stoff suchen",
         task="research",
         web_search=mit_suche,
@@ -232,7 +247,7 @@ def finde_stoff(
         ),
     )
 
-    fund.gesucht_von = STOFF_NAME
+    fund.gesucht_von = person_name
     fund.mit_suche = mit_suche
     if brain.letzte_quellen:
         fund.quellen = list(dict.fromkeys([*fund.quellen, *brain.letzte_quellen]))

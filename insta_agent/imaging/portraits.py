@@ -32,26 +32,32 @@ def portraitpfad(media_dir: Path, schluessel: str) -> Path:
     return Path(media_dir) / f"_portrait_{schluessel}.png"
 
 
-def portraitwunsch(rolle, identitaet=None) -> str:
+def portraitwunsch(rolle, identitaet=None, bildwunsch: str = "") -> str:
     """Der Prompt für ein Porträt dieser Rolle.
 
     Beim Chef fließt die Bildsprache des Accounts ein: Er ist das Gesicht
     dieses Vorhabens, nicht irgendeiner Firma.
+
+    `bildwunsch` ist, was der Betreiber selbst eingetragen hat. Das sticht
+    die Voreinstellung: Das Bildmodell weiß nichts über die Person hinter
+    dem Namen, und wer mit dem Ergebnis leben muss, darf es bestimmen.
     """
-    teile = [rolle.bildwunsch]
+    teile = [bildwunsch.strip() or rolle.bildwunsch]
     if rolle.schluessel == "chef" and identitaet is not None:
         teile.append(f"colour mood taken from: {identitaet.visual_identity}")
     teile.append(STIL)
     return ", ".join(t.strip(" ,") for t in teile if t and t.strip())
 
 
-def erzeuge_portrait(generator, rolle, ziel: Path, identitaet=None) -> Path | None:
+def erzeuge_portrait(generator, rolle, ziel: Path, identitaet=None, bildwunsch: str = "") -> Path | None:
     """Malt ein Porträt. None heisst: hat nicht geklappt, Zeichen bleibt."""
-    pfad, _grund = male_portrait(generator, rolle, ziel, identitaet)
+    pfad, _grund = male_portrait(generator, rolle, ziel, identitaet, bildwunsch)
     return pfad
 
 
-def male_portrait(generator, rolle, ziel: Path, identitaet=None) -> tuple[Path | None, str]:
+def male_portrait(
+    generator, rolle, ziel: Path, identitaet=None, bildwunsch: str = ""
+) -> tuple[Path | None, str]:
     """Wie erzeuge_portrait, gibt aber den Grund des Fehlschlags mit zurück.
 
     Der Grund gehört dem Betreiber: "hat nicht geklappt" lässt ihn raten,
@@ -62,7 +68,7 @@ def male_portrait(generator, rolle, ziel: Path, identitaet=None) -> tuple[Path |
         return None, "Kein Bilddienst eingerichtet"
     ziel.parent.mkdir(parents=True, exist_ok=True)
     try:
-        return generator.erzeuge(portraitwunsch(rolle, identitaet), ziel), ""
+        return generator.erzeuge(portraitwunsch(rolle, identitaet, bildwunsch), ziel), ""
     except Exception as exc:  # noqa: BLE001 - der Grund gehört zum Ergebnis
         log.warning("Porträt für %s nicht erzeugt: %s", rolle.schluessel, exc)
         return None, str(exc)

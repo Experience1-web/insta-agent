@@ -35,6 +35,15 @@ from .brain import (
 
 # Wo die Modellwahl des Betreibers liegt.
 KEY_MODELLWAHL = "modellwahl"
+# Und wo seine Änderungen an den Steckbriefen liegen: Name, Aufgabe,
+# Eigenschaften, Haltung und Aussehen. Der Quelltext gibt nur vor, womit
+# angefangen wird.
+KEY_MANNSCHAFT = "mannschaft"
+
+# Was sich an einer Person ändern lässt. Alles andere - der Schlüssel,
+# die Aufgabenstufe, wann sie drankommt - gehört zum Aufbau des Betriebs
+# und nicht in ein Formular.
+FELDER = ("name", "rolle", "aufgabe", "eigenschaften", "haltung", "bildwunsch")
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +180,42 @@ def modell_fuer(schluessel: str, wahl: dict | None, llm) -> str:
     return gewaehlt or standardmodell(rolle, llm)
 
 
-def aufstellung(identitaet, settings, wahl: dict | None = None) -> list[dict]:
+def person(schluessel: str, anpassung: dict | None = None, identitaet=None) -> dict:
+    """Wie diese Person aussieht, nachdem der Betreiber drübergegangen ist.
+
+    Die Voreinstellung steht im Quelltext, die Änderung im Speicher. Was
+    der Betreiber nicht angefasst hat, bleibt, wie es war - deshalb wird
+    gemischt und nicht ersetzt.
+    """
+    rolle = NACH_SCHLUESSEL.get(schluessel)
+    eigen = (anpassung or {}).get(schluessel) or {}
+
+    if schluessel == "chef" and identitaet is not None:
+        # Name und Motto des Chefs stehen in seiner Identität. Sie dort
+        # zu ändern ist richtig: Unter diesem Namen schreibt er, und mit
+        # diesem Motto arbeitet er.
+        grund = {"name": identitaet.agent_name, "aufgabe": identitaet.motto}
+    elif rolle is not None:
+        grund = {"name": rolle.name, "aufgabe": rolle.aufgabe}
+    else:
+        grund = {"name": "", "aufgabe": ""}
+
+    if rolle is not None:
+        grund["rolle"] = rolle.rolle
+        grund["eigenschaften"] = list(rolle.eigenschaften)
+        grund["bildwunsch"] = rolle.bildwunsch
+    grund["haltung"] = ""
+
+    for feld in FELDER:
+        wert = eigen.get(feld)
+        if wert not in (None, "", []):
+            grund[feld] = wert
+    return grund
+
+
+def aufstellung(
+    identitaet, settings, wahl: dict | None = None, anpassung: dict | None = None
+) -> list[dict]:
     """Die Mannschaft, wie das Dashboard sie zeigt.
 
     Ohne Identität fehlt der Chef - dann steht der Betrieb noch nicht, und
@@ -179,13 +223,9 @@ def aufstellung(identitaet, settings, wahl: dict | None = None) -> list[dict]:
     """
     leute: list[dict] = []
     for rolle in ROLLEN:
-        if rolle.schluessel == "chef":
-            if identitaet is None:
-                continue
-            name = identitaet.agent_name
-            aufgabe = identitaet.motto
-        else:
-            name, aufgabe = rolle.name, rolle.aufgabe
+        if rolle.schluessel == "chef" and identitaet is None:
+            continue
+        eigen = person(rolle.schluessel, anpassung, identitaet)
 
         aktiv = True
         if rolle.abschaltbar:
@@ -194,10 +234,12 @@ def aufstellung(identitaet, settings, wahl: dict | None = None) -> list[dict]:
         leute.append(
             {
                 "schluessel": rolle.schluessel,
-                "name": name,
-                "rolle": rolle.rolle,
-                "aufgabe": aufgabe,
-                "eigenschaften": list(rolle.eigenschaften),
+                "name": eigen["name"],
+                "rolle": eigen["rolle"],
+                "aufgabe": eigen["aufgabe"],
+                "eigenschaften": list(eigen["eigenschaften"]),
+                "haltung": eigen["haltung"],
+                "bildwunsch": eigen["bildwunsch"],
                 "rang": rolle.rang,
                 "modell": modell_fuer(rolle.schluessel, wahl, settings.llm),
                 "standard": standardmodell(rolle, settings.llm),

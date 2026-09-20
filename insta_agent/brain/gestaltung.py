@@ -25,7 +25,7 @@ import logging
 
 from ..llm import Brain
 from ..models import Gestaltungsurteil, PostDraft
-from .prompts import identity_block, with_context
+from .prompts import identity_block, persona_mit, with_context
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +125,22 @@ erfundener Statistik-Ausschnitt, keine Urkunde, kein Diagramm, keine
 erkennbare reale Person. Inszeniert ja, dokumentarisch nein."""
 
 
+def _wer(person: dict | None, standard: str) -> tuple[str, str]:
+    """Name und Haltung dieser Person - oder die Voreinstellung."""
+    person = person or {}
+    return (person.get("name") or standard, person.get("haltung") or "")
+
+
+def gestalter_persona(name: str = GESTALTER_NAME, haltung: str = "") -> str:
+    """Die Persona unter dem Namen, den der Betreiber vergeben hat."""
+    return persona_mit(
+        GESTALTER_PERSONA,
+        name=name or GESTALTER_NAME,
+        standardname=GESTALTER_NAME,
+        haltung=haltung,
+    )
+
+
 def pruefe_gestaltung(
     brain: Brain,
     *,
@@ -132,6 +148,7 @@ def pruefe_gestaltung(
     draft: PostDraft,
     mit_suche: bool = True,
     modell: str | None = None,
+    person: dict | None = None,
 ) -> Gestaltungsurteil:
     """Lässt die Bildsprache über den geplanten Beitrag sehen.
 
@@ -139,6 +156,7 @@ def pruefe_gestaltung(
     entscheidet, wie das Bild aussieht. Ein Urteil über ein fertiges Bild
     käme zu spät, um noch etwas zu ändern.
     """
+    person_name, haltung = _wer(person, GESTALTER_NAME)
     hinweis_suche = (
         f"Du darfst bis zu {brain.suchbudget} Websuchen stellen. Sieh nach, was "
         "in dieser Nische und in der Bildgestaltung gerade läuft - vor allem, "
@@ -153,7 +171,7 @@ def pruefe_gestaltung(
 
     urteil = brain.structured(
         schema=Gestaltungsurteil,
-        system=GESTALTER_PERSONA,
+        system=gestalter_persona(person_name, haltung),
         label="Bildsprache",
         task="research",
         web_search=mit_suche,
@@ -184,7 +202,7 @@ Dann schreib den Prompt neu.""",
         ),
     )
 
-    urteil.geprueft_von = GESTALTER_NAME
+    urteil.geprueft_von = person_name
     urteil.mit_suche = mit_suche
     if brain.letzte_quellen:
         urteil.quellen = list(dict.fromkeys([*urteil.quellen, *brain.letzte_quellen]))

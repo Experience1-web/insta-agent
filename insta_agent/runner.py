@@ -431,6 +431,7 @@ class Agent:
                 max_hashtags=self.settings.posting.max_hashtags,
                 performance_note=performance,
                 fund=fund,
+                persona=self._persona_chef(),
             )
             if not draft.visual.footer.strip():
                 draft.visual.footer = f"@{identity.handle}"
@@ -619,6 +620,7 @@ class Agent:
             max_hashtags=self.settings.posting.max_hashtags,
             modell=self._modell("chef"),
             fund=fund,
+            persona=self._persona_chef(),
         )
         if not neu.visual.footer.strip():
             neu.visual.footer = f"@{identity.handle}"
@@ -703,6 +705,7 @@ class Agent:
             draft=draft,
             mit_suche=self.treasury.state().mode is Mode.NORMAL,
             modell=self._modell("pruefung"),
+            person=self._person("pruefung"),
         )
         self.store.set_pruefung(post_id, bericht)
         self.store.log(
@@ -750,6 +753,99 @@ class Agent:
         """Das gewählte Modell einer Rolle, oder None für die Voreinstellung."""
         return self.modellwahl.get(schluessel)
 
+    @property
+    def mannschaft(self) -> dict:
+        """Was der Betreiber an den Steckbriefen geändert hat."""
+        from .mannschaft import KEY_MANNSCHAFT
+
+        return self.store.get_json(KEY_MANNSCHAFT) or {}
+
+    def _person(self, schluessel: str) -> dict:
+        """Name, Haltung und Aussehen einer Rolle, nach den Änderungen."""
+        from .mannschaft import person
+
+        return person(schluessel, self.mannschaft, self.identity)
+
+    def _persona_chef(self) -> str:
+        """Die Haltung des Chefs, um die Vorgabe des Betreibers ergänzt.
+
+        Sie wirkt dort, wo sie sich zeigt: beim Schreiben und beim
+        Nachbessern. Für das Ordnen von Zahlen ändert ein Charakterzug
+        nichts, und dort wäre er nur bezahlte Länge im Prompt.
+        """
+        from .brain.prompts import persona_chef
+
+        return persona_chef(self._person("chef").get("haltung", ""))
+
+    def aendere_person(self, schluessel: str, felder: dict) -> dict:
+        """Schreibt den Steckbrief einer Rolle um.
+
+        Beim Chef wandern Name und Aufgabe in die Identität und nicht in
+        die Anpassung: Unter diesem Namen schreibt er, mit diesem Motto
+        arbeitet er. Zwei Wahrheiten nebeneinander wären eine zu viel.
+        """
+        from .mannschaft import FELDER, KEY_MANNSCHAFT, NACH_SCHLUESSEL, person
+
+        if schluessel not in NACH_SCHLUESSEL:
+            return {"ok": False, "grund": "Diese Rolle gibt es nicht."}
+
+        sauber = {
+            f: (
+                [str(x).strip() for x in felder[f] if str(x).strip()][:5]
+                if f == "eigenschaften"
+                else str(felder[f]).strip()
+            )
+            for f in FELDER
+            if f in felder and felder[f] is not None
+        }
+        if not sauber:
+            return {"ok": False, "grund": "Es gab nichts zu ändern."}
+
+        if schluessel == "chef":
+            identity = self.identity
+            if identity is None:
+                return {"ok": False, "grund": "Es gibt noch kein Profil."}
+            if name := sauber.pop("name", ""):
+                identity.agent_name = name
+            if motto := sauber.pop("aufgabe", ""):
+                identity.motto = motto
+            self.store.set_json(KEY_IDENTITY, identity)
+
+        alle = self.mannschaft
+        alle[schluessel] = {**(alle.get(schluessel) or {}), **sauber}
+        self.store.set_json(KEY_MANNSCHAFT, alle)
+
+        jetzt = person(schluessel, alle, self.identity)
+        self.store.log("mannschaft", f"{jetzt['name']}: Steckbrief geändert")
+        return {"ok": True, "person": jetzt}
+
+    def male_portrait_neu(self, schluessel: str) -> dict:
+        """Malt das Porträt einer Person neu - auch wenn schon eines da ist.
+
+        Nötig, weil das Bildmodell nichts über die Person weiß. Es malt,
+        was im Bildwunsch steht, und trifft dabei weder Alter noch
+        Aussehen noch sonst etwas verlässlich. Wer damit leben muss, darf
+        es bestimmen.
+        """
+        from .imaging.portraits import male_portrait, portraitpfad
+        from .mannschaft import NACH_SCHLUESSEL
+
+        rolle = NACH_SCHLUESSEL.get(schluessel)
+        if rolle is None:
+            return {"ok": False, "grund": "Diese Rolle gibt es nicht."}
+        if self.bildgenerator is None:
+            return {"ok": False, "grund": "Kein Bilddienst eingerichtet."}
+
+        eigen = self._person(schluessel)
+        ziel = portraitpfad(self.settings.media_dir, schluessel)
+        pfad, grund = male_portrait(
+            self.bildgenerator, rolle, ziel, self.identity, eigen.get("bildwunsch", "")
+        )
+        if pfad is None:
+            return {"ok": False, "grund": grund or "Das hat nicht geklappt."}
+        self.store.log("mannschaft", f"{eigen['name']}: Porträt neu gemalt")
+        return {"ok": True}
+
     def _pruefe(self, post_id: int, draft, identity, report: CycleReport):
         """Lässt die Endprüfung über den Entwurf gehen.
 
@@ -769,6 +865,7 @@ class Agent:
                 # wird trotzdem - Rechenfehler fallen auch so auf.
                 mit_suche=self.treasury.state().mode is Mode.NORMAL,
                 modell=self._modell("pruefung"),
+                person=self._person("pruefung"),
             )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise
@@ -816,6 +913,7 @@ class Agent:
                 bisherige=bisherige,
                 mit_suche=mit_suche,
                 modell=self._modell("stoff"),
+                person=self._person("stoff"),
             )
             if not fund.taugt and mit_suche:
                 report.steps.append(
@@ -829,6 +927,7 @@ class Agent:
                     mit_suche=mit_suche,
                     modell=self._modell("stoff"),
                     nachsetzen=fund,
+                    person=self._person("stoff"),
                 )
                 # Der bessere von beiden, nicht einfach der zweite: Auch
                 # der Nachschlag kann schwächer ausfallen.
@@ -881,6 +980,7 @@ class Agent:
                 draft=draft,
                 mit_suche=self.treasury.state().mode is Mode.NORMAL,
                 modell=self._modell("bildsprache"),
+                person=self._person("bildsprache"),
             )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise

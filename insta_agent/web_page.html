@@ -232,10 +232,26 @@
   .balken i { display: block; height: 100%; background: var(--akzent); }
 
   /* ---------- Bedienung ---------- */
-  input, select, button, .knopf {
+  input, select, textarea, button, .knopf {
     font: inherit; border-radius: 10px; border: 1px solid var(--rand);
     background: var(--bg); color: var(--text); padding: 11px 13px;
   }
+  textarea { width: 100%; resize: vertical; line-height: 1.5; min-height: 68px; }
+  textarea::placeholder { color: #667289; }
+  /* Ein Formular im Popup: Beschriftung ueber dem Feld, nie daneben -
+     auf dem Handy bleibt fuer beides nebeneinander kein Platz. */
+  .formzeile { margin-bottom: 14px; }
+  .formzeile > label { display: block; font-size: 12.5px; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--leise); margin-bottom: 6px; }
+  .formzeile > input { width: 100%; }
+  .formzeile .hinweis { margin: 6px 0 0; }
+  /* Das Zahnrad sitzt in der Personenkarte und darf den Klick auf die
+     Karte nicht erben - sonst oeffnet sich beides. */
+  .zahnrad {
+    background: none; border: none; padding: 6px 8px; color: var(--leise);
+    font-size: 17px; line-height: 1; border-radius: 8px;
+  }
+  .zahnrad:hover { background: var(--rand); color: var(--text); filter: none; }
   input { flex: 1; min-width: 150px; }
   input::placeholder { color: #667289; }
   button, .knopf {
@@ -869,6 +885,9 @@ function zeichne_mannschaft(d) {
             ${m.aktiv ? "" : '<span class="schlafend">abgeschaltet</span>'}
             <span class="modellmarke">${esc(kurzmodell(m.modell))}</span>
             <span class="mehr">ansehen</span>
+            <span class="zahnrad" role="button" tabindex="0"
+                  data-bearbeiten="${esc(m.schluessel)}"
+                  title="Namen, Steckbrief und Aussehen ändern">&#9881;</span>
           </span>
         </button>`).join("")}
     </div>
@@ -880,7 +899,12 @@ function zeichne_mannschaft(d) {
 
   for (const knopf of $("mannschaftbox").querySelectorAll("[data-person]")) {
     const m = leute.find(x => x.schluessel === knopf.dataset.person);
-    knopf.onclick = () => zeige_person(m, d);
+    knopf.onclick = e => {
+      // Das Zahnrad springt direkt ins Formular, der Rest der Karte
+      // zeigt erst einmal nur.
+      const rad = e.target.closest("[data-bearbeiten]");
+      zeige_person(m, d, !!rad);
+    };
   }
   const malen = $("portraitsmalen");
   if (malen) malen.onclick = male_portraits;
@@ -896,7 +920,7 @@ function kurzmodell(modell) {
     .replace(/\b[a-z]/g, z => z.toUpperCase());
 }
 
-function zeige_person(m, d) {
+function zeige_person(m, d, bearbeiten = false) {
   const i = d.identitaet;
   const steckbrief = (m.rang === "chef" && i) ? `
     <dl class="fakten">
@@ -953,7 +977,100 @@ function zeige_person(m, d) {
       </p>
     </div>
 
+    <details class="feld" id="steckbriefform" ${bearbeiten ? "open" : ""}>
+      <summary>Steckbrief ändern</summary>
+      <p class="hinweis" style="margin:10px 0 14px">
+        Was du hier einträgst, ist keine Beschriftung: Der Name steht in
+        ${m.rang === "chef" ? "seinem Profil" : "ihrem Auftrag"}, die Haltung geht in
+        ${m.rang === "chef" ? "seine" : "ihre"} Arbeit ein. Leer lassen heißt: bleibt, wie es ist.
+      </p>
+
+      <div class="formzeile">
+        <label for="f_name">Name</label>
+        <input id="f_name" value="${esc(m.name)}" maxlength="60">
+        ${m.rang === "chef" ? `<p class="hinweis">Unter diesem Namen schreibt er.
+          Die Änderung geht in sein Profil.</p>` : ""}
+      </div>
+
+      <div class="formzeile">
+        <label for="f_aufgabe">${m.rang === "chef" ? "Motto" : "Auftrag"}</label>
+        <textarea id="f_aufgabe" rows="2" maxlength="400">${esc(m.aufgabe)}</textarea>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_eigenschaften">Eigenschaften</label>
+        <input id="f_eigenschaften" maxlength="200"
+               value="${esc((m.eigenschaften || []).join(", "))}">
+        <p class="hinweis">Mit Komma getrennt, höchstens fünf.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_haltung">Charakter und Haltung</label>
+        <textarea id="f_haltung" rows="3" maxlength="1200"
+          placeholder="Zum Beispiel: Besonders misstrauisch bei runden Zahlen. Kurz angebunden.">${esc(m.haltung || "")}</textarea>
+        <p class="hinweis">Kommt ans Ende ${m.rang === "chef" ? "seiner" : "ihrer"} Anweisung
+          und färbt die Arbeit ein. Erfinden oder Durchwinken kann man so aber nicht
+          anordnen – das bleibt gesperrt.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_bildwunsch">Aussehen für das Porträt</label>
+        <textarea id="f_bildwunsch" rows="3" maxlength="1200"
+          placeholder="Auf Englisch beschreiben, zum Beispiel: a portrait of a man in his fifties, grey beard">${esc(m.bildwunsch || "")}</textarea>
+        <p class="hinweis">Das Bildmodell weiß nichts über die Person hinter dem Namen –
+          es malt, was hier steht. Trifft es daneben, liegt es an dieser Zeile.</p>
+      </div>
+
+      <div class="knopfreihe">
+        <button class="klein gut" id="personspeichern"
+                data-wer="${esc(m.schluessel)}">Speichern</button>
+        <button class="klein" id="portraitneu"
+                data-wer="${esc(m.schluessel)}">Porträt neu malen</button>
+      </div>
+    </details>
+
     ${m.aktiv ? "" : '<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>'}`);
+
+  const speichern = $("personspeichern");
+  speichern.onclick = async () => {
+    const felder = {
+      name: $("f_name").value,
+      aufgabe: $("f_aufgabe").value,
+      eigenschaften: $("f_eigenschaften").value.split(",").map(x => x.trim()).filter(Boolean),
+      haltung: $("f_haltung").value,
+      bildwunsch: $("f_bildwunsch").value,
+    };
+    speichern.disabled = true;
+    speichern.textContent = "speichert …";
+    try {
+      const ergebnis = await sende("/api/person", { wer: speichern.dataset.wer, felder });
+      if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
+      schliesse_popup();
+      gezeichnet.mannschaft = null;
+      laden();
+    } finally {
+      speichern.disabled = false;
+      speichern.textContent = "Speichern";
+    }
+  };
+
+  const neues_portrait = $("portraitneu");
+  neues_portrait.onclick = async () => {
+    if (!confirm("Das Porträt wird nach der Beschreibung oben neu gemalt. " +
+                 "Speichere vorher, wenn du sie gerade geändert hast.\n\nWeitermachen?")) return;
+    neues_portrait.disabled = true;
+    neues_portrait.textContent = "malt …";
+    try {
+      const ergebnis = await sende("/api/portraitneu", { wer: neues_portrait.dataset.wer });
+      if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
+      schliesse_popup();
+      gezeichnet.mannschaft = null;
+      laden();
+    } finally {
+      neues_portrait.disabled = false;
+      neues_portrait.textContent = "Porträt neu malen";
+    }
+  };
 
   const bildsprache = $("bildspracheneu");
   if (bildsprache) bildsprache.onclick = async () => {

@@ -117,3 +117,36 @@ Für eigenes Denken ausgegeben: {state.spent_usd:.4f} USD
 Kontostand: {state.balance_usd:.4f} USD
 Deine Kosten deckst du zu {state.cost_coverage * 100:.0f} Prozent selbst
 Betriebsmodus: {state.mode.value}"""
+
+
+def persona_mit(vorlage: str, *, name: str, standardname: str, haltung: str = "") -> str:
+    """Setzt den Namen ein, den der Betreiber vergeben hat, und seine Vorgabe.
+
+    Eine Umbenennung im Dashboard, die nur dort ankommt, wäre eine
+    Attrappe: Die Person würde weiter unter ihrem alten Namen denken und
+    unterschreiben. Deshalb wird der Name in der Persona wirklich
+    ausgetauscht.
+
+    `haltung` ist, was der Betreiber dieser Person mitgibt - ihr
+    Charakter, ihre Schwerpunkte, ihre Marotten. Der Zusatz steht am
+    Ende, damit er das Vorherige einfärbt, ohne es zu ersetzen. Was er
+    nicht darf, steht ausdrücklich dabei: Niemand kann jemandem
+    auftragen, eine falsche Zahl durchzuwinken.
+    """
+    text = vorlage.replace(standardname, name) if name and name != standardname else vorlage
+    if not haltung.strip():
+        return text
+    return f"""{text}
+
+# Was der Betreiber dir mitgibt
+
+{haltung.strip()}
+
+Das gehört zu deiner Arbeitsweise. Es ändert aber nichts an deinem
+Auftrag und nichts an dem, was du nicht darfst - erfinden, beschönigen
+oder etwas durchgehen lassen, das nicht stimmt."""
+
+
+def persona_chef(haltung: str = "") -> str:
+    """Die Haltung des Betreibers, um eine Vorgabe ergänzt."""
+    return persona_mit(PERSONA, name="", standardname="", haltung=haltung)

@@ -195,6 +195,7 @@ class Steuerung:
         try:
             kasse = agent.treasury.state()
             modellwahl = agent.modellwahl
+            mannschaft = agent.mannschaft
             identitaet = agent.identity
             strategie = agent.strategy
             plan = agent.monetization
@@ -273,7 +274,7 @@ class Steuerung:
                     "traegt_sich": kasse.self_sustaining,
                 },
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
-                "mannschaft": aufstellung(identitaet, self.settings, modellwahl),
+                "mannschaft": aufstellung(identitaet, self.settings, modellwahl, mannschaft),
                 "modelle": WAEHLBARE_MODELLE,
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
@@ -689,6 +690,45 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
 
+        def _aendere_person(self, rumpf: dict) -> None:
+            """Schreibt den Steckbrief einer Rolle um."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            wer = (rumpf.get("wer") or "").strip()
+            felder = rumpf.get("felder")
+            if not isinstance(felder, dict):
+                self._json({"ok": False, "grund": "Es wurde nichts übergeben."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                ergebnis = agent.aendere_person(wer, felder)
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Steckbrief nicht geändert: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+            self._json(ergebnis, 200 if ergebnis.get("ok") else 400)
+
+        def _portrait_neu(self, rumpf: dict) -> None:
+            """Malt das Porträt einer einzelnen Person neu."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                ergebnis = agent.male_portrait_neu((rumpf.get("wer") or "").strip())
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Porträt nicht neu gemalt: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+            self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
+
         def _pruefen(self, rumpf: dict) -> None:
             """Holt die Endprüfung für einen Entwurf nach, der keine hat."""
             if steuerung.nur_lesen:
@@ -801,7 +841,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                     ziel = portraitpfad(einst.media_dir, rolle.schluessel)
                     if ziel.is_file():
                         continue
-                    pfad, grund = male_portrait(generator, rolle, ziel, identitaet)
+                    eigen = agent._person(rolle.schluessel)
+                    pfad, grund = male_portrait(
+                        generator, rolle, ziel, identitaet, eigen.get("bildwunsch", "")
+                    )
                     if pfad:
                         gemalt.append(rolle.schluessel)
                     else:
@@ -858,7 +901,13 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 self._sende(404, "text/plain; charset=utf-8", b"Noch kein Profil")
                 return
 
-            name = identitaet["agent_name"] if rolle.schluessel == "chef" else rolle.name
+            # Der Name, der wirklich gilt - sonst steht unter einem
+            # umbenannten Menschen weiter das alte Kürzel.
+            eigen = next(
+                (m for m in zustand.get("mannschaft", []) if m["schluessel"] == rolle.schluessel),
+                None,
+            )
+            name = eigen["name"] if eigen else rolle.name
             farben = zustand.get("farben", {})
             pfad = steuerung.settings.media_dir / f"_zeichen_{rolle.schluessel}.png"
             render_avatar(
@@ -919,6 +968,8 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/bildsprache",
                 "/api/nachbessern",
                 "/api/pruefen",
+                "/api/person",
+                "/api/portraitneu",
                 "/api/bildneu",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
@@ -957,6 +1008,14 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/pruefen":
                 self._pruefen(rumpf)
+                return
+
+            if pfad == "/api/person":
+                self._aendere_person(rumpf)
+                return
+
+            if pfad == "/api/portraitneu":
+                self._portrait_neu(rumpf)
                 return
 
             if pfad == "/api/bildneu":

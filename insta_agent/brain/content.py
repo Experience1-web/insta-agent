@@ -72,6 +72,7 @@ def create_post_draft(
     max_hashtags: int,
     performance_note: str = "",
     fund: Fund | None = None,
+    persona: str | None = None,
 ) -> PostDraft:
     already_used = (
         "\n".join(f"- {c[:120]}" for c in recent_captions)
@@ -83,7 +84,7 @@ def create_post_draft(
 
     draft = brain.structured(
         schema=PostDraft,
-        system=PERSONA,
+        system=persona or PERSONA,
         label="Post schreiben",
         prompt=with_context(
             identity_block(identity),

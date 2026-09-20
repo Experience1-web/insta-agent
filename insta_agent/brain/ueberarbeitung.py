@@ -47,11 +47,12 @@ def ueberarbeite_beitrag(
     max_hashtags: int = 20,
     modell: str | None = None,
     fund: Fund | None = None,
+    persona: str | None = None,
 ) -> PostDraft:
     """Schreibt den Beitrag neu, sodass jeder Befund erledigt ist."""
     neu = brain.structured(
         schema=PostDraft,
-        system=PERSONA,
+        system=persona or PERSONA,
         label="Beitrag nachbessern",
         modell=modell,
         prompt=with_context(

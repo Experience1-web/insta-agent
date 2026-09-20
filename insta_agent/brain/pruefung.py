@@ -21,7 +21,7 @@ import logging
 
 from ..llm import Brain
 from ..models import PostDraft, Pruefbericht
-from .prompts import identity_block, with_context
+from .prompts import identity_block, persona_mit, with_context
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +109,19 @@ def _zu_pruefen(draft: PostDraft) -> str:
     return "\n\n".join(t for t in teile if t)
 
 
+def _wer(person: dict | None, standard: str) -> tuple[str, str]:
+    """Name und Haltung dieser Person - oder die Voreinstellung."""
+    person = person or {}
+    return (person.get("name") or standard, person.get("haltung") or "")
+
+
+def pruefer_persona(name: str = PRUEFER_NAME, haltung: str = "") -> str:
+    """Die Persona unter dem Namen, den der Betreiber vergeben hat."""
+    return persona_mit(
+        PRUEFER_PERSONA, name=name or PRUEFER_NAME, standardname=PRUEFER_NAME, haltung=haltung
+    )
+
+
 def pruefe_beitrag(
     brain: Brain,
     *,
@@ -116,6 +129,7 @@ def pruefe_beitrag(
     draft: PostDraft,
     mit_suche: bool = True,
     modell: str | None = None,
+    person: dict | None = None,
 ) -> Pruefbericht:
     """Lässt den Beitrag von der Endprüfung durchgehen.
 
@@ -124,6 +138,7 @@ def pruefe_beitrag(
     vermerkt dann, dass nicht nachgeschlagen werden konnte - damit niemand
     ein "belegt" für mehr hält, als es ist.
     """
+    person_name, haltung = _wer(person, PRUEFER_NAME)
     hinweis_suche = (
         f"Du darfst bis zu {brain.suchbudget} Websuchen stellen. Nutze sie für "
         "die Zahlen und Quellenangaben, nicht für Allgemeinwissen."
@@ -138,7 +153,7 @@ def pruefe_beitrag(
 
     bericht = brain.structured(
         schema=Pruefbericht,
-        system=PRUEFER_PERSONA,
+        system=pruefer_persona(person_name, haltung),
         label="Endprüfung",
         task="research",
         web_search=mit_suche,
@@ -164,7 +179,7 @@ Trag in `quellen` ein, was du tatsächlich aufgerufen hast.""",
 
     # Der Code trägt ein, was der Code weiß. Das Modell könnte sich hier
     # selbst einen schöneren Zustand ausstellen.
-    bericht.geprueft_von = PRUEFER_NAME
+    bericht.geprueft_von = person_name
     bericht.mit_suche = mit_suche
     if brain.letzte_quellen:
         bericht.quellen = list(dict.fromkeys([*bericht.quellen, *brain.letzte_quellen]))
