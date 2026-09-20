@@ -246,9 +246,7 @@
     <input id="hinweis" placeholder="Wunsch für die Nische (optional – sonst entscheidet er allein)">
     <button id="start">Starten</button>
   </div>
-  <p class="hinweis" style="margin:13px 0 0">
-    Veröffentlicht wird nichts – es entstehen nur Entwürfe.
-  </p>
+  <p class="hinweis" id="starthinweis" style="margin:13px 0 0"></p>
   <p class="hinweis" id="takthinweis" style="margin:8px 0 0; display:none"></p>
 </div>
 
@@ -434,6 +432,11 @@ function zeichne(d) {
   for (const id of ["steuerung", "steuerungstitel", "einnahmebox", "einnahmetitel"]) {
     $(id).style.display = sichtbar;
   }
+  // Was ein Lauf bewirkt, haengt davon ab, ob er scharf geschaltet ist.
+  $("starthinweis").innerHTML = d.kann_posten
+    ? "Er schreibt neue Beiträge. Hinaus geht nur, was du freigibst."
+    : "Es entstehen nur Entwürfe – veröffentlicht wird nichts.";
+
   const takt = $("takthinweis");
   takt.style.display = d.auto_stunden ? "" : "none";
   if (d.auto_stunden) {

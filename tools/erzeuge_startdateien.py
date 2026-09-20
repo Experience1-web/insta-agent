@@ -109,6 +109,17 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "14 - Jetzt posten.bat": f"""{KOPF}
+title Jetzt posten
+echo.
+echo   Schickt raus, was du schon freigegeben hast.
+echo.
+echo   Kostet kein Guthaben - es wird nichts gedacht,
+echo   nur hochgeladen.
+echo.
+%PY% -m insta_agent.cli posten
+echo.
+pause""",
     "13 - Wirklich veroeffentlichen.bat": f"""{KOPF}
 title Wirklich veroeffentlichen
 echo.

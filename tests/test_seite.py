@@ -87,3 +87,13 @@ def test_kostenlose_bilder_werden_nicht_als_null_dollar_ausgewiesen():
     abschnitt = QUELLE[stelle : stelle + 700]
     assert "d.bildkosten > 0" in abschnitt
     assert "kostenloses Kontingent" in abschnitt
+
+
+def test_der_starthinweis_kennt_die_lage():
+    """"Veroeffentlicht wird nichts" war fest verdrahtet und wurde falsch,
+    sobald alles eingerichtet war."""
+    assert "Veröffentlicht wird nichts – es entstehen nur Entwürfe." not in QUELLE
+    stelle = QUELLE.index('$("starthinweis").innerHTML')
+    abschnitt = QUELLE[stelle : stelle + 300]
+    assert "d.kann_posten" in abschnitt
+    assert "Hinaus geht nur, was du freigibst" in abschnitt

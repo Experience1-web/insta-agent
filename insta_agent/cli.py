@@ -562,6 +562,50 @@ def _bild_fertig() -> None:
 
 
 @app.command()
+def posten(config: Path = typer.Option(None)) -> None:
+    """Schickt raus, was schon freigegeben ist - ohne Denkzyklus.
+
+    Kostet kein Guthaben: Es wird nichts geschrieben und nichts gedacht,
+    nur hochgeladen.
+    """
+    settings = load_settings(config)
+    if not settings.postet_wirklich:
+        if not settings.can_publish:
+            console.print(
+                "[red]Es fehlt der Zugang.[/red]\n"
+                "  insta-agent instagram\n"
+                "  insta-agent ablage"
+            )
+        else:
+            console.print(
+                "[yellow]Noch im Trockenlauf.[/yellow] Erst scharf schalten:\n"
+                "  insta-agent scharf"
+            )
+        raise typer.Exit(1)
+
+    agent = _agent(config)
+    try:
+        offen = agent.store.approved_drafts(limit=20)
+        if not offen:
+            console.print("[dim]Nichts freigegeben - es gibt nichts zu senden.[/dim]")
+            return
+
+        console.print(f"[dim]{len(offen)} freigegeben. Schicke raus ...[/dim]\n")
+        bericht = agent.veroeffentliche_jetzt()
+        for schritt in bericht.steps:
+            console.print(f"  {schritt}")
+
+        if bericht.published_media_ids:
+            console.print(
+                f"\n[green]{len(bericht.published_media_ids)} veroeffentlicht.[/green]"
+            )
+        else:
+            console.print("\n[yellow]Nichts ging raus.[/yellow] Die Gruende stehen oben.")
+    finally:
+        agent.close()
+
+
+@app.command()
 def scharf(
     config: Path = typer.Option(None),
     aus: bool = typer.Option(False, "--aus", help="Wieder auf Trockenlauf stellen"),
