@@ -840,3 +840,146 @@ def test_beide_neuen_wege_stehen_zur_auswahl():
     # Pollinations braucht nicht einmal ein Konto.
     assert "pollinations" in OHNE_SCHLUESSEL
     assert "cloudflare" not in OHNE_SCHLUESSEL
+
+
+# --- Das Akzentwort --------------------------------------------------------
+#
+# Eine Schlagzeile unterscheidet sich von einer Bildunterschrift dadurch,
+# dass ein Wort heraussticht: die Zahl, die Tiefe, der Name. Genau das
+# macht den Unterschied zwischen "da steht Text auf einem Bild" und
+# "da ist eine Aussage".
+
+
+def _akzentanteil(bild_pfad, akzent=(123, 224, 90)) -> int:
+    """Wie viele Pixel in der ersten Textzeile die Akzentfarbe tragen."""
+    from PIL import Image
+
+    bild = Image.open(bild_pfad).convert("RGB")
+    oben = int(bild.height * 0.15)
+    streifen = bild.crop((0, oben, bild.width, oben + int(bild.height * 0.04)))
+    return sum(
+        1
+        for p in streifen.getdata()
+        if abs(p[0] - akzent[0]) < 30 and abs(p[1] - akzent[1]) < 30 and abs(p[2] - akzent[2]) < 30
+    )
+
+
+def _grund(pfad, groesse):
+    from PIL import Image
+
+    Image.new("RGB", groesse, (8, 26, 38)).save(pfad)
+    return pfad
+
+
+def test_das_akzentwort_steht_in_der_akzentfarbe(tmp_path):
+    from insta_agent.imaging import STORY, lege_hook_auf
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(
+        headline="7.902 Meter tief. Und es wartet.",
+        akzentwort="7.902 Meter",
+        text_hex="#FFFFFF",
+        accent_hex="#7BE05A",
+    )
+    ziel = lege_hook_auf(
+        _grund(tmp_path / "g.png", STORY), tmp_path / "a.png", text=spec.headline, spec=spec
+    )
+
+    assert _akzentanteil(ziel) > 200
+
+
+def test_ohne_akzentwort_und_ohne_zahl_bleibt_alles_einfarbig(tmp_path):
+    """Lieber gar kein Akzent als einer auf dem falschen Wort."""
+    from insta_agent.imaging import STORY, lege_hook_auf
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(
+        headline="Ein Satz ganz ohne jede Ziffer darin",
+        text_hex="#FFFFFF",
+        accent_hex="#7BE05A",
+    )
+    ziel = lege_hook_auf(
+        _grund(tmp_path / "g.png", STORY), tmp_path / "b.png", text=spec.headline, spec=spec
+    )
+
+    assert _akzentanteil(ziel) == 0
+
+
+def test_ohne_angabe_wird_die_zahl_hervorgehoben(tmp_path):
+    """In diesen Beiträgen ist fast immer die Zahl das, was zählt."""
+    from insta_agent.imaging import STORY, lege_hook_auf
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(
+        headline="7.902 Meter tief. Und es wartet.", text_hex="#FFFFFF", accent_hex="#7BE05A"
+    )
+    ziel = lege_hook_auf(
+        _grund(tmp_path / "g.png", STORY), tmp_path / "c.png", text=spec.headline, spec=spec
+    )
+
+    assert _akzentanteil(ziel) > 200
+
+
+def test_ein_akzentwort_das_gar_nicht_dasteht_faellt_zurueck():
+    """Sonst wäre die Hervorhebung spurlos verloren."""
+    from insta_agent.imaging.renderer import _akzentkerne
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(headline="x", akzentwort="Rübenacker")
+
+    assert _akzentkerne(spec, "7.902 Meter tief") == {"7.902"}
+
+
+def test_satzzeichen_stehen_der_hervorhebung_nicht_im_weg():
+    from insta_agent.imaging.renderer import _akzentkerne
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(headline="x", akzentwort="Tiefsee")
+
+    assert _akzentkerne(spec, "Die Tiefsee, dunkel und still") == {"tiefsee"}
+
+
+def test_die_notfassung_hebt_dasselbe_wort_hervor(tmp_path):
+    """Beide Wege müssen gleich aussehen, sonst fällt einer aus der Reihe."""
+    from insta_agent.imaging import STORY, render_post_image
+    from insta_agent.models import VisualSpec
+
+    spec = VisualSpec(
+        headline="7.902 Meter tief. Und es wartet.",
+        akzentwort="7.902 Meter",
+        background_hex="#061822",
+        text_hex="#FFFFFF",
+        accent_hex="#7BE05A",
+    )
+    ziel = render_post_image(spec, tmp_path / "d.png", groesse=STORY)
+
+    from PIL import Image
+
+    bild = Image.open(ziel).convert("RGB")
+    treffer = sum(
+        1
+        for p in bild.getdata()
+        if abs(p[0] - 123) < 30 and abs(p[1] - 224) < 30 and abs(p[2] - 90) < 30
+    )
+    # Der Akzentbalken oben allein macht rund 19.000 Pixel aus.
+    assert treffer > 25000
+
+
+def test_die_schrift_bekommt_eine_kontur(tmp_path):
+    """Auf einem hellen Fleck mitten im Wort trägt kein Verlauf mehr."""
+    from PIL import Image
+
+    from insta_agent.imaging import STORY, lege_hook_auf
+    from insta_agent.models import VisualSpec
+
+    hell = tmp_path / "hell.png"
+    Image.new("RGB", STORY, (235, 240, 245)).save(hell)
+    spec = VisualSpec(headline="Weiss auf Weiss", text_hex="#FFFFFF", accent_hex="#7BE05A")
+
+    ziel = lege_hook_auf(hell, tmp_path / "e.png", text=spec.headline, spec=spec)
+
+    bild = Image.open(ziel).convert("RGB")
+    oben = int(bild.height * 0.15)
+    streifen = bild.crop((0, oben, bild.width, oben + int(bild.height * 0.05)))
+    # Ohne Kontur gäbe es hier gar keine dunklen Pixel.
+    assert sum(1 for p in streifen.getdata() if sum(p) < 200) > 500

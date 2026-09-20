@@ -2,8 +2,15 @@
 
 Ein Foto ist nie gleichmäßig hell. Weißer Text auf einem hellen Fleck ist
 unsichtbar, und genau der Satz, wegen dem der Daumen stehenbleiben soll,
-wäre dann weg. Deshalb wird gemessen, wo es ruhig und dunkel genug ist,
-und notfalls ein Verlauf daruntergelegt.
+wäre dann weg. Deshalb dreierlei: Es wird gemessen, wo es ruhig und dunkel
+genug ist, notfalls ein Verlauf daruntergelegt, und die Schrift bekommt
+eine dünne dunkle Kontur. Die Kontur trägt auch da, wo ein heller Fleck
+mitten im Wort sitzt - dafür reicht kein Verlauf.
+
+Ein Wort steht in der Akzentfarbe: die Zahl, die Tiefe, der Name - das,
+woran die Sache hängt. Das ist der Unterschied zwischen einer Bildunter-
+schrift und einer Schlagzeile. Wer alles hervorhebt, hebt nichts hervor,
+deshalb höchstens zwei Wörter.
 """
 
 from __future__ import annotations
@@ -15,12 +22,15 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from ..models import VisualSpec
 from .renderer import (
+    KONTUR,
     STORY,
+    _akzentkerne,
     _contrast_ratio,
     _fit_text,
     _hex_to_rgb,
     _load_font,
     _wrap_to_width,
+    _zeichne_zeile,
 )
 
 log = logging.getLogger(__name__)
@@ -116,9 +126,21 @@ def lege_hook_auf(
         _lege_schleier(bild, max(oben - 90, 0), min(oben + blockhoehe + 90, hoehe))
         log.debug("Schleier gelegt, der Bildgrund war zu unruhig")
 
+    kerne = _akzentkerne(spec, text)
+    kontur = max(2, round(getattr(schrift, "size", 80) * KONTUR))
+
     y = oben
     for zeile in zeilen:
-        zeichnung.text((RAND, y), zeile, font=schrift, fill=textfarbe)
+        _zeichne_zeile(
+            zeichnung,
+            (RAND, y),
+            zeile,
+            schrift=schrift,
+            textfarbe=textfarbe,
+            akzent=akzent,
+            kerne=kerne,
+            kontur=kontur,
+        )
         y += zeilenhoehe
 
     # Die Akzentlinie ist das Wiedererkennungszeichen im Feed.
@@ -136,4 +158,4 @@ def lege_hook_auf(
     return ziel
 
 
-__all__ = ["lege_hook_auf", "_wrap_to_width"]
+__all__ = ["lege_hook_auf", "_akzentkerne", "_wrap_to_width"]

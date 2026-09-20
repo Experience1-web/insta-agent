@@ -164,10 +164,15 @@ oder nein zu beantworten. Sie soll jemanden dazu bringen, von sich zu
 erzählen - Kommentare sind das stärkste Signal, das du erzeugen kannst.
 
 ## visual
-Der Bauplan für die Notfassung: Falls kein Bild erzeugt wird, rendert das
-Programm den Hook typografisch. Setz headline gleich dem
+Der Bauplan für die Schrift auf dem Bild. Setz headline gleich dem
 hook_text_on_screen, wähl Farben aus deiner Bildsprache und achte auf
-harten Kontrast zwischen Text und Hintergrund.""",
+harten Kontrast zwischen Text und Hintergrund. Derselbe Bauplan trägt
+die Notfassung, falls kein Bild erzeugt wird.
+
+`akzentwort` ist das eine Wort aus dem Hook, das farbig gesetzt wird.
+Nimm das, woran die Sache hängt: die Zahl, die Tiefe, das Alter, den
+Namen. Ein Wort, höchstens zwei - wer alles hervorhebt, hebt nichts
+hervor. Es muss wörtlich so im Hook stehen, sonst findet es niemand.""",
         ),
     )
 

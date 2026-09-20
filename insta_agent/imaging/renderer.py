@@ -96,6 +96,69 @@ def _ensure_readable(
     return white if _contrast_ratio(white, background) >= _contrast_ratio(black, background) else black
 
 
+# Wie dick die Kontur im Verhältnis zur Schriftgröße ist. Zu dünn trägt
+# nicht, zu dick sieht nach Word-Art aus.
+KONTUR = 0.055
+
+
+def _wortkern(wort: str) -> str:
+    """Ein Wort ohne Satzzeichen und Groß/Klein - zum Vergleichen."""
+    return wort.strip(".,;:!?\"'\u201e\u201c\u2013-()").casefold()
+
+
+def _akzentkerne(spec: VisualSpec, text: str) -> set[str]:
+    """Welche Wörter farbig werden.
+
+    Erste Wahl ist, was der Bauplan sagt. Sagt er nichts, wird die Zahl
+    genommen: In diesen Beiträgen ist fast immer die Zahl das, was zählt -
+    die Tiefe, das Alter, die Entfernung. Findet sich auch keine, bleibt
+    alles einfarbig. Lieber gar kein Akzent als einer auf dem falschen Wort.
+    """
+    if gewuenscht := spec.akzentwort.strip():
+        kerne = {_wortkern(w) for w in gewuenscht.split()}
+        # Nur, was wirklich dasteht: Ein Akzentwort, das im Hook nicht
+        # vorkommt, wäre sonst spurlos verloren.
+        vorhanden = {_wortkern(w) for w in text.split()}
+        if treffer := {k for k in kerne if k and k in vorhanden}:
+            return treffer
+
+    mit_ziffer = [
+        _wortkern(w) for w in text.split() if any(z.isdigit() for z in w)
+    ]
+    return {k for k in mit_ziffer[:2] if k}
+
+
+def _zeichne_zeile(
+    zeichnung: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    zeile: str,
+    *,
+    schrift,
+    textfarbe: tuple[int, int, int],
+    akzent: tuple[int, int, int],
+    kerne: set[str],
+    kontur: int,
+) -> None:
+    """Malt eine Zeile Wort für Wort, damit einzelne Wörter farbig sein können.
+
+    Das Leerzeichen wird mitgemessen und nicht mitgezeichnet - sonst
+    wandern die Wörter bei jeder Schriftgröße anders auseinander.
+    """
+    x, y = xy
+    leer = zeichnung.textlength(" ", font=schrift)
+    for wort in zeile.split():
+        farbe = akzent if _wortkern(wort) in kerne else textfarbe
+        zeichnung.text(
+            (x, y),
+            wort,
+            font=schrift,
+            fill=farbe,
+            stroke_width=kontur,
+            stroke_fill=(0, 0, 0),
+        )
+        x += zeichnung.textlength(wort, font=schrift) + leer
+
+
 def _wrap_to_width(
     draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int
 ) -> list[str]:
@@ -200,8 +263,20 @@ def render_post_image(
     block_height = len(lines) * line_height
     y = max(MARGIN + 60, (hoehe - block_height) // 2 - (len(body_lines) * 34))
 
+    # Dieselbe Hervorhebung wie auf dem gemalten Bild: Beide Wege müssen
+    # gleich aussehen, sonst fällt die Notfassung im Feed aus der Reihe.
+    kerne = _akzentkerne(spec, spec.headline)
     for line in lines:
-        draw.text((MARGIN, y), line, font=font, fill=text_color)
+        _zeichne_zeile(
+            draw,
+            (MARGIN, y),
+            line,
+            schrift=font,
+            textfarbe=text_color,
+            akzent=accent,
+            kerne=kerne,
+            kontur=0,
+        )
         y += line_height
 
     if spec.subline.strip():

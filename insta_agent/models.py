@@ -175,6 +175,15 @@ class VisualSpec(BaseModel):
     background_hex: str = Field(default="#111318", description="Hintergrundfarbe als #rrggbb")
     text_hex: str = Field(default="#F5F5F0", description="Textfarbe als #rrggbb")
     accent_hex: str = Field(default="#E4572E", description="Akzentfarbe als #rrggbb")
+    akzentwort: str = Field(
+        default="",
+        description=(
+            "Ein Wort oder eine Zahl aus der Headline, die farbig gesetzt "
+            "wird. Das eine Wort, an dem die Sache hängt - meist die Zahl, "
+            "die Tiefe oder der Name. Nicht mehr als zwei Wörter: Wenn alles "
+            "hervorgehoben ist, ist nichts hervorgehoben."
+        ),
+    )
     footer: str = Field(default="", description="Kleiner Fußtext, meist der Handle")
 
 
