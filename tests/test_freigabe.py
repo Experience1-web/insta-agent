@@ -253,3 +253,47 @@ def test_der_autopilot_umgeht_das_verwerfen_nicht(agent):
     assert len(agent.publisher.veroeffentlicht) == 0
     agent.run_cycle()
     assert len(agent.publisher.veroeffentlicht) == 1
+
+
+# --- Veröffentlichen ohne Denkzyklus --------------------------------------
+
+
+def test_veroeffentlichen_kostet_kein_guthaben(agent):
+    """Hochladen ist kein Denken. Dafür einen Zyklus zu verlangen wäre absurd."""
+    agent.run_cycle()
+    agent.store.freigeben(agent.store.pending_drafts()[0]["id"])
+    vorher = agent.treasury.state().spent_usd
+
+    bericht = agent.veroeffentliche_jetzt()
+
+    assert agent.publisher.veroeffentlicht != []
+    assert agent.treasury.state().spent_usd == vorher
+    assert bericht.finished_at is not None
+
+
+def test_ohne_freigabe_geht_auch_sofort_nichts_raus(agent):
+    agent.run_cycle()
+
+    agent.veroeffentliche_jetzt()
+
+    assert agent.publisher.veroeffentlicht == []
+
+
+def test_zweimal_sofort_veroeffentlichen_postet_nicht_doppelt(agent):
+    agent.run_cycle()
+    agent.store.freigeben(agent.store.pending_drafts()[0]["id"])
+
+    agent.veroeffentliche_jetzt()
+    agent.veroeffentliche_jetzt()
+
+    assert len(agent.publisher.veroeffentlicht) == 1
+
+
+def test_die_freigabe_loest_das_veroeffentlichen_aus():
+    """Das Ja des Betreibers ist der Ausloeser, nicht der naechste Zyklus."""
+    from pathlib import Path
+
+    quelle = (Path(__file__).resolve().parent.parent
+              / "insta_agent" / "web.py").read_text("utf-8")
+    assert "steuerung.jetzt_veroeffentlichen" in quelle
+    assert 'wahl == "freigeben" and steuerung.settings.can_publish' in quelle

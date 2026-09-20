@@ -469,6 +469,19 @@ class Agent:
         report.steps.append("Bild erzeugt und beschriftet")
         return fertig
 
+    def veroeffentliche_jetzt(self) -> CycleReport:
+        """Schickt raus, was freigegeben ist - ohne einen Denkzyklus.
+
+        Veröffentlichen kostet kein Guthaben: Es wird nichts geschrieben
+        und nichts gedacht, nur hochgeladen. Es wäre absurd, dafür einen
+        bezahlten Zyklus zu verlangen, nur weil das Verschicken sonst am
+        Anfang eines Zyklus passiert.
+        """
+        bericht = CycleReport(cycle=0, started_at=datetime.now(timezone.utc))
+        self._veroeffentliche_freigegebenes(bericht)
+        bericht.finished_at = datetime.now(timezone.utc)
+        return bericht
+
     def _veroeffentliche_freigegebenes(self, report: CycleReport) -> None:
         """Schickt raus, was der Betreiber freigegeben hat.
 

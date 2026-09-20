@@ -593,6 +593,12 @@ async function entscheide(id, wahl, knopf) {
       knopf.disabled = false;
       return;
     }
+    if (daten.geht_raus) {
+      knopf.textContent = "geht raus …";
+      // Das Hochladen dauert ein paar Sekunden; danach steht die Marke
+      // von selbst auf "veröffentlicht".
+      setTimeout(() => { gezeichnet.beitraege = null; laden(); }, 6000);
+    }
     // Sofort neu laden, damit die Marke umspringt.
     gezeichnet.beitraege = null;
     laden();

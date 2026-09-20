@@ -160,6 +160,19 @@ class Steuerung:
         if self.auto_stunden > 0:
             threading.Thread(target=self._takt, daemon=True).start()
 
+    def jetzt_veroeffentlichen(self) -> None:
+        """Schickt freigegebene Beiträge sofort raus, ohne Denkzyklus."""
+        agent = Agent(self.settings)
+        try:
+            bericht = agent.veroeffentliche_jetzt()
+            for schritt in bericht.steps:
+                log.info("%s", schritt)
+        except Exception as exc:  # noqa: BLE001 - darf den Server nie mitreißen
+            log.exception("Veröffentlichen fehlgeschlagen")
+            self.letzter_fehler = _verstaendlich(exc)
+        finally:
+            agent.close()
+
     # -- Daten für die Anzeige --------------------------------------------
 
     def zustand(self) -> dict[str, Any]:
@@ -500,7 +513,15 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             finally:
                 agent.close()
 
-            self._json({"ok": True})
+            # Das Ja des Betreibers ist der Auslöser, nicht der nächste
+            # Zyklus. Veröffentlichen kostet kein Guthaben - darauf zu
+            # warten wäre nur Wartezeit ohne Gegenwert.
+            if wahl == "freigeben" and steuerung.settings.can_publish:
+                threading.Thread(target=steuerung.jetzt_veroeffentlichen, daemon=True).start()
+                self._json({"ok": True, "geht_raus": True})
+                return
+
+            self._json({"ok": True, "geht_raus": False})
 
         def _buche_einnahme(self, rumpf: dict) -> None:
             """Trägt eine Einnahme in die Kasse des Agenten ein.
