@@ -192,7 +192,7 @@ class Settings:
     # Wohin die fertigen Bilder kurz hochgeladen werden, damit Instagram
     # sie abholen kann. Ohne das - und ohne public_media_base_url - kann
     # der Agent nicht veroeffentlichen.
-    ablage_anbieter: str = "imgbb"
+    ablage_anbieter: str = "litterbox"
     ablage_token: str | None = None
     wallet_address: str | None = None
     """Empfangsadresse. Nur zum Empfangen - der Agent hat keine Schlüssel."""
@@ -206,11 +206,20 @@ class Settings:
         return bool(self.ig_user_id and self.ig_access_token)
 
     @property
+    def hat_bildplatz(self) -> bool:
+        """Ob es eine Adresse gibt, von der Instagram das Bild holen kann."""
+        from .instagram.ablage import OHNE_SCHLUESSEL
+
+        if self.public_media_base_url or self.ablage_token:
+            return True
+        # Manche Bildspeicher brauchen weder Konto noch Schlüssel - dann
+        # ist nichts einzurichten und es kann sofort losgehen.
+        return self.ablage_anbieter in OHNE_SCHLUESSEL
+
+    @property
     def can_publish(self) -> bool:
         """Ob alles eingerichtet ist, was zum Veröffentlichen nötig wäre."""
-        return self.instagram_ready and bool(
-            self.public_media_base_url or self.ablage_token
-        )
+        return self.instagram_ready and self.hat_bildplatz
 
     @property
     def postet_wirklich(self) -> bool:

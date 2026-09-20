@@ -85,16 +85,19 @@ class Agent:
         if settings.instagram_ready:
             self.ig = InstagramClient(settings.ig_user_id, settings.ig_access_token)
 
-        from .instagram.ablage import baue_ablage
+        from .instagram.ablage import baue_ablagen
 
-        self.ablage = baue_ablage(settings.ablage_anbieter, settings.ablage_token)
+        # Mehrere Bildspeicher, nicht einer: Meta holt von manchen Adressen
+        # nicht ab, und das laesst sich vorher nicht pruefen.
+        self.ablagen = baue_ablagen(settings.ablage_anbieter, settings.ablage_token)
+        self.ablage = self.ablagen[0] if self.ablagen else None
         self.publisher = Publisher(
             client=self.ig,
             media_dir=settings.media_dir,
             draft_dir=settings.draft_dir,
             public_base_url=settings.public_media_base_url,
             live=settings.posting.live,
-            ablage=self.ablage,
+            ablagen=self.ablagen,
         )
 
         # Ohne Schlüssel bleibt es bei der Typografie - kein Fehler, nur weniger.

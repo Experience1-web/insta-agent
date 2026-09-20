@@ -61,7 +61,7 @@ def test_live_ohne_oeffentliche_url_veroeffentlicht_nicht(tmp_path, draft):
     result = publisher.publish(draft, tmp_path / "media" / "bild.png")
 
     assert result.published is False
-    assert "PUBLIC_MEDIA_BASE_URL" in result.reason
+    assert "insta-agent ablage" in result.reason
     assert client.calls == []
 
 
@@ -111,3 +111,131 @@ def test_handlungsaufruf_wird_nicht_doppelt_angehaengt(draft):
     draft.caption = f"{draft.caption}\n\n{draft.call_to_action}"
     caption = Publisher.full_caption(draft)
     assert caption.count("Speichere das für Montag.") == 1
+
+
+# --- Wenn Instagram die Adresse nicht mag ---------------------------------
+
+
+class GesperrterClient(FakeClient):
+    """Instagram lehnt bestimmte Adressen ab - mit einer Meldung übers Bild.
+
+    Genau das passiert mit imgbb: Metas Abholer kommt nicht an die Datei,
+    und zurück kommt "Only photo or video can be accepted as media type".
+    """
+
+    def __init__(self, gesperrt: str):
+        super().__init__()
+        self.gesperrt = gesperrt
+
+    def create_container(self, image_url, caption):
+        from insta_agent.instagram.client import GraphAPIError
+
+        self.calls.append(("container", image_url, caption))
+        if self.gesperrt in image_url:
+            raise GraphAPIError(
+                "OAuthException 9004: Only photo or video can be accepted as media type."
+            )
+        return "container-1"
+
+
+class FakeAblage:
+    def __init__(self, name, adresse):
+        self.name = name
+        self.adresse = adresse
+        self.hochgeladen = 0
+
+    def lade_hoch(self, bild):
+        self.hochgeladen += 1
+        return self.adresse
+
+
+def test_eine_abgelehnte_adresse_wird_woanders_nochmal_versucht(tmp_path, draft):
+    client = GesperrterClient("ibb.co")
+    erste = FakeAblage("imgbb", "https://i.ibb.co/x/b.jpg")
+    zweite = FakeAblage("litterbox", "https://litter.catbox.moe/b.jpg")
+
+    publisher = _publisher(tmp_path, live=True, client=client, ablagen=[erste, zweite])
+    result = publisher.publish(draft, tmp_path / "media" / "bild.png")
+
+    assert result.published is True
+    assert result.ig_media_id == "media-99"
+    assert [c[1] for c in client.calls if c[0] == "container"] == [
+        "https://i.ibb.co/x/b.jpg",
+        "https://litter.catbox.moe/b.jpg",
+    ]
+
+
+def test_solange_es_klappt_wird_nichts_zweites_hochgeladen(tmp_path, draft):
+    """Jeder Upload kostet Zeit - die zweite Ablage bleibt unberührt."""
+    erste = FakeAblage("litterbox", "https://litter.catbox.moe/b.jpg")
+    zweite = FakeAblage("catbox", "https://files.catbox.moe/b.jpg")
+
+    publisher = _publisher(
+        tmp_path, live=True, client=FakeClient(), ablagen=[erste, zweite]
+    )
+    publisher.publish(draft, tmp_path / "media" / "bild.png")
+
+    assert erste.hochgeladen == 1
+    assert zweite.hochgeladen == 0
+
+
+def test_ein_fehler_der_nicht_an_der_adresse_liegt_bricht_ab(tmp_path, draft):
+    """Ein abgelaufenes Zugangswort wird durch einen anderen Speicher nicht besser."""
+    from insta_agent.instagram.client import GraphAPIError
+
+    class AbgelaufenerClient(FakeClient):
+        def create_container(self, image_url, caption):
+            self.calls.append(("container", image_url, caption))
+            raise GraphAPIError("OAuthException 190: Session has expired")
+
+    client = AbgelaufenerClient()
+    zweite = FakeAblage("catbox", "https://files.catbox.moe/b.jpg")
+    publisher = _publisher(
+        tmp_path,
+        live=True,
+        client=client,
+        ablagen=[FakeAblage("litterbox", "https://litter.catbox.moe/b.jpg"), zweite],
+    )
+    result = publisher.publish(draft, tmp_path / "media" / "bild.png")
+
+    assert result.published is False
+    assert zweite.hochgeladen == 0
+    assert "190" in result.reason
+
+
+def test_ein_speicher_der_nicht_annimmt_haelt_die_kette_nicht_auf(tmp_path, draft):
+    class KaputteAblage:
+        name = "kaputt"
+
+        def lade_hoch(self, bild):
+            raise RuntimeError("Netz weg")
+
+    client = FakeClient()
+    publisher = _publisher(
+        tmp_path,
+        live=True,
+        client=client,
+        ablagen=[KaputteAblage(), FakeAblage("catbox", "https://files.catbox.moe/b.jpg")],
+    )
+    result = publisher.publish(draft, tmp_path / "media" / "bild.png")
+
+    assert result.published is True
+
+
+def test_wenn_alles_scheitert_stehen_alle_gruende_da(tmp_path, draft):
+    client = GesperrterClient("")  # lehnt jede Adresse ab
+    publisher = _publisher(
+        tmp_path,
+        live=True,
+        client=client,
+        ablagen=[
+            FakeAblage("imgbb", "https://i.ibb.co/x/b.jpg"),
+            FakeAblage("litterbox", "https://litter.catbox.moe/b.jpg"),
+        ],
+    )
+    result = publisher.publish(draft, tmp_path / "media" / "bild.png")
+
+    assert result.published is False
+    assert "i.ibb.co" in result.reason
+    assert "litter.catbox.moe" in result.reason
+    assert result.draft_path.exists()

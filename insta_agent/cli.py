@@ -381,6 +381,13 @@ def check() -> None:
         )
     else:
         table.add_row("Veröffentlichen", "[dim]nur Entwürfe[/dim]")
+    if settings.instagram_ready:
+        from .instagram.ablage import baue_ablagen
+
+        # Wo die Bilder liegen, wenn Instagram sie abholt. Mehrere, weil
+        # Meta manche Speicher nicht annimmt.
+        namen = [a.name for a in baue_ablagen(settings.ablage_anbieter, settings.ablage_token)]
+        table.add_row("Bildspeicher", " → ".join(namen) if namen else "[red]keiner[/red]")
     console.print(table)
 
     if schluessel and schluessel.startswith("sk-ant-") and not kaputt:
@@ -543,12 +550,16 @@ def bilder(
     _bild_fertig()
 
 
-def _frag_schluessel(frage: str) -> str:
-    """Fragt einen Schluessel ab und raeumt Einfuege-Unfaelle weg."""
-    roh = typer.prompt(frage, hide_input=True)
+def _frag_schluessel(frage: str, *, noetig: bool = True) -> str:
+    """Fragt einen Schluessel ab und raeumt Einfuege-Unfaelle weg.
+
+    `noetig=False` laesst eine leere Eingabe zu - fuer Schluessel, ohne die
+    es auch geht. Dann wird ein leerer Text zurueckgegeben.
+    """
+    roh = typer.prompt(frage, hide_input=True, default="" if not noetig else None)
     # Mehrzeiliges Einfuegen zerlegt den Schluessel sonst still.
     token = "".join(roh.split()).strip("\"'")
-    if not token:
+    if not token and noetig:
         console.print("[yellow]Nichts eingetragen.[/yellow]")
         raise typer.Exit(1)
     return token
@@ -674,29 +685,40 @@ def ablage(
 
     if loeschen:
         set_env_value("ABLAGE_TOKEN", "")
-        console.print("[green]Entfernt.[/green] Veroeffentlichen geht damit nicht mehr.")
+        console.print(
+            "[green]Entfernt.[/green] Veroeffentlichen geht weiter - ueber die"
+            " Speicher ohne Konto."
+        )
         return
 
     console.print(
         Panel(
             "Instagram laedt kein Bild hoch, das du ihm gibst. Es bekommt eine\n"
             "Adresse im Netz und holt sich das Bild dort ab.\n\n"
-            "[bold]So kommst du an den Schluessel:[/bold]\n"
+            "[bold]Normalerweise ist hier nichts zu tun.[/bold] Der Agent nutzt\n"
+            "Bildspeicher, die weder Konto noch Schluessel brauchen, und\n"
+            "probiert der Reihe nach den naechsten, wenn Instagram eine\n"
+            "Adresse nicht annimmt.\n\n"
+            "Ein Schluessel von imgbb ist nur eine zusaetzliche Rueckfallebene.\n"
             "  1. imgbb.com oeffnen, kostenlos anmelden\n"
             "  2. api.imgbb.com aufrufen -> 'Get API key'\n"
             "  3. Den Schluessel kopieren\n\n"
-            "[dim]Jedes Bild wird mit einer Verfallszeit von einem Tag\n"
-            "hochgeladen. Instagram holt es in Sekunden ab und behaelt seine\n"
-            "eigene Kopie - danach verschwindet es dort wieder von selbst.[/dim]",
+            "[dim]Leer lassen und Enter druecken geht auch - dann bleibt es bei\n"
+            "den Speichern ohne Konto.[/dim]",
             title="Platz fuer die Bilder",
         )
     )
 
-    token = _frag_schluessel("Schluessel von imgbb")
-    set_env_value("ABLAGE_ANBIETER", "imgbb")
+    token = _frag_schluessel("Schluessel von imgbb (oder leer lassen)", noetig=False)
+    if not token.strip():
+        console.print(
+            "\n[green]Nichts noetig.[/green] Die Speicher ohne Konto sind schon"
+            " eingestellt."
+        )
+        return
     set_env_value("ABLAGE_TOKEN", token)
     console.print(
-        "\n[green]Eingetragen.[/green] Ab jetzt kann er selbst veroeffentlichen."
+        "\n[green]Eingetragen.[/green] Er hat jetzt einen Speicher mehr zur Auswahl."
         "\n[dim]Pruefen: insta-agent check[/dim]"
     )
 
