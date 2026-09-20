@@ -210,6 +210,13 @@ class Agent:
                 self.store.set_json(schluessel, None)
                 geloescht.append(schluessel)
 
+        # Entwürfe aus der alten Nische passen nicht mehr zum neuen Profil.
+        # Stehen blieben sie auf "wartet auf dich" - ein Fehlklick auf
+        # Freigeben würde sie unter der neuen Identität veröffentlichen.
+        verworfen = self.store.verwirf_alle_offenen()
+        if verworfen:
+            geloescht.append(f"{verworfen} offene Entwürfe")
+
         self.store.log("identity", "Der Agent fängt von vorne an und sucht sich eine neue Nische")
         return geloescht
 

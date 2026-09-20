@@ -174,3 +174,46 @@ def test_fehlendes_bild_haelt_den_beitrag_zurueck_statt_zu_stuerzen(agent):
     assert agent.publisher.veroeffentlicht == []
     assert bericht.halted_reason is None
     assert any("Bild fehlt" in s for s in bericht.steps)
+
+
+# --- Der Neuanfang räumt die alten Entwürfe weg ---------------------------
+
+
+def test_neuanfang_verwirft_offene_entwuerfe(agent):
+    """Sonst könnte ein Fehlklick sie unter dem neuen Profil hinausschicken."""
+    agent.run_cycle()
+    offen = agent.store.pending_drafts()
+    assert len(offen) == 1
+
+    agent.neu_erfinden()
+
+    assert agent.store.pending_drafts() == []
+    assert agent.store.approved_drafts() == []
+    stati = [z["status"] for z in agent.store.recent_posts(limit=10)]
+    assert stati == ["discarded"]
+
+
+def test_neuanfang_verwirft_auch_schon_freigegebenes(agent):
+    """Eine Freigabe aus der alten Nische gilt für die neue nicht mehr."""
+    agent.run_cycle()
+    agent.store.freigeben(agent.store.pending_drafts()[0]["id"])
+
+    agent.neu_erfinden()
+    agent.run_cycle()
+
+    assert agent.publisher.veroeffentlicht == []
+
+
+def test_neuanfang_laesst_veroeffentlichtes_in_ruhe(agent):
+    """Was auf Instagram steht, bleibt seine Geschichte."""
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    agent.store.freigeben(entwurf["id"])
+    agent.run_cycle()
+    assert agent.store.published_count() == 1
+
+    agent.neu_erfinden()
+
+    assert agent.store.published_count() == 1
+    veroeffentlicht = [z for z in agent.store.recent_posts(10) if z["status"] == "published"]
+    assert veroeffentlicht[0]["ig_media_id"] == "ig-1"

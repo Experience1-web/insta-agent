@@ -169,6 +169,20 @@ class Store:
             )
             return cur.rowcount > 0
 
+    def verwirf_alle_offenen(self) -> int:
+        """Legt alles zur Seite, was noch nicht veröffentlicht wurde.
+
+        Gedacht für den Neuanfang: Entwürfe aus einer aufgegebenen Nische
+        passen nicht mehr zum neuen Profil, und ein versehentliches
+        Freigeben würde sie trotzdem hinausschicken. Veröffentlichtes
+        bleibt unberührt - das steht bereits auf Instagram.
+        """
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE posts SET status='discarded' WHERE status IN ('draft','approved')"
+            )
+            return cur.rowcount
+
     def approved_drafts(self, limit: int = 10) -> list[sqlite3.Row]:
         """Was der Betreiber freigegeben hat - in der Reihenfolge des Schreibens."""
         return self._conn.execute(
