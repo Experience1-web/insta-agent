@@ -109,6 +109,18 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "12 - Platz fuer die Bilder.bat": f"""{KOPF}
+title Platz fuer die Bilder
+echo.
+echo   Der letzte Schritt.
+echo.
+echo   Instagram nimmt keine Datei entgegen - es holt sich das Bild
+echo   von einer Adresse im Netz. Dafuer brauchen die fertigen
+echo   Bilder einen kurzen oeffentlichen Platz.
+echo.
+%PY% -m insta_agent.cli ablage
+echo.
+pause""",
     "11 - Instagram verbinden.bat": f"""{KOPF}
 title Instagram verbinden
 echo.

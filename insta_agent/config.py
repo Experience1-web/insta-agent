@@ -187,6 +187,11 @@ class Settings:
     meta_app_id: str | None = None
     meta_app_secret: str | None = None
     public_media_base_url: str | None = None
+    # Wohin die fertigen Bilder kurz hochgeladen werden, damit Instagram
+    # sie abholen kann. Ohne das - und ohne public_media_base_url - kann
+    # der Agent nicht veroeffentlichen.
+    ablage_anbieter: str = "imgbb"
+    ablage_token: str | None = None
     wallet_address: str | None = None
     """Empfangsadresse. Nur zum Empfangen - der Agent hat keine Schlüssel."""
 
@@ -200,8 +205,10 @@ class Settings:
 
     @property
     def can_publish(self) -> bool:
-        """Veröffentlichen geht nur mit API-Zugang UND öffentlicher Bild-URL."""
-        return self.instagram_ready and bool(self.public_media_base_url)
+        """Veröffentlichen geht nur mit API-Zugang UND einem Weg zur Bild-Adresse."""
+        return self.instagram_ready and bool(
+            self.public_media_base_url or self.ablage_token
+        )
 
 
 def _merge(section: Any, data: dict[str, Any] | None) -> None:
@@ -242,6 +249,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
     settings.meta_app_id = os.getenv("META_APP_ID") or None
     settings.meta_app_secret = os.getenv("META_APP_SECRET") or None
     settings.public_media_base_url = (os.getenv("PUBLIC_MEDIA_BASE_URL") or "").rstrip("/") or None
+    settings.ablage_token = os.getenv("ABLAGE_TOKEN") or None
+    if anbieter := os.getenv("ABLAGE_ANBIETER"):
+        settings.ablage_anbieter = anbieter
     settings.web_token = os.getenv("WEB_TOKEN") or None
     settings.wallet_address = os.getenv("WALLET_ADDRESS") or None
     settings.wallet_chain = os.getenv("WALLET_CHAIN") or None

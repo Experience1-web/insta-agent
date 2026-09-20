@@ -557,6 +557,48 @@ def _bild_fertig() -> None:
 
 
 @app.command()
+def ablage(
+    config: Path = typer.Option(None),
+    loeschen: bool = typer.Option(False, "--loeschen"),
+) -> None:
+    """Richtet den Platz ein, von dem Instagram die Bilder abholt.
+
+    Instagram nimmt keine Datei entgegen - es bekommt eine Adresse und
+    holt sich das Bild selbst. Dein Rechner ist von aussen nicht
+    erreichbar, also muss das Bild kurz irgendwo im Netz liegen.
+    """
+    from .config import set_env_value
+
+    if loeschen:
+        set_env_value("ABLAGE_TOKEN", "")
+        console.print("[green]Entfernt.[/green] Veroeffentlichen geht damit nicht mehr.")
+        return
+
+    console.print(
+        Panel(
+            "Instagram laedt kein Bild hoch, das du ihm gibst. Es bekommt eine\n"
+            "Adresse im Netz und holt sich das Bild dort ab.\n\n"
+            "[bold]So kommst du an den Schluessel:[/bold]\n"
+            "  1. imgbb.com oeffnen, kostenlos anmelden\n"
+            "  2. api.imgbb.com aufrufen -> 'Get API key'\n"
+            "  3. Den Schluessel kopieren\n\n"
+            "[dim]Jedes Bild wird mit einer Verfallszeit von einem Tag\n"
+            "hochgeladen. Instagram holt es in Sekunden ab und behaelt seine\n"
+            "eigene Kopie - danach verschwindet es dort wieder von selbst.[/dim]",
+            title="Platz fuer die Bilder",
+        )
+    )
+
+    token = _frag_schluessel("Schluessel von imgbb")
+    set_env_value("ABLAGE_ANBIETER", "imgbb")
+    set_env_value("ABLAGE_TOKEN", token)
+    console.print(
+        "\n[green]Eingetragen.[/green] Ab jetzt kann er selbst veroeffentlichen."
+        "\n[dim]Pruefen: insta-agent check[/dim]"
+    )
+
+
+@app.command()
 def instagram(config: Path = typer.Option(None)) -> None:
     """Richtet den Instagram-Zugang ein, damit der Agent selbst posten kann.
 

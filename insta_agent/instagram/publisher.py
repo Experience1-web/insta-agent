@@ -40,17 +40,32 @@ class Publisher:
         draft_dir: Path,
         public_base_url: str | None,
         live: bool,
+        ablage: object | None = None,
     ) -> None:
         self.client = client
         self.media_dir = Path(media_dir)
         self.draft_dir = Path(draft_dir)
         self.public_base_url = (public_base_url or "").rstrip("/") or None
         self.live = live
+        # Zweiter Weg zur oeffentlichen Adresse: das Bild kurz hochladen.
+        self.ablage = ablage
 
     def _public_url(self, image_path: Path) -> str | None:
-        """Die Graph API lädt keine Dateien hoch - sie holt sie von einer URL."""
+        """Die Graph API lädt keine Dateien hoch - sie holt sie von einer URL.
+
+        Zwei Wege: ein fester öffentlicher Ordner, den der Betreiber selbst
+        betreibt, oder ein Bildspeicher, in den wir das Bild kurz vor dem
+        Veröffentlichen hochladen. Der feste Ordner hat Vorrang - wer ihn
+        eingerichtet hat, will ihn auch benutzen.
+        """
         if not self.public_base_url:
-            return None
+            if self.ablage is None:
+                return None
+            try:
+                return self.ablage.lade_hoch(image_path)
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+                log.warning("Bild konnte nicht abgelegt werden: %s", exc)
+                return None
         try:
             relative = image_path.resolve().relative_to(self.media_dir.resolve())
         except ValueError:

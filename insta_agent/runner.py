@@ -85,12 +85,16 @@ class Agent:
         if settings.instagram_ready:
             self.ig = InstagramClient(settings.ig_user_id, settings.ig_access_token)
 
+        from .instagram.ablage import baue_ablage
+
+        self.ablage = baue_ablage(settings.ablage_anbieter, settings.ablage_token)
         self.publisher = Publisher(
             client=self.ig,
             media_dir=settings.media_dir,
             draft_dir=settings.draft_dir,
             public_base_url=settings.public_media_base_url,
             live=settings.posting.live,
+            ablage=self.ablage,
         )
 
         # Ohne Schlüssel bleibt es bei der Typografie - kein Fehler, nur weniger.
