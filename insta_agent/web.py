@@ -233,6 +233,8 @@ class Steuerung:
                 "grenze_pro_zyklus": self.settings.economy.max_cost_per_cycle_usd,
                 "schluessel_da": bool(self.settings.anthropic_api_key),
                 "instagram_da": self.settings.instagram_ready,
+                # Ob ein freigegebener Beitrag auch wirklich rausgehen kann.
+                "kann_posten": self.settings.can_publish,
             }
         finally:
             agent.close()
@@ -453,6 +455,47 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             else:
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
 
+        def _entscheide(self, rumpf: dict) -> None:
+            """Freigeben oder verwerfen - das Ja des Betreibers zu einem Entwurf.
+
+            Nur ein freigegebener Entwurf geht bei Jonas' nächstem Zyklus
+            nach draußen. Ohne diesen Knopf passiert nichts.
+            """
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            try:
+                post_id = int(rumpf.get("id"))
+            except (TypeError, ValueError):
+                self._json({"ok": False, "grund": "Kein gültiger Beitrag."}, 400)
+                return
+
+            wahl = str(rumpf.get("wahl") or "")
+            if wahl not in ("freigeben", "verwerfen"):
+                self._json({"ok": False, "grund": "Unbekannte Entscheidung."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                if wahl == "freigeben":
+                    geaendert = agent.store.freigeben(post_id)
+                    text = f"Beitrag {post_id} freigegeben"
+                else:
+                    geaendert = agent.store.verwerfen(post_id)
+                    text = f"Beitrag {post_id} verworfen"
+
+                if not geaendert:
+                    self._json(
+                        {"ok": False, "grund": "Der Beitrag ist dafür nicht mehr offen."}, 409
+                    )
+                    return
+                agent.store.log("decision", text)
+            finally:
+                agent.close()
+
+            self._json({"ok": True})
+
         def _buche_einnahme(self, rumpf: dict) -> None:
             """Trägt eine Einnahme in die Kasse des Agenten ein.
 
@@ -557,7 +600,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 return
 
             pfad = urlparse(self.path).path
-            if pfad not in ("/api/start", "/api/einnahme"):
+            if pfad not in ("/api/start", "/api/einnahme", "/api/entscheiden"):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
 
@@ -566,6 +609,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/einnahme":
                 self._buche_einnahme(rumpf)
+                return
+
+            if pfad == "/api/entscheiden":
+                self._entscheide(rumpf)
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))

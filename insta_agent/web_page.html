@@ -136,6 +136,10 @@
     letter-spacing: 0.07em; font-weight: 600;
   }
   .marke.live { background: var(--gut); color: #05240f; }
+  .marke.warm { background: var(--warnung); color: #2a1c00; }
+  .marke.aus  { opacity: 0.55; text-decoration: line-through; }
+  .klein.gut { background: var(--gut); border-color: var(--gut); color: #05240f; }
+  .klein.gut:hover:not(:disabled) { background: #6ee79c; }
   .marke.akzent { background: var(--akzent); color: #fff; }
 
   /* ---------- Ideen ---------- */
@@ -532,23 +536,64 @@ function zeichne_protokoll(d) {
   if (unten) p.scrollTop = p.scrollHeight;
 }
 
+const MARKEN = {
+  draft:     ["",     "wartet auf dich"],
+  approved:  ["warm", "freigegeben"],
+  published: ["live", "veröffentlicht"],
+  discarded: ["aus",  "verworfen"],
+};
+
+function marke_klasse(status) { return (MARKEN[status] || MARKEN.draft)[0]; }
+function marke_text(status)   { return (MARKEN[status] || MARKEN.draft)[1]; }
+
+async function entscheide(id, wahl, knopf) {
+  knopf.disabled = true;
+  try {
+    const antwort = await fetch("/api/entscheiden", {
+      method: "POST",
+      headers: { ...kopf, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(id), wahl }),
+    });
+    const daten = await antwort.json();
+    if (!daten.ok) {
+      alert(daten.grund || "Das hat nicht geklappt.");
+      knopf.disabled = false;
+      return;
+    }
+    // Sofort neu laden, damit die Marke umspringt.
+    gezeichnet.beitraege = null;
+    laden();
+  } catch {
+    alert("Keine Verbindung zum Dashboard.");
+    knopf.disabled = false;
+  }
+}
+
 function zeichne_beitraege(d) {
   if (!d.entwuerfe.length) { $("postbox").innerHTML = ""; return; }
 
   $("postbox").innerHTML = `
     <h2>Seine Arbeit</h2>
+    <p class="hinweis" style="margin:-6px 0 16px">${
+      d.kann_posten
+        ? "Er schreibt, du entscheidest. Was du freigibst, veröffentlicht er bei seinem nächsten Zyklus selbst."
+        : "Er schreibt, du entscheidest. Freigegebene Beiträge wartet er ab, bis der Instagram-Zugang steht – bis dahin lädst du sie von Hand hoch."
+    }</p>
     <div class="gitter beitraege">${d.entwuerfe.map(p => `
       <article class="beitrag">
         ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"
              alt="" loading="lazy">` : ""}
         <div class="inhalt">
           <div>
-            <span class="marke ${p.status === "published" ? "live" : ""}">${
-              p.status === "published" ? "veröffentlicht" : "Entwurf"}</span>
+            <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
             <span class="marke">${esc(p.saeule)}</span>
           </div>
           <p class="caption">${esc(p.caption)}</p>
           <div class="tags">${p.hashtags.map(h => "#" + esc(h)).join(" ")}</div>
+          ${p.status === "draft" ? `<div class="knopfreihe">
+            <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
+            <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>
+          </div>` : ""}
           <div class="knopfreihe">
             <button class="klein" data-kopieren="${p.id}">Text kopieren</button>
             ${p.bild ? `<a class="klein knopf" style="padding:8px 13px; font-size:13px"
@@ -564,6 +609,16 @@ function zeichne_beitraege(d) {
         </div>
       </article>`).join("")}</div>`;
 
+  for (const knopf of document.querySelectorAll("[data-freigeben]")) {
+    knopf.onclick = () => entscheide(knopf.dataset.freigeben, "freigeben", knopf);
+  }
+  for (const knopf of document.querySelectorAll("[data-verwerfen]")) {
+    knopf.onclick = () => {
+      if (confirm("Diesen Entwurf verwerfen? Er geht dann nie raus.")) {
+        entscheide(knopf.dataset.verwerfen, "verwerfen", knopf);
+      }
+    };
+  }
   for (const knopf of document.querySelectorAll("[data-kopieren]")) {
     const post = d.entwuerfe.find(x => String(x.id) === knopf.dataset.kopieren);
     knopf.onclick = async () => {

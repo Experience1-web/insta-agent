@@ -37,6 +37,7 @@ from .models import (
     MarketAnalysis,
     MonetizationPlan,
     OpportunityAssessment,
+    PostDraft,
     Reflection,
     StrategyUpdate,
 )
@@ -313,6 +314,7 @@ class Agent:
         if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL:
             identity = self._pruefe_kurs(cycle, identity, performance, report)
 
+        self._veroeffentliche_freigegebenes(report)
         self._produce_posts(cycle, identity, strategy, performance, report)
 
         # Geschäftsplanung in großem Takt - oder sofort, wenn das Geld knapp wird.
@@ -348,17 +350,37 @@ class Agent:
             )
             post_id = self.store.add_draft(draft, str(image_path))
 
-            result = self.publisher.publish(draft, image_path)
-            if result.published and result.ig_media_id:
-                self.store.mark_published(post_id, result.ig_media_id)
-                report.published_media_ids.append(result.ig_media_id)
-                report.steps.append(f"Veröffentlicht: {result.ig_media_id}")
-            else:
-                if result.draft_path:
-                    report.drafts_written.append(str(result.draft_path))
-                report.steps.append(f"Entwurf abgelegt ({result.reason})")
+            # Bewusst nicht sofort veröffentlichen: Jeder Beitrag wartet auf
+            # das Ja des Betreibers. Erst der nächste Zyklus schickt raus,
+            # was freigegeben wurde.
+            report.drafts_written.append(str(image_path))
+            report.steps.append(f"Entwurf {post_id} wartet auf Freigabe")
 
             recent.append(draft.caption)
+
+    def _veroeffentliche_freigegebenes(self, report: CycleReport) -> None:
+        """Schickt raus, was der Betreiber freigegeben hat.
+
+        Läuft vor dem Schreiben neuer Beiträge - so ist das Freigegebene
+        draußen, auch wenn das Budget für den Rest des Zyklus nicht reicht.
+        """
+        for zeile in self.store.approved_drafts(limit=5):
+            draft = PostDraft.model_validate_json(zeile["draft_json"])
+            bild = Path(zeile["image_path"]) if zeile["image_path"] else None
+            if bild is None or not bild.exists():
+                self.store.mark_failed(zeile["id"], "Das Bild fehlt auf der Festplatte")
+                report.steps.append(f"Beitrag {zeile['id']}: Bild fehlt")
+                continue
+
+            ergebnis = self.publisher.publish(draft, bild)
+            if ergebnis.published and ergebnis.ig_media_id:
+                self.store.mark_published(zeile["id"], ergebnis.ig_media_id)
+                report.published_media_ids.append(ergebnis.ig_media_id)
+                report.steps.append(f"Veröffentlicht: {ergebnis.ig_media_id}")
+            else:
+                # Freigegeben bleibt freigegeben - beim nächsten Mal erneut.
+                self.store.mark_failed(zeile["id"], ergebnis.reason or "unbekannt")
+                report.steps.append(f"Beitrag {zeile['id']} wartet: {ergebnis.reason}")
 
     def _pruefe_kurs(self, cycle: int, identity, performance: str, report: CycleReport):
         """Rechnet nach, ob ein anderer Weg mehr einbringt.

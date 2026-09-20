@@ -140,6 +140,49 @@ class Store:
             "SELECT * FROM posts WHERE status='draft' ORDER BY id ASC LIMIT ?", (limit,)
         ).fetchall()
 
+    # -- Freigabe ----------------------------------------------------------
+    #
+    # Der Agent schreibt, der Betreiber entscheidet. Nichts geht ohne ein
+    # ausdrückliches Ja nach draußen - deshalb ist 'draft' der Anfang und
+    # nicht schon die Erlaubnis.
+
+    def freigeben(self, post_id: int) -> bool:
+        """Gibt einen Entwurf zum Veröffentlichen frei.
+
+        Gibt zurück, ob sich wirklich etwas geändert hat. Ein bereits
+        veröffentlichter Beitrag lässt sich nicht nachträglich freigeben -
+        sonst würde er beim nächsten Zyklus ein zweites Mal hochgeladen.
+        """
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE posts SET status='approved' WHERE id=? AND status='draft'",
+                (post_id,),
+            )
+            return cur.rowcount > 0
+
+    def verwerfen(self, post_id: int) -> bool:
+        """Legt einen Entwurf zur Seite. Er bleibt lesbar, geht aber nie raus."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE posts SET status='discarded' WHERE id=? AND status IN ('draft','approved')",
+                (post_id,),
+            )
+            return cur.rowcount > 0
+
+    def approved_drafts(self, limit: int = 10) -> list[sqlite3.Row]:
+        """Was der Betreiber freigegeben hat - in der Reihenfolge des Schreibens."""
+        return self._conn.execute(
+            "SELECT * FROM posts WHERE status='approved' ORDER BY id ASC LIMIT ?", (limit,)
+        ).fetchall()
+
+    def mark_failed(self, post_id: int, grund: str) -> None:
+        """Veröffentlichen ging schief - der Beitrag bleibt freigegeben.
+
+        Er wird beim nächsten Zyklus erneut versucht; der Grund landet im
+        Journal, damit man sieht, woran es hängt.
+        """
+        self.log("publish_error", f"Beitrag {post_id}: {grund}")
+
     def recent_posts(self, limit: int = 15) -> list[sqlite3.Row]:
         return self._conn.execute(
             "SELECT * FROM posts ORDER BY id DESC LIMIT ?", (limit,)
