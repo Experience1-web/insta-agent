@@ -661,6 +661,37 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json({"ok": True})
 
+        def _erneuere_bildsprache(self) -> None:
+            """Lässt den Agenten seine Bildsprache neu schreiben.
+
+            Ein einzelner Aufruf, kein Zyklus: Nische und Motto bleiben, nur
+            das Aussehen der Bilder wird neu festgelegt.
+            """
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                neu = agent.bildsprache_erneuern()
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Bildsprache nicht erneuert: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+
+            if neu is None:
+                self._json({"ok": False, "grund": "Es gibt noch kein Profil."}, 409)
+                return
+            self._json(
+                {
+                    "ok": True,
+                    "aenderung": neu.was_sich_aendert,
+                    "beispiel": neu.beispielmotiv,
+                }
+            )
+
         def _male_portraits(self) -> None:
             """Lässt Porträts für die Mannschaft malen.
 
@@ -813,6 +844,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/kasse",
                 "/api/modell",
                 "/api/portraits",
+                "/api/bildsprache",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -838,6 +870,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/portraits":
                 self._male_portraits()
+                return
+
+            if pfad == "/api/bildsprache":
+                self._erneuere_bildsprache()
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))

@@ -225,6 +225,27 @@ class Pruefbericht(BaseModel):
 # --------------------------------------------------------------------------
 
 
+class NeueBildsprache(BaseModel):
+    """Eine überarbeitete Bildsprache, ohne die übrige Identität anzufassen.
+
+    Der Account bleibt derselbe - Nische, Motto, Tonfall, Themensäulen.
+    Nur wie die Bilder aussehen, wird neu festgelegt. Sonst müsste man
+    alles wegwerfen, um eine einzige Entscheidung zu ändern.
+    """
+
+    visual_identity: str = Field(
+        description=(
+            "Die neue Bildsprache, so geschrieben, dass ein Fotograf danach "
+            "arbeiten könnte: Motivwelt, Lichtführung, Objektiv, Farbklima, "
+            "Material, und wo Platz für Schrift bleibt"
+        )
+    )
+    was_sich_aendert: str = Field(description="Was jetzt anders ist als vorher, in zwei Sätzen")
+    beispielmotiv: str = Field(
+        description="Ein konkretes Motiv aus der neuen Bildsprache, als Beispiel"
+    )
+
+
 class Gestaltungsurteil(BaseModel):
     """Was die Bildsprache über einen geplanten Beitrag sagt.
 

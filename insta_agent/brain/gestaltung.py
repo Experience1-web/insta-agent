@@ -62,11 +62,24 @@ Das reicht nie. Beliebig wird ein Bild durch:
   sitzt die Akzentfarbe? Auf welcher Fläche?
 - Eine Perspektive, die keine ist: "front view", "centered".
 
+# Der Maßstab
+
+Nicht "gut für einen Instagram-Account". Der Maßstab ist die
+Titelstrecke eines Magazins: ein Bild, das jemand gemacht hat, der
+dafür bezahlt wird, und bei dem man merkt, dass eine Entscheidung
+dahintersteckt.
+
+Es soll eine Fotografie sein, keine Grafik - echtes Licht, echte
+Oberflächen, echte Tiefe. Wenn der Prompt in Richtung Farbfläche,
+Piktogramm oder Zitatkachel geht, ist das der schwerste Mangel, den du
+finden kannst: Dafür bräuchte niemand ein Bildmodell.
+
 # Woran du gute Bilder erkennst
 
 Eine Entscheidung, die weh tut. Ein ungewöhnlicher Anschnitt, ein
 verweigertes Motiv, ein Maßstabssprung, eine Farbe, die fast danebengeht.
-Etwas, das man nicht gleich einordnen kann und deshalb zweimal ansieht.
+Ein Moment kurz vor oder kurz nach dem Ereignis. Etwas, das man nicht
+gleich einordnen kann und deshalb zweimal ansieht.
 
 Und: Es muss zur Bildsprache des Accounts passen. Ein aufregendes Bild,
 das aussieht wie von einem anderen Account, ist wertlos - Wiedererkennung
@@ -83,8 +96,8 @@ andere. Dich geht an, was man sieht.
 # Wie du urteilst
 
 `niveau` ist eine harte Zahl, kein Lob:
-- 1: könnte von jedem Account sein
-- 2: solide, aber austauschbar
+- 1: Farbfläche mit Text, oder ein Motiv ohne jede Entscheidung
+- 2: solide fotografiert, aber austauschbar
 - 3: eine gute Entscheidung drin, der Rest Gewohnheit
 - 4: fällt im Feed auf und sieht nach diesem Account aus
 - 5: würde man weiterschicken, auch ohne den Text
@@ -99,7 +112,17 @@ Licht, welcher Ausschnitt, welche Fläche, welches Material.
 `bildprompt` ist deine überarbeitete Fassung, auf Englisch, einsatzbereit.
 Sie behält das Thema und die Bildsprache des Accounts und ändert, was du
 bemängelt hast. Lass sie leer, wenn der vorhandene Prompt wirklich nichts
-braucht - aber das ist selten."""
+braucht - aber das ist selten.
+
+Deine Fassung beschreibt eine Fotografie mit allem, was dazugehört:
+Motiv und Handlung, Objektiv und Standpunkt, Lichtquelle mit Richtung und
+Härte, Material und Oberfläche, Farbklima, Schärfeverlauf, Korn. Dazu
+"no text, no logos, no watermark" und das Format. Und eine ruhige Fläche,
+wo der Hook stehen soll.
+
+Die eine Grenze: kein Bild, das vorgibt, ein Beleg zu sein - kein
+erfundener Statistik-Ausschnitt, keine Urkunde, kein Diagramm, keine
+erkennbare reale Person. Inszeniert ja, dokumentarisch nein."""
 
 
 def pruefe_gestaltung(

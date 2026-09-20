@@ -46,7 +46,27 @@
   @keyframes puls { 50% { opacity: 0.25; } }
 
   /* ---------- Kopf: das Vorhaben ---------- */
-  .leitstand { margin-bottom: 34px; animation: auftauchen 0.35s ease-out backwards; }
+  /* Der Kopf traegt das neueste Bild als Hintergrund. Eine Seite ueber
+     Bilder, die selbst keine zeigt, ist ein Widerspruch. */
+  .leitstand {
+    margin-bottom: 34px; animation: auftauchen 0.35s ease-out backwards;
+    position: relative; border-radius: var(--radius); overflow: hidden;
+  }
+  .leitstand.mitbild { padding: 46px 32px 30px; min-height: 260px;
+                       display: flex; flex-direction: column; justify-content: flex-end; }
+  .leitstand .hintergrund {
+    position: absolute; inset: 0; z-index: 0;
+    /* Etwas ueber der Mitte: Bei Hochformaten sitzt das Motiv meist oben. */
+    background-size: cover; background-position: center 35%;
+    transform: scale(1.04); filter: saturate(1.05);
+  }
+  /* Ohne diesen Verlauf ist die Schrift auf einem hellen Bild unlesbar. */
+  .leitstand .schleier {
+    position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(180deg,
+      rgba(12,14,19,0.35) 0%, rgba(12,14,19,0.72) 45%, rgba(12,14,19,0.96) 100%);
+  }
+  .leitstand .vorn { position: relative; z-index: 2; }
   .vorhaben {
     font-size: clamp(27px, 4.4vw, 40px); line-height: 1.1; margin: 6px 0 10px;
     letter-spacing: -0.025em; font-weight: 800;
@@ -141,23 +161,32 @@
   /* Zwei Beitraege nebeneinander, das Bild daneben statt darueber: So
      bleibt die Caption lesbar breit und das Bild trotzdem gross genug,
      um zu erkennen, was er da gebaut hat. */
-  .beitraege { grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  /* Eine Galerie, kein Textblock: Das Bild ist der Beitrag, der Rest
+     steht darunter oder im Fenster. */
+  .beitraege { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
                align-items: start; }
+  .beitragsbild { position: relative; background: #05070b; }
+  .beitragsbild img { aspect-ratio: 4 / 5; object-fit: cover; }
+  /* Marken liegen auf dem Bild, damit sie keine Zeile kosten. */
+  .beitragsbild .marken {
+    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    display: flex; flex-wrap: wrap; gap: 5px;
+  }
+  .beitragsbild .marken .marke { backdrop-filter: blur(6px); }
+  .ohnebild .beitragsbild {
+    aspect-ratio: 4 / 5; display: grid; place-items: center; padding: 18px;
+    background: linear-gradient(160deg, var(--flaeche-hoch), var(--flaeche));
+  }
+  .ohnebild .beitragsbild .leerhinweis {
+    color: var(--leise); font-size: 13px; text-align: center; line-height: 1.6;
+  }
   .beitrag { background: var(--flaeche); border: 1px solid var(--rand);
              border-radius: var(--radius); overflow: hidden; display: flex;
              flex-direction: column; }
   .beitrag img { width: 100%; display: block; background: #000; }
   @media (min-width: 900px) {
-    .beitrag { display: grid; grid-template-columns: 200px 1fr; align-items: start; }
-    /* Ohne Bild bliebe die Bildspalte leer stehen und der Text quetschte
-       sich in die Haelfte der Karte. */
-    .beitrag.ohnebild { grid-template-columns: 1fr; }
     /* Beide Knoepfe sollen nebeneinander passen und nicht umbrechen. */
     .beitrag .knopfreihe > * { flex: 1 1 auto; text-align: center; }
-    /* Kein festes Seitenverhaeltnis: Der Renderer liefert je nach
-       Einstellung 4:5 oder 9:16. Das Bild bringt seine Maße selbst mit,
-       dann wird nichts beschnitten und nichts mit Balken aufgefuellt. */
-    .beitrag img { height: auto; align-self: start; }
   }
   .beitrag .inhalt { padding: 16px 18px; display: flex; flex-direction: column;
                      flex: 1; gap: 10px; }
@@ -279,6 +308,8 @@
   .popup-kopf h3 { margin: 0; font-size: 19px; flex: 1; }
   .popup-inhalt { padding: 22px; }
   .popup-inhalt a { color: var(--akzent); }
+  .grossbild { width: 100%; border-radius: 10px; display: block;
+               margin-bottom: 18px; background: #05070b; }
   .popup-inhalt ul { margin: 6px 0; padding-left: 20px; }
   .popup-inhalt li { margin: 4px 0; word-break: break-word; }
   .popup-inhalt .feld:first-child { margin-top: 0; }
@@ -801,6 +832,15 @@ function zeige_person(m, d) {
 
     ${steckbrief}
 
+    ${m.rang === "chef" && i ? `<div class="feld">
+      <div class="feldkopf"><span>Bildsprache</span></div>
+      <p class="hinweis" style="margin:6px 0 10px">
+        Wie seine Bilder aussehen sollen. Er kann das neu festlegen, ohne dass
+        Nische, Motto oder Tonfall sich ändern – ein Aufruf, ein paar Cent.
+      </p>
+      <button class="klein" id="bildspracheneu">Bildsprache neu festlegen</button>
+    </div>` : ""}
+
     <div class="feld">
       <div class="feldkopf"><span>Womit gearbeitet wird</span></div>
       <div class="zeile" style="margin-top:8px">
@@ -819,6 +859,27 @@ function zeige_person(m, d) {
     </div>
 
     ${m.aktiv ? "" : '<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>'}`);
+
+  const bildsprache = $("bildspracheneu");
+  if (bildsprache) bildsprache.onclick = async () => {
+    bildsprache.disabled = true;
+    bildsprache.textContent = "er überlegt …";
+    try {
+      const antwort = await fetch("/api/bildsprache", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...kopf },
+        body: "{}",
+      });
+      const ergebnis = await antwort.json();
+      if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
+      schliesse_popup();
+      laden();
+      alert(`Neu festgelegt.\n\n${ergebnis.aenderung}\n\nZum Beispiel: ${ergebnis.beispiel}`);
+    } finally {
+      bildsprache.disabled = false;
+      bildsprache.textContent = "Bildsprache neu festlegen";
+    }
+  };
 
   const setzen = $("modellsetzen");
   setzen.onclick = async () => {
@@ -916,7 +977,8 @@ function zeichne(d) {
   // ersetzen: ein aufgeklapptes "Was er sich dabei gedacht hat" klappt
   // wieder zu, markierter Text verliert die Markierung und das
   // "Kopiert" am Knopf ist weg, bevor man es gelesen hat.
-  wenn_neu("kopf", [d.identitaet, d.farben], () => zeichne_kopf(d));
+  wenn_neu("kopf", [d.identitaet, d.farben, (d.entwuerfe[0] || {}).bild],
+           () => zeichne_kopf(d));
   wenn_neu("mannschaft", d.mannschaft, () => zeichne_mannschaft(d));
   wenn_neu("vorhaben", d.strategie, () => zeichne_vorhaben(d));
   wenn_neu("beitraege", d.entwuerfe, () => zeichne_beitraege(d));
@@ -972,15 +1034,26 @@ function zeichne_kopf(d) {
     return;
   }
 
+  // Das neueste Bild, das er gemalt hat - es gehoert nach oben, nicht
+  // nur in eine kleine Kachel weit unten.
+  const neuestes = (d.entwuerfe || []).find(p => p.bild);
+  const hinter = neuestes
+    ? `<div class="hintergrund" style="background-image:url('/media?name=${
+        encodeURIComponent(neuestes.bild)}${anhang}')"></div><div class="schleier"></div>`
+    : "";
+
   $("heldbox").innerHTML = `
-    <div class="leitstand">
-      <div class="rolle">Leitstand</div>
-      <h1 class="vorhaben">${esc(i.display_name)}</h1>
-      <p class="untertitel">
-        <a href="https://instagram.com/${encodeURIComponent(i.handle)}" target="_blank"
-           rel="noopener noreferrer">@${esc(i.handle)}</a>
-        <span>${esc(i.niche)}</span>
-      </p>
+    <div class="leitstand ${neuestes ? "mitbild" : ""}">
+      ${hinter}
+      <div class="vorn">
+        <div class="rolle">Leitstand</div>
+        <h1 class="vorhaben">${esc(i.display_name)}</h1>
+        <p class="untertitel">
+          <a href="https://instagram.com/${encodeURIComponent(i.handle)}" target="_blank"
+             rel="noopener noreferrer">@${esc(i.handle)}</a>
+          <span>${esc(i.niche)}</span>
+        </p>
+      </div>
     </div>`;
 }
 
@@ -1133,16 +1206,19 @@ function zeichne_beitraege(d) {
     <div class="gitter beitraege">${d.entwuerfe.map((p, i) => `
       <article class="beitrag klickbar ${p.bild ? "" : "ohnebild"}" data-oeffnen="${p.id}"
                style="animation-delay:${Math.min(i, 8) * 45}ms">
-        ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"
-             alt="" loading="lazy">` : ""}
-        <div class="inhalt">
-          <div>
+        <div class="beitragsbild">
+          ${p.bild
+            ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"
+                    alt="" loading="lazy">`
+            : `<p class="leerhinweis">Noch kein Bild –<br>es blieb bei der Typografie</p>`}
+          <div class="marken">
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
             ${pruef_marke(p.pruefung)}
             ${niveau_marke(p.gestaltung)}
-            <span class="marke">${esc(p.saeule)}</span>
           </div>
-          <p class="caption">${esc(anriss(p.bildtext || p.caption))}</p>
+        </div>
+        <div class="inhalt">
+          <p class="caption">${esc(anriss(p.bildtext || p.caption, 80))}</p>
           <span class="mehr">Alles ansehen</span>
           ${p.status === "draft" ? `<div class="knopfreihe">
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
@@ -1165,6 +1241,8 @@ function zeichne_beitraege(d) {
 /** Der ganze Beitrag: Text, Bild-Prompt, Prüfbericht, Hintergedanken. */
 function zeige_beitrag(p) {
   oeffne_popup(anriss(p.bildtext || p.caption, 60), `
+    ${p.bild ? `<img class="grossbild"
+       src="/media?name=${encodeURIComponent(p.bild)}${anhang}" alt="">` : ""}
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
       ${pruef_marke(p.pruefung)}

@@ -21,6 +21,7 @@ from .brain import (
     assess_opportunities,
     build_monetization_plan,
     create_post_draft,
+    erneuere_bildsprache,
     invent_identity,
     pruefe_beitrag,
     pruefe_gestaltung,
@@ -466,6 +467,29 @@ class Agent:
                 report.steps.append(f"Entwurf {post_id} automatisch freigegeben")
 
             recent.append(draft.caption)
+
+    def bildsprache_erneuern(self):
+        """Lässt den Agenten seine Bildsprache neu schreiben und übernimmt sie.
+
+        Gibt das Ergebnis zurück, oder None, wenn es noch keine Identität
+        gibt. Der Rest der Identität bleibt unangetastet - es ist eine
+        Korrektur, kein Neuanfang.
+        """
+        identity = self.identity
+        if identity is None:
+            return None
+
+        neu = erneuere_bildsprache(self.brain, identity)
+        vorher = identity.visual_identity
+        identity.visual_identity = neu.visual_identity
+        self.store.set_json(KEY_IDENTITY, identity)
+        self.store.log(
+            "identity",
+            f"Bildsprache neu festgelegt: {neu.was_sich_aendert}",
+            payload={"vorher": vorher, "nachher": neu.visual_identity},
+        )
+        log.info("Bildsprache erneuert: %s", neu.was_sich_aendert)
+        return neu
 
     @property
     def modellwahl(self) -> dict:

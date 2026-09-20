@@ -1,4 +1,4 @@
-from .identity import invent_identity
+from .identity import erneuere_bildsprache, invent_identity
 from .research import run_market_research
 from .strategy import update_strategy
 from .content import create_post_draft
@@ -20,6 +20,7 @@ from .pruefung import (
 
 __all__ = [
     "invent_identity",
+    "erneuere_bildsprache",
     "run_market_research",
     "update_strategy",
     "create_post_draft",

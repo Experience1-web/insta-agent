@@ -214,11 +214,32 @@ def test_der_bildprompt_verlangt_platz_fuer_die_schrift():
     assert "ruhige Fläche für die Schrift" in quelle
 
 
-def test_die_nische_darf_keine_echten_belege_verlangen():
-    """Er erzeugt Bilder. Ein erzeugtes Bild darf sich nie als Beweis ausgeben."""
+def test_ein_bild_darf_sich_nie_als_beleg_ausgeben():
+    """Die eine Grenze, die bleibt.
+
+    Fotorealismus ist erwuenscht - ein Titelbild im Magazin ist auch
+    inszeniert. Was nicht geht, ist ein erzeugtes Bild, das vorgibt, der
+    Beleg fuer die Zahl darunter zu sein. Genau das wuerde die
+    Glaubwuerdigkeit zerstoeren, von der der Account lebt.
+    """
     import inspect
 
     from insta_agent.brain import identity
 
     quelle = inspect.getsource(identity.invent_identity)
-    assert "es darf sich nur nicht als Beweis ausgeben" in quelle
+    assert "nie vorgeben, ein Beleg zu sein" in quelle
+    assert "Inszeniert ja, dokumentarisch" in quelle
+
+
+def test_die_bildsprache_soll_fotografisch_sein():
+    """Vorher stand dort "keine dokumentarischen Aufnahmen" - das trieb ihn
+    zu Farbflaechen mit Text darauf."""
+    import inspect
+
+    from insta_agent.brain import identity
+
+    quelle = inspect.getsource(identity.invent_identity)
+    assert "fotografisch sein" in quelle
+    assert "Menschen dürfen darauf sein" in quelle
+    # Die alte Einschraenkung darf nicht zurueckkommen.
+    assert "keine realen Personen" not in quelle

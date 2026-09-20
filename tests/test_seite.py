@@ -143,3 +143,34 @@ def test_ein_laufender_zyklus_meldet_sich_zwischendurch():
 
     quelle = inspect.getsource(llm.Brain)
     assert quelle.count("denkt nach") >= 2, "structured und text sollen beide melden"
+
+
+# --- Bilder statt Text ----------------------------------------------------
+
+
+def test_der_kopf_zeigt_das_neueste_bild():
+    """Eine Seite ueber Bilder, die selbst keine zeigt, ist ein Widerspruch."""
+    assert 'class="hintergrund"' in QUELLE
+    assert "mitbild" in QUELLE
+
+
+def test_der_schleier_haelt_die_schrift_lesbar():
+    """Ohne ihn verschwindet der Titel auf einem hellen Bild."""
+    assert 'class="schleier"' in QUELLE
+    assert "linear-gradient" in QUELLE
+
+
+def test_die_beitraege_sind_eine_galerie():
+    """Das Bild ist der Beitrag - der Text steht darunter."""
+    assert "beitragsbild" in QUELLE
+    assert "aspect-ratio: 4 / 5" in QUELLE
+
+
+def test_ein_beitrag_ohne_bild_sagt_warum():
+    """Eine leere Flaeche laesst den Betreiber raten, ob etwas kaputt ist."""
+    assert "Noch kein Bild" in QUELLE
+    assert "es blieb bei der Typografie" in QUELLE
+
+
+def test_im_fenster_steht_das_bild_gross_oben():
+    assert 'class="grossbild"' in QUELLE

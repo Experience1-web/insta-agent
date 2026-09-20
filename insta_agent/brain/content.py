@@ -51,18 +51,38 @@ Schreibe den nächsten Beitrag. Er zahlt auf dein Wochenziel ein.
 ## image_generation_prompt - das Wichtigste an diesem Beitrag
 Der Daumen bleibt wegen des Bildes stehen. Alles andere kommt danach.
 
-Auf Englisch, für Flux oder Midjourney. Beschreibe:
-Bildinhalt und Motiv, Kameraperspektive und Bildausschnitt, Lichtquelle
-und Lichtrichtung, Farbklima, Material und Oberfläche, Stimmung, Stil
-und Körnung. Schließe mit dem Format 9:16.
+Du beschreibst eine Fotografie, keine Grafik. Echtes Licht, echte
+Oberflächen, echte Tiefe - als hätte jemand mit einer Kamera in einem
+Raum gestanden. Menschen dürfen darauf sein.
 
-Konkret genug, dass zweimal ein ähnliches Bild herauskäme - "beautiful
-landscape" ist kein Prompt. Halte dich an deine Bildsprache, damit man
-den Beitrag im Feed erkennt, bevor man den Namen liest.
+Auf Englisch. Sieben Dinge gehören hinein, jedes als Entscheidung, nicht
+als Adjektiv:
 
-Zwei Regeln: Lass eine ruhige Fläche für die Schrift - oberes Drittel
-oder Mitte. Und schreib "no text, no logos" hinein; die Schrift kommt
-erst danach darüber.
+1. Motiv und Handlung - was ist zu sehen, und was passiert gerade
+2. Objektiv und Standpunkt - Brennweite, Augenhöhe oder nicht, wie nah
+3. Licht - woher, wie hart, welche Farbe, wohin die Schatten fallen
+4. Material und Oberfläche - Stoff, Metall, Haut, Staub, Kratzer, Reflex
+5. Farbklima - welche zwei, drei Farben das Bild beherrschen
+6. Tiefe - was scharf ist und was nicht
+7. Korn und Anmutung - Filmmaterial, Kontrastumfang, Kinolook
+
+Abschluss: das Format 9:16.
+
+"beautiful landscape" ist kein Prompt. "soft lighting" auch nicht - Licht
+kommt immer von irgendwo. Sag woher.
+
+Das Bild muss zwei Sekunden gewinnen: ein ungewöhnlicher Anschnitt, ein
+Maßstabssprung, ein Moment kurz vor oder kurz nach dem Ereignis. Etwas,
+das man nicht sofort einordnen kann.
+
+Halte dich an deine Bildsprache, damit man den Beitrag im Feed erkennt,
+bevor man den Namen liest.
+
+Drei Regeln: Lass eine ruhige Fläche für die Schrift - oberes Drittel
+oder Mitte. Schreib "no text, no logos, no watermark" hinein; die Schrift
+kommt erst danach darüber. Und nichts, was vorgibt, ein Beleg zu sein:
+kein Bildschirmausschnitt einer Statistik, keine Urkunde, kein Diagramm,
+keine erkennbare reale Person.
 
 ## hook_text_on_screen
 Die Zeile, die über dem Bild liegt. Höchstens {MAX_HOOK_WOERTER} Wörter.
