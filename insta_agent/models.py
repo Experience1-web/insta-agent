@@ -163,6 +163,64 @@ class PostDraft(BaseModel):
 
 
 # --------------------------------------------------------------------------
+# Endpruefung - ein zweites Paar Augen vor der Freigabe
+# --------------------------------------------------------------------------
+
+
+class Befund(BaseModel):
+    """Eine einzelne geprüfte Aussage aus dem Beitrag."""
+
+    behauptung: str = Field(
+        description="Die geprüfte Aussage, wörtlich aus dem Beitrag zitiert"
+    )
+    urteil: Literal["belegt", "ungenau", "falsch", "unbelegbar"] = Field(
+        description=(
+            "belegt: stimmt und ist auffindbar. ungenau: im Kern richtig, aber "
+            "schief dargestellt. falsch: stimmt nicht. unbelegbar: keine Quelle "
+            "zu finden - was für eine Zahl genauso schlimm ist wie falsch."
+        )
+    )
+    begruendung: str = Field(description="Warum dieses Urteil, in ein bis zwei Sätzen")
+    beleg: str = Field(default="", description="Fundstelle oder URL, falls vorhanden")
+
+
+class Pruefbericht(BaseModel):
+    """Das Urteil der Endprüfung über einen Beitrag.
+
+    Der Agent zugespitzt formulieren zu lassen und ihn gleichzeitig selbst
+    prüfen zu lassen, ist ein Interessenkonflikt: Wer den Satz geschrieben
+    hat, will, dass er stehenbleibt. Deshalb prüft eine zweite Instanz mit
+    eigenem Auftrag, die den Beitrag nicht geschrieben hat.
+    """
+
+    urteil: Literal["freigabe", "nachbessern", "ablehnen"] = Field(
+        description=(
+            "freigabe: alles belegt, kann raus. nachbessern: etwas ist schief, "
+            "aber reparierbar. ablehnen: eine Zahl oder Quelle ist falsch oder "
+            "erfunden - so darf das nicht erscheinen."
+        )
+    )
+    zusammenfassung: str = Field(description="Das Urteil in zwei bis drei Sätzen")
+    befunde: list[Befund] = Field(
+        default_factory=list, description="Jede geprüfte Zahl, Quelle und Tatsachenbehauptung"
+    )
+    korrekturen: list[str] = Field(
+        default_factory=list, description="Konkrete Änderungen, die den Beitrag retten würden"
+    )
+    quellen: list[str] = Field(default_factory=list, description="URLs, die nachgeschlagen wurden")
+    geprueft_von: str = Field(default="", description="Wer geprüft hat")
+    mit_suche: bool = Field(default=True, description="Ob nachgeschlagen werden konnte")
+
+    @property
+    def darf_raus(self) -> bool:
+        return self.urteil == "freigabe"
+
+    @property
+    def beanstandet(self) -> list[Befund]:
+        return [b for b in self.befunde if b.urteil != "belegt"]
+
+
+# --------------------------------------------------------------------------
 # Reflexion - der Agent lernt aus seinen Zahlen
 # --------------------------------------------------------------------------
 

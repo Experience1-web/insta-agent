@@ -15,6 +15,7 @@ from insta_agent.models import (
     MarketAnalysis,
     MonetizationPlan,
     PostDraft,
+    Pruefbericht,
     Reflection,
     StrategyUpdate,
     VisualSpec,
@@ -32,6 +33,9 @@ class FakeBrain:
         self.treasury = treasury
         self.aufrufe: list[str] = []
         self.suchbudget = config.max_web_searches
+        self.letzte_quellen: list[str] = []
+        # Womit gesucht wurde, damit Tests das nachsehen koennen.
+        self.gesucht: list[str] = []
 
     def _buchen(self, label: str) -> None:
         self.treasury.check()
@@ -47,8 +51,13 @@ class FakeBrain:
             sources=["https://beispiel.de/studie"] if web_search else [],
         )
 
-    def structured(self, *, schema, system, prompt, label, task="reasoning"):
+    def structured(
+        self, *, schema, system, prompt, label, task="reasoning", web_search=False, max_rounds=6
+    ):
         self._buchen(label)
+        if web_search:
+            self.gesucht.append(label)
+            self.letzte_quellen = ["https://beispiel.de/quelle"]
         return _ANTWORTEN[schema]()
 
 
@@ -128,6 +137,19 @@ def _entwurf() -> PostDraft:
     )
 
 
+def _pruefbericht() -> Pruefbericht:
+    """Die Endprüfung findet nichts - das ist der Normalfall im Test.
+
+    Wer den angehaltenen Beitrag prüfen will, baut sich einen eigenen
+    Bericht; hier soll der Zyklus durchlaufen.
+    """
+    return Pruefbericht(
+        urteil="freigabe",
+        zusammenfassung="Keine Zahl, keine Quellenangabe, nichts zu beanstanden.",
+        befunde=[],
+    )
+
+
 def _reflexion() -> Reflection:
     return Reflection(
         what_worked=["Anleitungen"],
@@ -166,6 +188,7 @@ _ANTWORTEN = {
     PostDraft: _entwurf,
     Reflection: _reflexion,
     MonetizationPlan: _geschaeftsplan,
+    Pruefbericht: _pruefbericht,
 }
 
 

@@ -7,12 +7,15 @@ weiß, liegt hier. Ein Zyklus lädt den Zustand, denkt, schreibt zurück.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, Iterator
+
+log = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -31,7 +34,8 @@ CREATE TABLE IF NOT EXISTS posts (
     hashtags        TEXT NOT NULL,
     image_path      TEXT,
     draft_json      TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'draft'
+    status          TEXT NOT NULL DEFAULT 'draft',
+    pruefung_json   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -78,7 +82,24 @@ class Store:
         self._conn = sqlite3.connect(self.path, check_same_thread=False, timeout=30.0)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
+        self._ergaenze_spalten()
         self._conn.commit()
+
+    # Spalten, die später dazugekommen sind. `CREATE TABLE IF NOT EXISTS`
+    # fasst eine bestehende Tabelle nicht an, also müssen sie einzeln
+    # nachgezogen werden - sonst scheitert jede Datenbank, die es schon
+    # vor der Änderung gab.
+    NACHGETRAGEN = {"posts": {"pruefung_json": "TEXT"}}
+
+    def _ergaenze_spalten(self) -> None:
+        for tabelle, spalten in self.NACHGETRAGEN.items():
+            vorhanden = {
+                r["name"] for r in self._conn.execute(f"PRAGMA table_info({tabelle})")
+            }
+            for name, typ in spalten.items():
+                if name not in vorhanden:
+                    self._conn.execute(f"ALTER TABLE {tabelle} ADD COLUMN {name} {typ}")
+                    log.info("Spalte %s.%s nachgetragen", tabelle, name)
 
     def close(self) -> None:
         self._conn.close()
@@ -128,6 +149,15 @@ class Store:
                 ),
             )
             return int(cur.lastrowid)
+
+    def set_pruefung(self, post_id: int, bericht: Any) -> None:
+        """Hängt den Bericht der Endprüfung an den Entwurf."""
+        payload = bericht.model_dump(mode="json") if hasattr(bericht, "model_dump") else bericht
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET pruefung_json=? WHERE id=?",
+                (json.dumps(payload, ensure_ascii=False), post_id),
+            )
 
     def mark_published(self, post_id: int, ig_media_id: str) -> None:
         with self._tx() as conn:

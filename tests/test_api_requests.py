@@ -18,6 +18,7 @@ from test_cycle import (
     _entwurf,
     _geschaeftsplan,
     _identitaet,
+    _pruefbericht,
     _reflexion,
     _strategie,
 )
@@ -29,6 +30,7 @@ ANTWORTEN = {
     "PostDraft": _entwurf,
     "Reflection": _reflexion,
     "MonetizationPlan": _geschaeftsplan,
+    "Pruefbericht": _pruefbericht,
 }
 
 
@@ -126,9 +128,12 @@ def test_die_websuche_geht_an_das_guenstige_modell(agent_mit_mitschrift):
     agent.run_cycle()
 
     mit_suche = [a for a in client.anfragen if a.get("tools")]
-    assert len(mit_suche) == 1, "die Recherche soll genau einmal laufen"
-    assert mit_suche[0]["model"] == agent.settings.llm.research_model
-    assert mit_suche[0]["tools"][0]["type"] == "web_search_20260209"
+    # Zweimal wird nachgeschlagen: die Marktrecherche und die Endprüfung.
+    # Beide gehen an das Recherchemodell, nicht an das teure.
+    assert len(mit_suche) == 2, "Recherche und Endprüfung sollen je einmal suchen"
+    for anfrage in mit_suche:
+        assert anfrage["model"] == agent.settings.llm.research_model
+        assert anfrage["tools"][0]["type"] == "web_search_20260209"
 
 
 def test_jeder_aufruf_wird_auch_abgerechnet(agent_mit_mitschrift):

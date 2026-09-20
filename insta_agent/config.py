@@ -135,6 +135,9 @@ class PostingConfig:
     # nimmt im Feed nur Bilder zwischen 4:5 und 1.91:1 an - 9:16 liegt
     # ausserhalb und wuerde beschnitten.
     bildformat: str = "feed"
+    # Jeder Entwurf geht durch die Endpruefung, bevor er vorgelegt wird.
+    # Abschalten spart Geld und kostet die einzige Kontrolle, die es gibt.
+    pruefung_noetig: bool = True
     # Solange True, geht nur nach draussen, was der Betreiber freigegeben hat.
     # Auf False wird jeder geschriebene Beitrag sofort veroeffentlicht -
     # das gehoert erst eingeschaltet, wenn die Beitraege verlaesslich taugen.

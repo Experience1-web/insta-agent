@@ -65,6 +65,9 @@ class Brain:
         self.config = config
         self.treasury = treasury
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        # Die Quellen des letzten Aufrufs. Sie gehören zum Ergebnis, passen
+        # aber in kein Schema, das der Aufrufer vorgibt.
+        self.letzte_quellen: list[str] = []
 
     @property
     def suchbudget(self) -> int:
@@ -123,29 +126,62 @@ class Brain:
         prompt: str,
         label: str,
         task: str = "reasoning",
+        web_search: bool = False,
+        max_rounds: int = 6,
     ) -> T:
-        """Holt eine validierte Antwort nach dem Pydantic-Schema."""
+        """Holt eine validierte Antwort nach dem Pydantic-Schema.
+
+        Mit `web_search` darf das Modell dabei nachschlagen. Das braucht
+        eine Schleife: Serverwerkzeuge halten den Zug an, und erst danach
+        kommt die fertige Struktur. Die gefundenen Quellen landen in
+        `letzte_quellen` - sie gehören zum Ergebnis, passen aber in kein
+        Schema, das der Aufrufer vorgibt.
+        """
         self.treasury.check()
         model = self._model_for(task)
+        tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
+        self.letzte_quellen = []
 
         for attempt_model in (model, self.config.fallback_model):
-            kwargs: dict[str, Any] = {
-                "model": attempt_model,
-                "max_tokens": self.config.max_tokens,
-                "system": system,
-                "messages": [{"role": "user", "content": prompt}],
-                "output_format": schema,
-            }
-            if konfig := self._output_config(attempt_model, task):
-                kwargs["output_config"] = konfig
+            messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+            response = None
 
-            response = self.client.messages.parse(**kwargs)
-            self._book(attempt_model, response, label)
-            if self._refused(response):
+            for _ in range(max_rounds):
+                kwargs: dict[str, Any] = {
+                    "model": attempt_model,
+                    "max_tokens": self.config.max_tokens,
+                    "system": system,
+                    "messages": messages,
+                    "output_format": schema,
+                }
+                if konfig := self._output_config(attempt_model, task):
+                    kwargs["output_config"] = konfig
+                if tools:
+                    kwargs["tools"] = tools
+
+                response = self.client.messages.parse(**kwargs)
+                self._book(attempt_model, response, label)
+                if self._refused(response):
+                    break
+                if tools:
+                    # Nur dann gibt es Suchblöcke - und nur dann hat die
+                    # Antwort überhaupt einen durchsuchbaren Inhalt.
+                    self.letzte_quellen.extend(
+                        _extract_sources(getattr(response, "content", []) or [])
+                    )
+
+                if getattr(response, "stop_reason", None) == "pause_turn":
+                    messages.append({"role": "assistant", "content": response.content})
+                    self.treasury.check()
+                    continue
+                break
+
+            if response is None or self._refused(response):
                 log.warning("%s wurde von %s abgelehnt, weiche aus", label, attempt_model)
                 continue
             parsed = response.parsed_output
             if parsed is not None:
+                self.letzte_quellen = list(dict.fromkeys(self.letzte_quellen))
                 return parsed
             log.warning("%s lieferte keine verwertbare Struktur, versuche Ausweichmodell", label)
 

@@ -22,6 +22,7 @@ from .brain import (
     build_monetization_plan,
     create_post_draft,
     invent_identity,
+    pruefe_beitrag,
     reflect,
     run_market_research,
     update_strategy,
@@ -434,6 +435,7 @@ class Agent:
             if erzeugt := self._erzeuge_bild(draft, basis, identity, report):
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
+            bericht = self._pruefe(post_id, draft, identity, report)
 
             report.drafts_written.append(str(image_path))
             if self.settings.posting.freigabe_noetig:
@@ -441,6 +443,12 @@ class Agent:
                 # Betreibers. Erst der nächste Zyklus schickt raus, was
                 # freigegeben wurde.
                 report.steps.append(f"Entwurf {post_id} wartet auf Freigabe")
+            elif bericht is not None and not bericht.darf_raus:
+                # Autopilot, aber die Endprüfung hat etwas gefunden. Dann
+                # entscheidet ein Mensch - dafür ist die Prüfung da.
+                report.steps.append(
+                    f"Entwurf {post_id} von der Endprüfung angehalten: {bericht.urteil}"
+                )
             else:
                 # Autopilot: Der Betreiber hat die Freigabepflicht
                 # abgeschaltet. Dann geht der Beitrag mit dem nächsten
@@ -449,6 +457,45 @@ class Agent:
                 report.steps.append(f"Entwurf {post_id} automatisch freigegeben")
 
             recent.append(draft.caption)
+
+    def _pruefe(self, post_id: int, draft, identity, report: CycleReport):
+        """Lässt die Endprüfung über den Entwurf gehen.
+
+        Gibt den Bericht zurück, oder None, wenn nicht geprüft werden
+        konnte. Ein Fehlschlag hier darf den Zyklus nicht kosten - aber er
+        darf auch nicht als "geprüft" durchgehen. Deshalb None und ein
+        sichtbarer Vermerk statt eines stillen Weiter.
+        """
+        if not self.settings.posting.pruefung_noetig:
+            return None
+        try:
+            bericht = pruefe_beitrag(
+                self.brain,
+                identity=identity,
+                draft=draft,
+                # Ohne Websuche lässt sich keine Quelle nachschlagen. Geprüft
+                # wird trotzdem - Rechenfehler fallen auch so auf.
+                mit_suche=self.treasury.state().mode is Mode.NORMAL,
+            )
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Endprüfung fehlgeschlagen: %s", exc)
+            report.steps.append(f"Entwurf {post_id} konnte nicht geprüft werden: {exc}")
+            self.store.log("pruefung_error", f"Entwurf {post_id}: {exc}")
+            return None
+
+        self.store.set_pruefung(post_id, bericht)
+        beanstandet = len(bericht.beanstandet)
+        report.steps.append(
+            f"Endprüfung {post_id}: {bericht.urteil}"
+            + (f", {beanstandet} beanstandet" if beanstandet else "")
+        )
+        self.store.log(
+            "pruefung",
+            f"Entwurf {post_id}: {bericht.urteil} - {bericht.zusammenfassung}",
+        )
+        return bericht
 
     def _erzeuge_bild(self, draft, basis: str, identity, report: CycleReport) -> Path | None:
         """Lässt das Bild malen und legt den Hook darüber.
