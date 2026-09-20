@@ -60,6 +60,10 @@ class CallResult:
     sources: list[str]
 
 
+class _KeinErgebnis(Exception):
+    """Dieses Modell hat nichts Brauchbares geliefert - das naechste ist dran."""
+
+
 class Brain:
     def __init__(self, config: LLMConfig, treasury: Treasury, api_key: str | None = None) -> None:
         self.config = config
@@ -151,49 +155,94 @@ class Brain:
         self.letzte_quellen = []
 
         for attempt_model in (model, self.config.fallback_model):
-            messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
-            response = None
-
-            for _ in range(max_rounds):
-                kwargs: dict[str, Any] = {
-                    "model": attempt_model,
-                    "max_tokens": self.config.max_tokens,
-                    "system": system,
-                    "messages": messages,
-                    "output_format": schema,
-                }
-                if konfig := self._output_config(attempt_model, task):
-                    kwargs["output_config"] = konfig
-                if tools:
-                    kwargs["tools"] = tools
-
-                response = self.client.messages.parse(**kwargs)
-                self._book(attempt_model, response, label)
-                if self._refused(response):
-                    break
-                if tools:
-                    # Nur dann gibt es Suchblöcke - und nur dann hat die
-                    # Antwort überhaupt einen durchsuchbaren Inhalt.
-                    self.letzte_quellen.extend(
-                        _extract_sources(getattr(response, "content", []) or [])
+            # Erst mit Werkzeugen, dann ohne. Ob eine strukturierte Antwort
+            # zusammen mit der Websuche angenommen wird, haengt am Modell und
+            # an der Schnittstelle - und wenn nicht, ist ein Urteil ohne
+            # Nachschlagen immer noch besser als gar keins.
+            for werkzeuge in ([tools, []] if tools else [[]]):
+                try:
+                    return self._ein_versuch(
+                        schema=schema,
+                        system=system,
+                        prompt=prompt,
+                        label=label,
+                        task=task,
+                        attempt_model=attempt_model,
+                        tools=werkzeuge,
+                        max_rounds=max_rounds,
                     )
+                except _KeinErgebnis:
+                    break
+                except anthropic.BadRequestError as exc:
+                    if not werkzeuge:
+                        raise
+                    log.warning(
+                        "%s: %s nimmt die Websuche hier nicht an, versuche es ohne (%s)",
+                        label,
+                        attempt_model,
+                        exc,
+                    )
+                    self.letzte_quellen = []
 
-                if getattr(response, "stop_reason", None) == "pause_turn":
-                    messages.append({"role": "assistant", "content": response.content})
-                    self.treasury.check()
-                    continue
+        raise ModelRefused(
+            f"{label}: weder {model} noch {self.config.fallback_model} lieferten ein Ergebnis."
+        )
+
+    def _ein_versuch(
+        self,
+        *,
+        schema: type[T],
+        system: str,
+        prompt: str,
+        label: str,
+        task: str,
+        attempt_model: str,
+        tools: list[dict[str, Any]],
+        max_rounds: int,
+    ) -> T:
+        """Ein Modell, ein Werkzeugsatz. Wirft _KeinErgebnis, wenn nichts kam."""
+        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        response = None
+
+        for _runde in range(max_rounds):
+            kwargs: dict[str, Any] = {
+                "model": attempt_model,
+                "max_tokens": self.config.max_tokens,
+                "system": system,
+                "messages": messages,
+                "output_format": schema,
+            }
+            if konfig := self._output_config(attempt_model, task):
+                kwargs["output_config"] = konfig
+            if tools:
+                kwargs["tools"] = tools
+
+            response = self.client.messages.parse(**kwargs)
+            self._book(attempt_model, response, label)
+            if self._refused(response):
                 break
+            if tools:
+                # Nur dann gibt es Suchblöcke - und nur dann hat die
+                # Antwort überhaupt einen durchsuchbaren Inhalt.
+                self.letzte_quellen.extend(
+                    _extract_sources(getattr(response, "content", []) or [])
+                )
 
-            if response is None or self._refused(response):
-                log.warning("%s wurde von %s abgelehnt, weiche aus", label, attempt_model)
+            if getattr(response, "stop_reason", None) == "pause_turn":
+                messages.append({"role": "assistant", "content": response.content})
+                self.treasury.check()
                 continue
-            parsed = response.parsed_output
-            if parsed is not None:
-                self.letzte_quellen = list(dict.fromkeys(self.letzte_quellen))
-                return parsed
-            log.warning("%s lieferte keine verwertbare Struktur, versuche Ausweichmodell", label)
+            break
 
-        raise ModelRefused(f"{label}: weder {model} noch {self.config.fallback_model} lieferten ein Ergebnis.")
+        if response is None or self._refused(response):
+            log.warning("%s wurde von %s abgelehnt, weiche aus", label, attempt_model)
+            raise _KeinErgebnis
+        parsed = response.parsed_output
+        if parsed is not None:
+            self.letzte_quellen = list(dict.fromkeys(self.letzte_quellen))
+            return parsed
+        log.warning("%s lieferte keine verwertbare Struktur, versuche Ausweichmodell", label)
+        raise _KeinErgebnis
 
     # -- Freie Antworten, optional mit Websuche ---------------------------
 

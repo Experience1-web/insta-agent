@@ -47,11 +47,22 @@ def portraitwunsch(rolle, identitaet=None) -> str:
 
 def erzeuge_portrait(generator, rolle, ziel: Path, identitaet=None) -> Path | None:
     """Malt ein Porträt. None heisst: hat nicht geklappt, Zeichen bleibt."""
+    pfad, _grund = male_portrait(generator, rolle, ziel, identitaet)
+    return pfad
+
+
+def male_portrait(generator, rolle, ziel: Path, identitaet=None) -> tuple[Path | None, str]:
+    """Wie erzeuge_portrait, gibt aber den Grund des Fehlschlags mit zurück.
+
+    Der Grund gehört dem Betreiber: "hat nicht geklappt" lässt ihn raten,
+    ob der Schlüssel fehlt, das Tageslimit erreicht ist oder das Netz weg
+    war. Jede dieser Ursachen braucht eine andere Reaktion.
+    """
     if generator is None:
-        return None
+        return None, "Kein Bilddienst eingerichtet"
     ziel.parent.mkdir(parents=True, exist_ok=True)
     try:
-        return generator.erzeuge(portraitwunsch(rolle, identitaet), ziel)
-    except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+        return generator.erzeuge(portraitwunsch(rolle, identitaet), ziel), ""
+    except Exception as exc:  # noqa: BLE001 - der Grund gehört zum Ergebnis
         log.warning("Porträt für %s nicht erzeugt: %s", rolle.schluessel, exc)
-        return None
+        return None, str(exc)

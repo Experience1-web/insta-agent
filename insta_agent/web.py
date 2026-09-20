@@ -668,7 +668,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             und nie im Zyklus. Wer schon ein Bild hat, bekommt kein neues.
             """
             from .imaging.generator import baue_generator
-            from .imaging.portraits import erzeuge_portrait, portraitpfad
+            from .imaging.portraits import male_portrait, portraitpfad
             from .mannschaft import ROLLEN
 
             if steuerung.nur_lesen:
@@ -690,25 +690,33 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             agent = Agent(einst)
             try:
                 identitaet = agent.identity
-                gemalt, gescheitert = [], []
+                gemalt: list[str] = []
+                gruende: list[str] = []
                 for rolle in ROLLEN:
                     if rolle.schluessel == "chef" and identitaet is None:
                         continue
                     ziel = portraitpfad(einst.media_dir, rolle.schluessel)
                     if ziel.is_file():
                         continue
-                    if erzeuge_portrait(generator, rolle, ziel, identitaet):
+                    pfad, grund = male_portrait(generator, rolle, ziel, identitaet)
+                    if pfad:
                         gemalt.append(rolle.schluessel)
                     else:
-                        gescheitert.append(rolle.schluessel)
+                        # Der echte Grund, nicht "hat nicht geklappt". Beim
+                        # ersten Fehlschlag aufhoeren: Wenn das Tageslimit
+                        # erreicht ist, scheitern die naechsten genauso.
+                        gruende.append(f"{rolle.name or rolle.rolle}: {grund}")
+                        break
                 if gemalt:
                     agent.store.log("portrait", f"{len(gemalt)} Porträt(s) gemalt")
+                if gruende:
+                    agent.store.log("portrait_error", gruende[0])
             finally:
                 agent.close()
                 if hasattr(generator, "close"):
                     generator.close()
 
-            self._json({"ok": True, "gemalt": gemalt, "gescheitert": gescheitert})
+            self._json({"ok": True, "gemalt": gemalt, "gruende": gruende})
 
         def _sende_avatar(self, wer: str = "chef") -> None:
             """Das Porträt einer Rolle.

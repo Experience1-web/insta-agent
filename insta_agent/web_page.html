@@ -828,13 +828,13 @@ async function male_portraits() {
     });
     const ergebnis = await antwort.json();
     if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
-    if (!ergebnis.gemalt.length && !ergebnis.gescheitert.length) {
+    if (!ergebnis.gemalt.length && !ergebnis.gruende.length) {
       alert("Alle haben schon ein Porträt.");
       return;
     }
-    if (ergebnis.gescheitert.length) {
-      alert(`${ergebnis.gemalt.length} gemalt, ${ergebnis.gescheitert.length} nicht – ` +
-            "vermutlich ist das Tageslimit des Bilddienstes erreicht.");
+    if (ergebnis.gruende.length) {
+      // Der echte Grund vom Bilddienst, nicht meine Vermutung.
+      alert(`${ergebnis.gemalt.length} gemalt, dann kam:\n\n${ergebnis.gruende[0]}`);
     }
     laden();
   } finally {

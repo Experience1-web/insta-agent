@@ -120,3 +120,91 @@ def test_der_agent_erfaehrt_wie_viele_suchen_er_hat():
 
     quelle = inspect.getsource(research.run_market_research)
     assert "{brain.suchbudget} Suchanfragen" in quelle
+
+
+# --- Strukturierte Antwort mit Websuche -----------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from pydantic import BaseModel  # noqa: E402
+
+
+class _Schema(BaseModel):
+    wert: str
+
+
+def _ANTWORT():
+    return _Schema(wert="fertig")
+
+
+@pytest.fixture
+def brain():
+    """Ein Brain mit echter Kasse, aber ohne echten Client."""
+    from insta_agent.config import EconomyConfig
+    from insta_agent.economy.ledger import Treasury
+    from insta_agent.store import Store
+
+    import tempfile
+    from pathlib import Path as _P
+
+    b = _brain()
+    b.treasury = Treasury(Store(_P(tempfile.mkdtemp()) / "a.db"), EconomyConfig())
+    b.letzte_quellen = []
+    return b
+
+
+
+def _bad_request(meldung: str):
+    """Ein echter 400er des SDK, kein nachgebauter."""
+    import httpx2 as httpx
+
+    from anthropic import BadRequestError
+
+    antwort = httpx.Response(
+        400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    )
+    return BadRequestError(meldung, response=antwort, body=None)
+
+
+class _Antwort:
+    def __init__(self, ergebnis):
+        self.usage = SimpleNamespace(
+            input_tokens=10, output_tokens=5,
+            cache_read_input_tokens=0, cache_creation_input_tokens=0,
+        )
+        self.stop_reason = "end_turn"
+        self.parsed_output = ergebnis
+        self.content = []
+
+
+def test_wenn_die_websuche_nicht_angenommen_wird_geht_es_ohne_sie_weiter(brain):
+    """Ein Urteil ohne Nachschlagen ist besser als gar keins."""
+    versuche = []
+
+    def parse(**kwargs):
+        versuche.append("tools" in kwargs)
+        if "tools" in kwargs:
+            raise _bad_request("tools are not supported with output_format")
+        return _Antwort(_ANTWORT())
+
+    brain.client = SimpleNamespace(messages=SimpleNamespace(parse=parse))
+
+    ergebnis = brain.structured(
+        schema=_Schema, system="s", prompt="p", label="Probe", web_search=True
+    )
+
+    assert ergebnis is not None
+    assert versuche == [True, False], "erst mit Suche, dann ohne"
+
+
+def test_ein_anderer_fehler_wird_nicht_verschluckt(brain):
+    """Nur die Werkzeuge sind der Verdacht - alles andere gehoert nach oben."""
+    def parse(**kwargs):
+        raise _bad_request("credit balance is too low")
+
+    brain.client = SimpleNamespace(messages=SimpleNamespace(parse=parse))
+
+    from anthropic import BadRequestError
+
+    with pytest.raises(BadRequestError, match="credit balance"):
+        brain.structured(schema=_Schema, system="s", prompt="p", label="Probe")
