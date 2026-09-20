@@ -11,6 +11,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Iterator
 
 SCHEMA = """
@@ -296,15 +297,18 @@ class Store:
             ).fetchone()
         return float(row["s"])
 
-    def ledger_sum_excluding(self, kind: str, category: str) -> float:
-        """Summe einer Art ohne eine bestimmte Kategorie.
+    def ledger_sum_excluding(self, kind: str, category: str | Sequence[str]) -> float:
+        """Summe einer Art ohne bestimmte Kategorien.
 
-        Gebraucht, um das Startkapital des Betreibers von dem zu trennen,
-        was der Agent selbst verdient hat.
+        Gebraucht, um das Geld des Betreibers von dem zu trennen, was der
+        Agent selbst verdient hat.
         """
+        ausser = [category] if isinstance(category, str) else list(category)
+        platzhalter = ",".join("?" for _ in ausser)
         row = self._conn.execute(
-            "SELECT COALESCE(SUM(amount_usd), 0) AS s FROM ledger WHERE kind=? AND category<>?",
-            (kind, category),
+            "SELECT COALESCE(SUM(amount_usd), 0) AS s FROM ledger "
+            f"WHERE kind=? AND category NOT IN ({platzhalter})",
+            (kind, *ausser),
         ).fetchone()
         return float(row["s"])
 

@@ -395,6 +395,55 @@ def check() -> None:
 
 
 @app.command()
+def kasse(
+    guthaben: float = typer.Argument(
+        None, help="Was wirklich auf dem Konto ist, in USD. Ohne Angabe wird nur gezeigt."
+    ),
+    config: Path = typer.Option(None),
+) -> None:
+    """Gleicht die Kasse mit dem echten Guthaben ab.
+
+    Der Agent rechnet mit, was ein Aufruf kosten sollte - aus Tokenzahl
+    und Preisliste. Das ist eine Schaetzung. Was auf console.anthropic.com
+    steht, ist die Wahrheit. Trag sie hier ein, damit er seine Grenzen auf
+    echten Zahlen zieht und nicht auf geratenen.
+    """
+    agent = _agent(config)
+    try:
+        stand = agent.treasury.state()
+        if guthaben is None:
+            console.print(
+                f"Der Agent rechnet mit [bold]{stand.balance_usd:.2f} USD[/bold]"
+                f" ({stand.mode.value}).\n"
+                "[dim]Echten Stand eintragen: insta-agent kasse 1.11[/dim]"
+            )
+            return
+
+        differenz = agent.treasury.abgleichen(guthaben)
+        neu = agent.treasury.state()
+        if differenz == 0:
+            console.print(f"[green]Stimmt schon:[/green] {neu.balance_usd:.2f} USD.")
+        else:
+            console.print(
+                f"Vorher [bold]{stand.balance_usd:.2f}[/bold], jetzt "
+                f"[bold]{neu.balance_usd:.2f} USD[/bold] "
+                f"([{'green' if differenz > 0 else 'yellow'}]{differenz:+.2f}[/])."
+            )
+        if neu.mode.value == "frugal":
+            console.print(
+                "\n[yellow]Sparbetrieb.[/yellow] Er arbeitet weiter, aber mit dem"
+                " billigen Modell und ohne Websuche."
+            )
+        elif neu.mode.value == "halted":
+            console.print(
+                "\n[red]Zu wenig zum Arbeiten.[/red] Lad Guthaben auf unter"
+                " console.anthropic.com."
+            )
+    finally:
+        agent.close()
+
+
+@app.command()
 def where() -> None:
     """Zeigt, wo die Dateien des Agenten auf deinem Rechner liegen."""
     settings = load_settings()

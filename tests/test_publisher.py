@@ -239,3 +239,33 @@ def test_wenn_alles_scheitert_stehen_alle_gruende_da(tmp_path, draft):
     assert "i.ibb.co" in result.reason
     assert "litter.catbox.moe" in result.reason
     assert result.draft_path.exists()
+
+
+# --- Der Handlungsaufruf steht nur einmal da ------------------------------
+
+
+def test_ein_fast_gleicher_aufruf_wird_nicht_nochmal_angehaengt(draft):
+    """Er schreibt den Aufruf gern in den Text und noch einmal ins Feld.
+
+    Beim zweiten Mal leicht erweitert - wörtlich verglichen faellt das
+    nicht auf, untereinander gedruckt schon.
+    """
+    draft.caption = (
+        "25 Tage. So viel Zeit mit deiner Mutter ist statistisch noch übrig.\n\n"
+        "Schick das der Person, die letzte Woche gesagt hat, sie habe gerade keine Zeit."
+    )
+    draft.call_to_action = (
+        "Schick das der Person, die letzte Woche gesagt hat, sie habe gerade keine "
+        "Zeit – und folge, wenn du lieber mit einer Quelle streitest als mit einem Gefühl."
+    )
+
+    caption = Publisher.full_caption(draft)
+
+    assert caption.count("Schick das der Person") == 1
+
+
+def test_ein_eigener_aufruf_kommt_weiterhin_dazu(draft):
+    draft.caption = "Zwei Zahlen, ein Irrtum weniger."
+    draft.call_to_action = "Speichere das für den nächsten Streit am Küchentisch."
+
+    assert "Küchentisch" in Publisher.full_caption(draft)

@@ -109,6 +109,25 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "15 - Guthaben eintragen.bat": f"""{KOPF}
+title Guthaben eintragen
+echo.
+echo   Der Agent schaetzt seine Kosten selbst. Die Wahrheit steht auf
+echo   console.anthropic.com unter "Organisations-Credits".
+echo.
+echo   Trag die Zahl hier ein, damit er seine Grenzen auf echten
+echo   Zahlen zieht. Punkt statt Komma: 1.11
+echo.
+set /p BETRAG=Guthaben in USD (leer lassen zeigt nur den Stand): 
+if "%BETRAG%"=="" goto zeigen
+%PY% -m insta_agent.cli kasse %BETRAG%
+echo.
+pause
+exit /b
+:zeigen
+%PY% -m insta_agent.cli kasse
+echo.
+pause""",
     "14 - Jetzt posten.bat": f"""{KOPF}
 title Jetzt posten
 echo.

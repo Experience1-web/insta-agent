@@ -166,7 +166,7 @@ class Publisher:
         """Caption, Handlungsaufruf und Hashtags zu einem Text zusammensetzen."""
         parts = [draft.caption.strip()]
         cta = draft.call_to_action.strip()
-        if cta and cta.lower() not in draft.caption.lower():
+        if cta and not _schon_gesagt(draft.caption, cta):
             parts.append(cta)
         if draft.hashtags:
             parts.append(" ".join(f"#{tag}" for tag in draft.hashtags))
@@ -218,3 +218,33 @@ _ADRESSFEHLER = (
 def _liegt_an_der_adresse(exc: GraphAPIError) -> bool:
     text = str(exc).lower()
     return any(marke in text for marke in _ADRESSFEHLER)
+
+
+# Kürzeste Länge, ab der ein Satzanfang als Wiedererkennung taugt. Darunter
+# ist "Folge mir" zu gewöhnlich, um daraus etwas zu schließen.
+_GENUG_ZEICHEN = 25
+
+
+def _entkleidet(text: str) -> str:
+    """Kleinschreibung, einfache Zeichen, ein Leerzeichen - zum Vergleichen."""
+    text = text.lower()
+    for hin, her in (("\u2013", "-"), ("\u2014", "-"), ("\u2019", "'"), ("\u201e", ""), ("\u201c", "")):
+        text = text.replace(hin, her)
+    return " ".join(text.split())
+
+
+def _schon_gesagt(caption: str, cta: str) -> bool:
+    """Steht der Handlungsaufruf schon im Text?
+
+    Nicht nur wörtlich: Der Agent schreibt den Aufruf gern ans Ende des
+    Textes und noch einmal ins eigene Feld, beim zweiten Mal leicht
+    erweitert. Angehängt stünde derselbe Satz dann zweimal untereinander -
+    was wie ein Fehler aussieht, weil es einer ist. Verglichen wird
+    deshalb der Satzanfang.
+    """
+    text, ruf = _entkleidet(caption), _entkleidet(cta)
+    if not ruf:
+        return True
+    if ruf in text:
+        return True
+    return len(ruf) >= _GENUG_ZEICHEN and ruf[:_GENUG_ZEICHEN] in text

@@ -111,3 +111,48 @@ def test_eine_gemeldete_einnahme_hebt_den_sparbetrieb_auf(treasury):
     # Erst ab voller Deckung.
     treasury.earn(1.5, "digital_product", "Weitere Verkäufe")
     assert treasury.state().self_sustaining
+
+
+# --- Abgleich mit dem echten Konto ----------------------------------------
+
+
+def test_der_echte_kontostand_laesst_sich_eintragen(treasury):
+    """Die Kasse schätzt aus Tokenzahl und Preisliste - die Abrechnung weiss es."""
+    treasury.charge(1.0, "llm")
+    assert treasury.state().balance_usd == pytest.approx(9.0)
+
+    treasury.abgleichen(1.11)
+
+    assert treasury.state().balance_usd == pytest.approx(1.11)
+
+
+def test_der_abgleich_zaehlt_nicht_als_verdienst(treasury):
+    """Sonst hielte er sich für selbsttragend, weil jemand nachgerechnet hat."""
+    treasury.charge(1.0, "llm")
+    treasury.earn(0.4, "verkauf")
+
+    treasury.abgleichen(50.0)
+
+    stand = treasury.state()
+    assert stand.balance_usd == pytest.approx(50.0)
+    assert stand.earned_usd == pytest.approx(0.4)
+    assert not stand.self_sustaining
+
+
+def test_ein_zweiter_abgleich_aendert_nichts(treasury):
+    treasury.abgleichen(2.0)
+    assert treasury.abgleichen(2.0) == 0.0
+    assert treasury.state().balance_usd == pytest.approx(2.0)
+
+
+def test_der_abgleich_gibt_die_differenz_zurueck(treasury):
+    assert treasury.abgleichen(7.0) == pytest.approx(-3.0)
+
+
+def test_ein_abgleich_nach_unten_kann_den_sparbetrieb_ausloesen(treasury):
+    """Genau dafür ist er da: Grenzen auf echten Zahlen statt auf geratenen."""
+    assert treasury.state().mode is Mode.NORMAL
+
+    treasury.abgleichen(1.11)
+
+    assert treasury.state().mode is Mode.FRUGAL

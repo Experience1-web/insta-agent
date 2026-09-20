@@ -17,6 +17,12 @@ from ..store import Store
 
 TREASURY_SEED_KEY = "treasury_seeded_usd"
 
+# Geld, das vom Betreiber kommt und nicht vom Agenten verdient wurde:
+# das Startkapital und spätere Korrekturen am Kontostand. Beides darf
+# nicht als Verdienst durchgehen, sonst hält der Agent sich für
+# selbsttragend, solange fremdes Geld reicht.
+BETREIBERGELD = ("seed", "abgleich")
+
 
 class Mode(str, Enum):
     NORMAL = "normal"
@@ -98,12 +104,38 @@ class Treasury:
         """Bucht eine Einnahme aus einem Geschäft des Agenten."""
         self.store.add_ledger_entry("revenue", category, abs(amount_usd), note, meta)
 
+    def abgleichen(self, ist_guthaben: float) -> float:
+        """Setzt den Kontostand auf den echten Wert und gibt die Differenz zurück.
+
+        Die Kasse rechnet mit, was ein Modellaufruf kosten *sollte* - aus
+        Tokenzahl und Preisliste. Das ist eine Schätzung: Preise ändern
+        sich, und nicht jede Ausgabe läuft über den Agenten. Der Wert auf
+        der Abrechnungsseite ist die Wahrheit, also muss er sich eintragen
+        lassen.
+
+        Gebucht wird die Differenz, nicht der Endstand. So bleibt in der
+        Geschichte stehen, was wirklich passiert ist - und die Korrektur
+        zählt ausdrücklich nicht als Verdienst.
+        """
+        differenz = round(ist_guthaben - self.state().balance_usd, 6)
+        if differenz == 0:
+            return 0.0
+        self.store.add_ledger_entry(
+            "revenue" if differenz > 0 else "cost",
+            "abgleich",
+            differenz,
+            note=f"Abgleich mit dem echten Konto: {ist_guthaben:.2f} USD",
+        )
+        return differenz
+
     # -- Zustand -----------------------------------------------------------
 
     def state(self) -> TreasuryState:
         spent = abs(self.store.ledger_sum("cost"))
-        seed = self.store.ledger_sum("revenue") - self.store.ledger_sum_excluding("revenue", "seed")
-        earned = self.store.ledger_sum_excluding("revenue", "seed")
+        seed = self.store.ledger_sum("revenue") - self.store.ledger_sum_excluding(
+            "revenue", BETREIBERGELD
+        )
+        earned = self.store.ledger_sum_excluding("revenue", BETREIBERGELD)
         balance = seed + earned - spent
 
         if balance < self.config.halt_balance_usd:
