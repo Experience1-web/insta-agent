@@ -174,3 +174,27 @@ def test_ein_beitrag_ohne_bild_sagt_warum():
 
 def test_im_fenster_steht_das_bild_gross_oben():
     assert 'class="grossbild"' in QUELLE
+
+
+# --- Kein Knopf darf stumm scheitern --------------------------------------
+
+
+def test_alle_knoepfe_gehen_ueber_einen_sender():
+    """Jede eigene Fassung war eine Stelle, die stumm scheitern konnte."""
+    assert 'await fetch("/api/' not in QUELLE
+    assert "async function sende(" in QUELLE
+
+
+def test_ein_altes_dashboard_wird_als_solches_erkannt():
+    """Die Seite kommt frisch von der Platte, das laufende Programm nicht.
+
+    Nach einer Aktualisierung zeigt ein altes Dashboard deshalb Knoepfe,
+    die es selbst nicht kennt - und antwortete darauf mit 404 und einer
+    Textmeldung, an der das Auslesen scheiterte. Es passierte nichts.
+    """
+    assert "antwort.status === 404" in QUELLE
+    assert "älteren Fassung als die Seite" in QUELLE
+
+
+def test_auch_ein_unerreichbares_dashboard_sagt_etwas():
+    assert "Das Dashboard antwortet nicht" in QUELLE

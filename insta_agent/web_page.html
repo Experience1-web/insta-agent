@@ -629,6 +629,40 @@ function lesbar(hex) {
   return "#" + aktuell.map(w => w.toString(16).padStart(2, "0")).join("");
 }
 
+/** Schickt etwas an den Agenten - und scheitert nie stumm.
+ *
+ *  Die Seite wird bei jeder Anfrage frisch von der Platte gelesen, das
+ *  laufende Programm dahinter nicht. Nach einer Aktualisierung zeigt ein
+ *  altes Dashboard also die neue Seite mit Knoepfen, die es selbst noch
+ *  nicht kennt. Vorher passierte dann gar nichts: Die Antwort war kein
+ *  JSON, das Lesen scheiterte, und niemand erfuhr davon.
+ */
+async function sende(pfad, rumpf = {}) {
+  let antwort;
+  try {
+    antwort = await fetch(pfad, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...kopf },
+      body: JSON.stringify(rumpf),
+    });
+  } catch {
+    return { ok: false, grund: "Das Dashboard antwortet nicht. Läuft es noch?" };
+  }
+
+  if (antwort.status === 404) {
+    return { ok: false, grund:
+      "Diesen Knopf kennt das laufende Dashboard noch nicht – es läuft in einer " +
+      "älteren Fassung als die Seite. Beende es und starte es neu " +
+      "(8 - Dashboard beenden, dann 2 - Dashboard starten)." };
+  }
+
+  try {
+    return await antwort.json();
+  } catch {
+    return { ok: false, grund: `Unverständliche Antwort (${antwort.status}).` };
+  }
+}
+
 /** Öffnet ein Fenster über der Seite. Alles Lange gehört hier hinein,
  *  damit die Seite selbst überschaubar bleibt. */
 function oeffne_popup(titel, inhalt) {
@@ -865,12 +899,7 @@ function zeige_person(m, d) {
     bildsprache.disabled = true;
     bildsprache.textContent = "er überlegt …";
     try {
-      const antwort = await fetch("/api/bildsprache", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...kopf },
-        body: "{}",
-      });
-      const ergebnis = await antwort.json();
+      const ergebnis = await sende("/api/bildsprache");
       if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
       schliesse_popup();
       laden();
@@ -884,12 +913,8 @@ function zeige_person(m, d) {
   const setzen = $("modellsetzen");
   setzen.onclick = async () => {
     setzen.disabled = true;
-    const antwort = await fetch("/api/modell", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...kopf },
-      body: JSON.stringify({ wer: setzen.dataset.wer, modell: $("modellwahl").value }),
-    });
-    const ergebnis = await antwort.json();
+    const ergebnis = await sende("/api/modell",
+      { wer: setzen.dataset.wer, modell: $("modellwahl").value });
     setzen.disabled = false;
     if (ergebnis.ok) {
       setzen.textContent = "Übernommen";
@@ -908,12 +933,7 @@ async function male_portraits() {
   knopf.disabled = true;
   knopf.textContent = "malt …";
   try {
-    const antwort = await fetch("/api/portraits", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...kopf },
-      body: "{}",
-    });
-    const ergebnis = await antwort.json();
+    const ergebnis = await sende("/api/portraits");
     if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
     if (!ergebnis.gemalt.length && !ergebnis.gruende.length) {
       alert("Alle haben schon ein Porträt.");
@@ -1153,31 +1173,21 @@ function marke_text(status)   { return (MARKEN[status] || MARKEN.draft)[1]; }
 
 async function entscheide(id, wahl, knopf) {
   knopf.disabled = true;
-  try {
-    const antwort = await fetch("/api/entscheiden", {
-      method: "POST",
-      headers: { ...kopf, "Content-Type": "application/json" },
-      body: JSON.stringify({ id: Number(id), wahl }),
-    });
-    const daten = await antwort.json();
-    if (!daten.ok) {
-      alert(daten.grund || "Das hat nicht geklappt.");
-      knopf.disabled = false;
-      return;
-    }
-    if (daten.geht_raus) {
-      knopf.textContent = "geht raus …";
-      // Das Hochladen dauert ein paar Sekunden; danach steht die Marke
-      // von selbst auf "veröffentlicht".
-      setTimeout(() => { gezeichnet.beitraege = null; laden(); }, 6000);
-    }
-    // Sofort neu laden, damit die Marke umspringt.
-    gezeichnet.beitraege = null;
-    laden();
-  } catch {
-    alert("Keine Verbindung zum Dashboard.");
+  const daten = await sende("/api/entscheiden", { id: Number(id), wahl });
+  if (!daten.ok) {
+    alert(daten.grund || "Das hat nicht geklappt.");
     knopf.disabled = false;
+    return;
   }
+  if (daten.geht_raus) {
+    knopf.textContent = "geht raus …";
+    // Das Hochladen dauert ein paar Sekunden; danach steht die Marke
+    // von selbst auf "veröffentlicht".
+    setTimeout(() => { gezeichnet.beitraege = null; laden(); }, 6000);
+  }
+  // Sofort neu laden, damit die Marke umspringt.
+  gezeichnet.beitraege = null;
+  laden();
 }
 
 /** Der Text eines Beitrags, so wie er bei Instagram stehen würde. */
@@ -1426,12 +1436,7 @@ $("kassesetzen").onclick = async () => {
 
   const knopf = $("kassesetzen");
   knopf.disabled = true;
-  const antwort = await fetch("/api/kasse", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...kopf },
-    body: JSON.stringify({ guthaben }),
-  });
-  const ergebnis = await antwort.json();
+  const ergebnis = await sende("/api/kasse", { guthaben });
   knopf.disabled = false;
 
   if (ergebnis.ok) {
@@ -1453,12 +1458,8 @@ $("buchen").onclick = async () => {
   if (!betrag || betrag <= 0) { alert("Bitte einen Betrag größer als null eintragen."); return; }
 
   $("buchen").disabled = true;
-  const antwort = await fetch("/api/einnahme", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...kopf },
-    body: JSON.stringify({ betrag, kategorie: $("kategorie").value, notiz: $("notiz").value }),
-  });
-  const ergebnis = await antwort.json();
+  const ergebnis = await sende("/api/einnahme",
+    { betrag, kategorie: $("kategorie").value, notiz: $("notiz").value });
   $("buchen").disabled = false;
 
   if (ergebnis.ok) {
@@ -1477,12 +1478,9 @@ $("buchen").onclick = async () => {
 
 $("start").onclick = async () => {
   $("start").disabled = true;
-  const antwort = await fetch("/api/start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...kopf },
-    body: JSON.stringify({ zyklen: +$("zyklen").value, hinweis: $("hinweis").value }),
-  });
-  if (!antwort.ok) alert((await antwort.json()).grund || "Start nicht möglich.");
+  const ergebnis = await sende("/api/start",
+    { zyklen: +$("zyklen").value, hinweis: $("hinweis").value });
+  if (!ergebnis.gestartet) alert(ergebnis.grund || "Start nicht möglich.");
   setTimeout(laden, 300);
 };
 
