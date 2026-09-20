@@ -79,3 +79,11 @@ def test_der_autopilot_wird_sichtbar_gemacht():
     abschnitt = QUELLE[stelle : stelle + 900]
     assert "Autopilot" in abschnitt
     assert 'class="warnung"' in abschnitt
+
+
+def test_kostenlose_bilder_werden_nicht_als_null_dollar_ausgewiesen():
+    """"0.0000 USD je Bild" liest sich wie ein Fehler, nicht wie ein Vorteil."""
+    stelle = QUELLE.index("function arbeitsweise(d)")
+    abschnitt = QUELLE[stelle : stelle + 700]
+    assert "d.bildkosten > 0" in abschnitt
+    assert "kostenloses Kontingent" in abschnitt

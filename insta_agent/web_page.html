@@ -556,7 +556,9 @@ function zeichne_protokoll(d) {
 function arbeitsweise(d) {
   return [
     d.malt_selbst
-      ? `Er malt seine Bilder selbst (${geld(d.bildkosten)} je Bild).`
+      ? (d.bildkosten > 0
+          ? `Er malt seine Bilder selbst, ${geld(d.bildkosten)} je Bild.`
+          : "Er malt seine Bilder selbst – über ein kostenloses Kontingent.")
       : "Ohne Bilddienst bleibt es bei der typografischen Fassung.",
     d.freigabe_noetig
       ? "Du entscheidest über jeden Beitrag."
