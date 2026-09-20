@@ -45,6 +45,19 @@
           animation: puls 1.1s infinite; }
   @keyframes puls { 50% { opacity: 0.25; } }
 
+  /* ---------- Kopf: das Vorhaben ---------- */
+  .leitstand { margin-bottom: 34px; animation: auftauchen 0.35s ease-out backwards; }
+  .vorhaben {
+    font-size: clamp(27px, 4.4vw, 40px); line-height: 1.1; margin: 6px 0 10px;
+    letter-spacing: -0.025em; font-weight: 800;
+  }
+  .untertitel {
+    margin: 0; color: var(--leise); font-size: 15px;
+    display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: baseline;
+  }
+  .untertitel a { color: var(--akzent); text-decoration: none; font-weight: 600; }
+  .untertitel a:hover { text-decoration: underline; }
+
   /* ---------- Held: die Mitarbeiterkarte ---------- */
   .held {
     display: grid; gap: 34px; align-items: center;
@@ -299,6 +312,16 @@
   .person .wer b { display: block; font-size: 15px; }
   .person .wer span { font-size: 13px; color: var(--leise); }
   .person .schlafend { font-size: 12px; color: var(--warnung); }
+  .person .rechts { display: flex; align-items: center; gap: 12px; flex: none; }
+  .person .rechts .mehr { margin: 0; font-size: 12.5px; }
+  .person .mehr::after { transition: transform 0.16s ease; }
+  .person:hover .mehr::after { transform: translateX(3px); }
+  .zeichen.bild { padding: 0; object-fit: cover; }
+  .person { animation: auftauchen 0.3s ease-out backwards; }
+  .popup-inhalt .fakten { margin: 18px 0 0; }
+  @media (max-width: 520px) {
+    .person .rechts .mehr { display: none; }
+  }
 
   /* ---------- Prüfmarken ---------- */
   .marke.gepruft { background: rgba(74, 222, 128, 0.16); color: var(--gut); }
@@ -384,7 +407,6 @@
 <div id="postbox"></div>
 <div id="ideenbox"></div>
 <div id="chancenbox"></div>
-<div id="profilbox"></div>
 
 <h2 id="einnahmetitel">Einnahme eintragen</h2>
 <div class="karte" id="einnahmebox">
@@ -639,27 +661,55 @@ function zeichne_mannschaft(d) {
     <h2>Wer hier arbeitet</h2>
     <div class="mannschaft">
       ${leute.map((m, i) => `
-        <button class="person ${esc(m.rang)}" data-person="${i}">
-          <span class="zeichen">${esc(initialen(m.name))}</span>
+        <button class="person ${esc(m.rang)}" data-person="${i}"
+                style="animation-delay:${i * 60}ms">
+          ${m.rang === "chef"
+            ? `<img class="zeichen bild" src="/avatar?t=${d.version}${anhang}" alt="">`
+            : `<span class="zeichen">${esc(initialen(m.name))}</span>`}
           <span class="wer">
             <b>${esc(m.name)}</b>
             <span>${esc(m.rolle)}</span>
           </span>
-          ${m.aktiv ? "" : '<span class="schlafend">abgeschaltet</span>'}
+          <span class="rechts">
+            ${m.aktiv ? "" : '<span class="schlafend">abgeschaltet</span>'}
+            <span class="mehr">ansehen</span>
+          </span>
         </button>`).join("")}
     </div>`;
 
   for (const knopf of $("mannschaftbox").querySelectorAll("[data-person]")) {
     const m = leute[+knopf.dataset.person];
-    knopf.onclick = () => oeffne_popup(m.name, `
-      <p class="rolle">${esc(m.rolle)}</p>
-      <p>${esc(m.aufgabe)}</p>
-      <div class="feld">
-        <div class="feldkopf"><span>Womit gearbeitet wird</span></div>
-        <p class="bildtext">${esc(m.modell)}</p>
-      </div>
-      ${m.aktiv ? "" : `<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>`}`);
+    knopf.onclick = () => oeffne_popup(m.name, person_html(m, d));
   }
+}
+
+/** Was über eine Person zu sagen ist. Beim Chef ist das der ganze
+ *  Steckbrief - der stand vorher in einem eigenen Abschnitt und hat die
+ *  Seite lang gemacht, ohne dass man ihn oft braucht. */
+function person_html(m, d) {
+  const i = d.identitaet;
+  const steckbrief = (m.rang === "chef" && i) ? `
+    <dl class="fakten">
+      <dt>Motto</dt><dd>${esc(i.motto)}</dd>
+      <dt>Warum dieser Name</dt><dd>${esc(i.agent_why)}</dd>
+      <dt>Nische</dt><dd>${esc(i.niche)}</dd>
+      <dt>Zielgruppe</dt><dd>${esc(i.target_audience)}</dd>
+      <dt>Tonfall</dt><dd>${esc(i.tone_of_voice)}</dd>
+      <dt>Bildsprache</dt><dd>${esc(i.visual_identity)}</dd>
+      <dt>Themensäulen</dt><dd>${i.content_pillars.map(esc).join(" · ")}</dd>
+      <dt>Profiltext</dt><dd>${esc(i.bio)}</dd>
+      <dt>Warum das aufgeht</dt><dd>${esc(i.why_this_works)}</dd>
+    </dl>` : "";
+
+  return `
+    <p class="rolle">${esc(m.rolle)}</p>
+    <p>${esc(m.aufgabe)}</p>
+    ${steckbrief}
+    <div class="feld">
+      <div class="feldkopf"><span>Womit gearbeitet wird</span></div>
+      <p class="bildtext">${esc(m.modell)}</p>
+    </div>
+    ${m.aktiv ? "" : '<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>'}`;
 }
 
 function initialen(name) {
@@ -713,13 +763,12 @@ function zeichne(d) {
   // ersetzen: ein aufgeklapptes "Was er sich dabei gedacht hat" klappt
   // wieder zu, markierter Text verliert die Markierung und das
   // "Kopiert" am Knopf ist weg, bevor man es gelesen hat.
-  wenn_neu("held", [d.identitaet, d.farben], () => zeichne_held(d));
+  wenn_neu("kopf", [d.identitaet, d.farben], () => zeichne_kopf(d));
   wenn_neu("mannschaft", d.mannschaft, () => zeichne_mannschaft(d));
   wenn_neu("vorhaben", d.strategie, () => zeichne_vorhaben(d));
   wenn_neu("beitraege", d.entwuerfe, () => zeichne_beitraege(d));
   wenn_neu("ideen", d.plan, () => zeichne_ideen(d));
   wenn_neu("chancen", d.bewertung, () => zeichne_chancen(d));
-  wenn_neu("profil", d.identitaet, () => zeichne_profil(d));
   wenn_neu("handy", d.handy_url, () => zeichne_handy(d));
   wenn_neu("verlauf", d.verlauf, () => zeichne_verlauf(d));
 }
@@ -749,30 +798,36 @@ function zeichne_warnung(d) {
   $("warnbox").innerHTML = inhalt;
 }
 
-function zeichne_held(d) {
+/** Der Kopf der Seite: das Vorhaben, nicht eine Person.
+ *
+ *  Vorher stand hier Konrads Name in Riesenschrift, als waere das seine
+ *  Homepage. Ist es nicht: Es ist die Uebersicht ueber einen Betrieb, in
+ *  dem er arbeitet - als Erster unter mehreren, aber nicht als Eigentuemer
+ *  der Seite. Wer er ist, steht jetzt bei den Leuten.
+ */
+function zeichne_kopf(d) {
   const i = d.identitaet;
-  document.title = i ? `${i.agent_name} · @${i.handle}` : "insta-agent";
+  document.title = i ? `${i.display_name} · Leitstand` : "insta-agent · Leitstand";
 
   if (!i) {
-    $("heldbox").innerHTML = `<div class="karte">
-      <h3>Noch niemand da</h3>
-      <p class="hinweis" style="margin:6px 0 0">Drück auf <strong>Starten</strong> – dann
-      erfindet er sich selbst: Name, Nische, Motto und sein erster Beitrag.</p></div>`;
+    $("heldbox").innerHTML = `
+      <div class="leitstand">
+        <h1 class="vorhaben">Noch kein Vorhaben</h1>
+        <p class="untertitel">Drück auf <strong>Starten</strong> – dann erfindet
+          er sich selbst: Name, Nische, Motto und den ersten Beitrag.</p>
+      </div>`;
     return;
   }
 
   $("heldbox").innerHTML = `
-    <div class="held">
-      <img class="portrait" src="/avatar?t=${d.version}${anhang}" alt="">
-      <div>
-        <div class="rolle">Betreibt @${esc(i.handle)}</div>
-        <h1 class="name">${esc(i.agent_name)}</h1>
-        <p class="motto">${esc(i.motto)}</p>
-        <div class="steckbrief">
-          <span><b>${esc(i.display_name)}</b></span>
-          <span>${esc(i.niche)}</span>
-        </div>
-      </div>
+    <div class="leitstand">
+      <div class="rolle">Leitstand</div>
+      <h1 class="vorhaben">${esc(i.display_name)}</h1>
+      <p class="untertitel">
+        <a href="https://instagram.com/${encodeURIComponent(i.handle)}" target="_blank"
+           rel="noopener noreferrer">@${esc(i.handle)}</a>
+        <span>${esc(i.niche)}</span>
+      </p>
     </div>`;
 }
 
@@ -1071,23 +1126,6 @@ function zeichne_chancen(d) {
         </div>`;
       }).join("")}
     </div>` : ""}`;
-}
-
-function zeichne_profil(d) {
-  const i = d.identitaet;
-  $("profilbox").innerHTML = !i ? "" : `
-    <h2>Wer er ist</h2>
-    <div class="karte">
-      <dl class="fakten">
-        <dt>Warum dieser Name</dt><dd>${esc(i.agent_why)}</dd>
-        <dt>Zielgruppe</dt><dd>${esc(i.target_audience)}</dd>
-        <dt>Tonfall</dt><dd>${esc(i.tone_of_voice)}</dd>
-        <dt>Bildsprache</dt><dd>${esc(i.visual_identity)}</dd>
-        <dt>Themensäulen</dt><dd>${i.content_pillars.map(esc).join(" · ")}</dd>
-        <dt>Profiltext</dt><dd>${esc(i.bio)}</dd>
-        <dt>Warum das aufgeht</dt><dd>${esc(i.why_this_works)}</dd>
-      </dl>
-    </div>`;
 }
 
 function zeichne_handy(d) {

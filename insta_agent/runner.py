@@ -23,6 +23,7 @@ from .brain import (
     create_post_draft,
     invent_identity,
     pruefe_beitrag,
+    pruefe_gestaltung,
     reflect,
     run_market_research,
     update_strategy,
@@ -432,9 +433,15 @@ class Agent:
                 self.settings.media_dir / f"{basis}.png",
                 groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
             )
+            # Erst die Bildsprache, dann malen: Was zählt, ist der Prompt.
+            # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
+            # zu ändern - und ein zweites Bild kostet zweimal.
+            gestaltung = self._gestalte(draft, identity, report)
             if erzeugt := self._erzeuge_bild(draft, basis, identity, report):
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
+            if gestaltung is not None:
+                self.store.set_gestaltung(post_id, gestaltung)
             bericht = self._pruefe(post_id, draft, identity, report)
 
             report.drafts_written.append(str(image_path))
@@ -496,6 +503,40 @@ class Agent:
             f"Entwurf {post_id}: {bericht.urteil} - {bericht.zusammenfassung}",
         )
         return bericht
+
+    def _gestalte(self, draft, identity, report: CycleReport):
+        """Lässt die Bildsprache über den geplanten Beitrag sehen.
+
+        Der überarbeitete Prompt wird wirklich übernommen - sonst wäre das
+        Urteil nur eine Meinung im Protokoll. Der ursprüngliche Prompt
+        bleibt im Bericht stehen, damit nachvollziehbar ist, was sich
+        geändert hat.
+        """
+        if not self.settings.posting.gestaltung_noetig:
+            return None
+        try:
+            urteil = pruefe_gestaltung(
+                self.brain,
+                identity=identity,
+                draft=draft,
+                mit_suche=self.treasury.state().mode is Mode.NORMAL,
+            )
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Bildsprache fehlgeschlagen: %s", exc)
+            report.steps.append(f"Bildsprache konnte nicht sehen: {exc}")
+            return None
+
+        if neuer := urteil.bildprompt.strip():
+            draft.image_generation_prompt = neuer
+
+        report.steps.append(
+            f"Bildsprache: Niveau {urteil.niveau}/5"
+            + (", Prompt überarbeitet" if urteil.bildprompt.strip() else "")
+        )
+        self.store.log("gestaltung", f"Niveau {urteil.niveau}/5 - {urteil.urteil}")
+        return urteil
 
     def _erzeuge_bild(self, draft, basis: str, identity, report: CycleReport) -> Path | None:
         """Lässt das Bild malen und legt den Hook darüber.

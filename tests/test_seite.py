@@ -41,7 +41,7 @@ def test_jeder_abschnitt_wird_auch_gezeichnet():
 
 @pytest.mark.parametrize(
     "abschnitt",
-    ["held", "vorhaben", "beitraege", "ideen", "chancen", "profil", "handy", "verlauf"],
+    ["kopf", "mannschaft", "vorhaben", "beitraege", "ideen", "chancen", "handy", "verlauf"],
 )
 def test_lesbare_abschnitte_werden_nicht_staendig_neu_gebaut(abschnitt):
     """Sonst klappt jedes aufgeklappte Detail nach zwei Sekunden wieder zu.

@@ -221,6 +221,53 @@ class Pruefbericht(BaseModel):
 
 
 # --------------------------------------------------------------------------
+# Bildsprache - damit es nicht aussieht wie alles andere
+# --------------------------------------------------------------------------
+
+
+class Gestaltungsurteil(BaseModel):
+    """Was die Bildsprache über einen geplanten Beitrag sagt.
+
+    Anders als die Endprüfung hält diese Stimme nichts auf. Gestaltung ist
+    Geschmack, keine Wahrheit - ein Bild kann langweilig sein, ohne falsch
+    zu sein. Was sie liefert, ist der bessere Vorschlag: einen überarbeiteten
+    Bildprompt, der tatsächlich benutzt wird.
+    """
+
+    niveau: int = Field(
+        ge=1, le=5, description="1 heißt beliebig, 5 heißt: das fällt im Feed auf"
+    )
+    urteil: str = Field(description="Das Gesamturteil in zwei bis drei Sätzen")
+    staerken: list[str] = Field(default_factory=list, description="Was schon trägt")
+    schwaechen: list[str] = Field(
+        default_factory=list, description="Woran man es als Massenware erkennt"
+    )
+    verbesserungen: list[str] = Field(
+        default_factory=list,
+        description="Konkrete Eingriffe - nicht 'moderner', sondern was genau anders wird",
+    )
+    bildprompt: str = Field(
+        default="",
+        description=(
+            "Der überarbeitete englische Bildprompt. Leer lassen, wenn der "
+            "vorhandene nicht zu verbessern ist."
+        ),
+    )
+    gesehen: list[str] = Field(
+        default_factory=list,
+        description="Was gerade läuft und woran man sich nicht anhängen sollte",
+    )
+    quellen: list[str] = Field(default_factory=list)
+    geprueft_von: str = Field(default="")
+    mit_suche: bool = Field(default=True)
+
+    @property
+    def taugt(self) -> bool:
+        """Ab vier ist es gut genug, um so hinauszugehen."""
+        return self.niveau >= 4
+
+
+# --------------------------------------------------------------------------
 # Reflexion - der Agent lernt aus seinen Zahlen
 # --------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ from insta_agent.llm import CallResult
 from insta_agent.models import (
     BusinessIdea,
     Competitor,
+    Gestaltungsurteil,
     Identity,
     MarketAnalysis,
     MonetizationPlan,
@@ -137,6 +138,16 @@ def _entwurf() -> PostDraft:
     )
 
 
+def _gestaltungsurteil() -> Gestaltungsurteil:
+    """Die Bildsprache ist zufrieden und laesst den Prompt, wie er ist."""
+    return Gestaltungsurteil(
+        niveau=4,
+        urteil="Der Ausschnitt sitzt, das Licht hat eine Richtung.",
+        staerken=["Harte Kante oben links"],
+        bildprompt="",
+    )
+
+
 def _pruefbericht() -> Pruefbericht:
     """Die Endprüfung findet nichts - das ist der Normalfall im Test.
 
@@ -189,6 +200,7 @@ _ANTWORTEN = {
     Reflection: _reflexion,
     MonetizationPlan: _geschaeftsplan,
     Pruefbericht: _pruefbericht,
+    Gestaltungsurteil: _gestaltungsurteil,
 }
 
 

@@ -17,6 +17,7 @@ from test_cycle import (
     _analyse,
     _entwurf,
     _geschaeftsplan,
+    _gestaltungsurteil,
     _identitaet,
     _pruefbericht,
     _reflexion,
@@ -31,6 +32,7 @@ ANTWORTEN = {
     "Reflection": _reflexion,
     "MonetizationPlan": _geschaeftsplan,
     "Pruefbericht": _pruefbericht,
+    "Gestaltungsurteil": _gestaltungsurteil,
 }
 
 
@@ -128,9 +130,9 @@ def test_die_websuche_geht_an_das_guenstige_modell(agent_mit_mitschrift):
     agent.run_cycle()
 
     mit_suche = [a for a in client.anfragen if a.get("tools")]
-    # Zweimal wird nachgeschlagen: die Marktrecherche und die Endprüfung.
-    # Beide gehen an das Recherchemodell, nicht an das teure.
-    assert len(mit_suche) == 2, "Recherche und Endprüfung sollen je einmal suchen"
+    # Dreimal wird nachgeschlagen: Marktrecherche, Bildsprache, Endprüfung.
+    # Alle drei gehen an das Recherchemodell, nicht an das teure.
+    assert len(mit_suche) == 3, "Recherche, Bildsprache und Endprüfung suchen je einmal"
     for anfrage in mit_suche:
         assert anfrage["model"] == agent.settings.llm.research_model
         assert anfrage["tools"][0]["type"] == "web_search_20260209"

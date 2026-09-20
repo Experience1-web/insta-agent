@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS posts (
     image_path      TEXT,
     draft_json      TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'draft',
-    pruefung_json   TEXT
+    pruefung_json   TEXT,
+    gestaltung_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -89,7 +90,7 @@ class Store:
     # fasst eine bestehende Tabelle nicht an, also müssen sie einzeln
     # nachgezogen werden - sonst scheitert jede Datenbank, die es schon
     # vor der Änderung gab.
-    NACHGETRAGEN = {"posts": {"pruefung_json": "TEXT"}}
+    NACHGETRAGEN = {"posts": {"pruefung_json": "TEXT", "gestaltung_json": "TEXT"}}
 
     def _ergaenze_spalten(self) -> None:
         for tabelle, spalten in self.NACHGETRAGEN.items():
@@ -152,10 +153,17 @@ class Store:
 
     def set_pruefung(self, post_id: int, bericht: Any) -> None:
         """Hängt den Bericht der Endprüfung an den Entwurf."""
-        payload = bericht.model_dump(mode="json") if hasattr(bericht, "model_dump") else bericht
+        self._haenge_an(post_id, "pruefung_json", bericht)
+
+    def set_gestaltung(self, post_id: int, urteil: Any) -> None:
+        """Hängt das Urteil der Bildsprache an den Entwurf."""
+        self._haenge_an(post_id, "gestaltung_json", urteil)
+
+    def _haenge_an(self, post_id: int, spalte: str, inhalt: Any) -> None:
+        payload = inhalt.model_dump(mode="json") if hasattr(inhalt, "model_dump") else inhalt
         with self._tx() as conn:
             conn.execute(
-                "UPDATE posts SET pruefung_json=? WHERE id=?",
+                f"UPDATE posts SET {spalte}=? WHERE id=?",
                 (json.dumps(payload, ensure_ascii=False), post_id),
             )
 
