@@ -151,6 +151,32 @@ class Store:
             )
             return int(cur.lastrowid)
 
+    def get_post(self, post_id: int) -> sqlite3.Row | None:
+        return self._conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+
+    def ersetze_entwurf(self, post_id: int, draft: Any, image_path: str | None) -> bool:
+        """Schreibt einen Entwurf neu - Text, Bild und Befunde.
+
+        Nur solange er noch Entwurf ist: Was schon freigegeben oder
+        veroeffentlicht wurde, wird nicht mehr angefasst. Die alten
+        Pruefvermerke gehen mit, denn sie gelten fuer den alten Text.
+        """
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE posts SET pillar=?, caption=?, hashtags=?, image_path=?, "
+                "draft_json=?, pruefung_json=NULL, gestaltung_json=NULL "
+                "WHERE id=? AND status='draft'",
+                (
+                    draft.pillar,
+                    draft.caption,
+                    json.dumps(draft.hashtags, ensure_ascii=False),
+                    image_path,
+                    json.dumps(draft.model_dump(mode="json"), ensure_ascii=False),
+                    post_id,
+                ),
+            )
+            return cur.rowcount > 0
+
     def set_pruefung(self, post_id: int, bericht: Any) -> None:
         """Hängt den Bericht der Endprüfung an den Entwurf."""
         self._haenge_an(post_id, "pruefung_json", bericht)

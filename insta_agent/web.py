@@ -661,6 +661,28 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json({"ok": True})
 
+        def _nachbessern(self, rumpf: dict) -> None:
+            """Lässt einen beanstandeten Entwurf neu schreiben und neu prüfen."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            try:
+                post_id = int(rumpf.get("id"))
+            except (TypeError, ValueError):
+                self._json({"ok": False, "grund": "Kein gültiger Beitrag."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                ergebnis = agent.nachbessern(post_id)
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Nachbessern fehlgeschlagen: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+            self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
+
         def _erneuere_bildsprache(self) -> None:
             """Lässt den Agenten seine Bildsprache neu schreiben.
 
@@ -845,6 +867,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/modell",
                 "/api/portraits",
                 "/api/bildsprache",
+                "/api/nachbessern",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -874,6 +897,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/bildsprache":
                 self._erneuere_bildsprache()
+                return
+
+            if pfad == "/api/nachbessern":
+                self._nachbessern(rumpf)
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))

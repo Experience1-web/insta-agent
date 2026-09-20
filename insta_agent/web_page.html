@@ -214,6 +214,7 @@
   }
   .marke.live { background: var(--gut); color: #05240f; }
   .marke.warm { background: var(--warnung); color: #2a1c00; }
+  button.klein.warn { background: var(--warnung); color: #2a1c00; font-weight: 600; }
   .marke.aus  { opacity: 0.55; text-decoration: line-through; }
   .klein.gut { background: var(--gut); border-color: var(--gut); color: #05240f; }
   .klein.gut:hover:not(:disabled) { background: #6ee79c; }
@@ -1204,7 +1205,10 @@ function anriss(text, zeichen = 110) {
   return sauber.length <= zeichen ? sauber : sauber.slice(0, zeichen).trimEnd() + " …";
 }
 
+let letzte_entwuerfe = [];
+
 function zeichne_beitraege(d) {
+  letzte_entwuerfe = d.entwuerfe;
   if (!d.entwuerfe.length) { $("postbox").innerHTML = ""; return; }
 
   // Die Karte zeigt, was man zum Entscheiden braucht: Bild, Stand,
@@ -1231,6 +1235,8 @@ function zeichne_beitraege(d) {
           <p class="caption">${esc(anriss(p.bildtext || p.caption, 80))}</p>
           <span class="mehr">Alles ansehen</span>
           ${p.status === "draft" ? `<div class="knopfreihe">
+            ${zu_bessern(p) ? `<button class="klein warn"
+               data-nachbessern="${p.id}">Nachbessern</button>` : ""}
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
             <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>
           </div>` : ""}
@@ -1309,6 +1315,8 @@ function zeige_beitrag(p) {
 
     <div class="knopfreihe" style="margin-top:20px">
       ${p.status === "draft" ? `
+        ${zu_bessern(p) ? `<button class="klein warn"
+           data-nachbessern="${p.id}">Nachbessern</button>` : ""}
         <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
         <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>` : ""}
       <button class="klein" data-text="${esc(volltext(p))}">Text kopieren</button>
@@ -1319,11 +1327,59 @@ function zeige_beitrag(p) {
   verdrahte_entscheidungen($("popupanker"));
 }
 
+/** Hat die Endprüfung etwas gefunden, das sich beheben lässt? */
+function zu_bessern(p) {
+  const pr = p.pruefung;
+  return !!pr && (pr.urteil !== "freigabe" ||
+                  (pr.befunde || []).some(b => b.urteil !== "belegt"));
+}
+
 /** Freigeben und Verwerfen - auf der Karte wie im Popup. */
 function verdrahte_entscheidungen(bereich) {
+  for (const knopf of bereich.querySelectorAll("[data-nachbessern]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      const post = letzte_entwuerfe.find(x => String(x.id) === knopf.dataset.nachbessern);
+      const offen = ((post && post.pruefung && post.pruefung.befunde) || [])
+        .filter(b => b.urteil !== "belegt").length;
+      if (!confirm(
+        `Konrad schreibt den Beitrag neu, damit die ${offen} Beanstandung(en) ` +
+        "wegfallen, malt das Bild neu und lässt ihn noch einmal prüfen.\n\n" +
+        "Das kostet ungefähr zehn Cent und dauert ein bis zwei Minuten.\n\n" +
+        "Weitermachen?")) return;
+
+      knopf.disabled = true;
+      knopf.textContent = "er schreibt neu …";
+      schliesse_popup();
+      const ergebnis = await sende("/api/nachbessern", { id: Number(knopf.dataset.nachbessern) });
+      if (!ergebnis.ok) {
+        alert(ergebnis.grund || "Das hat nicht geklappt.");
+      } else if (ergebnis.urteil === "freigabe") {
+        alert("Nachgebessert. Die Endprüfung hat diesmal nichts beanstandet.");
+      } else if (ergebnis.urteil) {
+        alert(`Nachgebessert, aber die Endprüfung findet weiter ${ergebnis.offen} ` +
+              `Sache(n) (${ergebnis.urteil}). Sieh im Beitrag nach, was noch offen ist.`);
+      } else {
+        alert("Nachgebessert, aber die Endprüfung kam nicht durch. Prüfbericht fehlt.");
+      }
+      gezeichnet.beitraege = null;
+      laden();
+    };
+  }
+
   for (const knopf of bereich.querySelectorAll("[data-freigeben]")) {
     knopf.onclick = e => {
       e.stopPropagation();
+      // Was die Endprüfung beanstandet hat, geht nicht versehentlich raus.
+      const post = letzte_entwuerfe.find(x => String(x.id) === knopf.dataset.freigeben);
+      const offen = ((post && post.pruefung && post.pruefung.befunde) || [])
+        .filter(b => b.urteil !== "belegt");
+      if (offen.length && !confirm(
+        `Die Endprüfung hat ${offen.length} Sache(n) beanstandet:\n\n` +
+        offen.slice(0, 3).map(b => `· ${b.urteil}: ${b.behauptung}`).join("\n") +
+        (offen.length > 3 ? `\n· … und ${offen.length - 3} weitere` : "") +
+        "\n\nDer Beitrag geht unverändert hinaus – nichts wird dabei " +
+        "korrigiert.\n\nTrotzdem veröffentlichen?")) return;
       schliesse_popup();
       entscheide(knopf.dataset.freigeben, "freigeben", knopf);
     };

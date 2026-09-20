@@ -139,6 +139,12 @@ class PostingConfig:
     # liefert die bessere Fassung. Abschalten spart einen Aufruf und
     # kostet den Unterschied zwischen eigenem Bild und Massenware.
     gestaltung_noetig: bool = True
+    # Wie oft ein beanstandeter Beitrag selbsttaetig nachgebessert wird,
+    # bevor er dem Betreiber vorgelegt wird. Jede Runde kostet: einmal neu
+    # schreiben, einmal neu pruefen. Eine Runde faengt das meiste ab; wer
+    # danach noch Befunde hat, hat meist ein Thema erwischt, das nicht
+    # traegt - dann entscheidet besser ein Mensch als eine dritte Runde.
+    nachbesserungen: int = 1
     # Jeder Entwurf geht durch die Endpruefung, bevor er vorgelegt wird.
     # Abschalten spart Geld und kostet die einzige Kontrolle, die es gibt.
     pruefung_noetig: bool = True

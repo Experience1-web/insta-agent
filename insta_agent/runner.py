@@ -11,6 +11,7 @@ verlieren.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from .brain import (
     pruefe_gestaltung,
     reflect,
     run_market_research,
+    ueberarbeite_beitrag,
     update_strategy,
 )
 from .config import Settings
@@ -42,6 +44,7 @@ from .models import (
     MonetizationPlan,
     OpportunityAssessment,
     PostDraft,
+    Pruefbericht,
     Reflection,
     StrategyUpdate,
 )
@@ -446,6 +449,10 @@ class Agent:
             if gestaltung is not None:
                 self.store.set_gestaltung(post_id, gestaltung)
             bericht = self._pruefe(post_id, draft, identity, report)
+            bericht = self._bessere_nach(post_id, bericht, report)
+            if zeile := self.store.get_post(post_id):
+                # Nach einer Nachbesserung steht dort ein anderes Bild.
+                image_path = Path(zeile["image_path"] or image_path)
 
             report.drafts_written.append(str(image_path))
             if self.settings.posting.freigabe_noetig:
@@ -467,6 +474,118 @@ class Agent:
                 report.steps.append(f"Entwurf {post_id} automatisch freigegeben")
 
             recent.append(draft.caption)
+
+    def _bessere_nach(self, post_id: int, bericht, report: CycleReport):
+        """Lässt beanstandete Beiträge selbst nachbessern, begrenzt oft.
+
+        Ohne das legt der Agent dem Betreiber Beiträge mit falschen Zahlen
+        vor und überlässt ihm die Arbeit. Mit unbegrenzten Runden würde er
+        sich an einem Thema festbeißen, das nicht trägt - deshalb die
+        Grenze aus den Einstellungen.
+        """
+        for runde in range(max(self.settings.posting.nachbesserungen, 0)):
+            if bericht is None or bericht.darf_raus:
+                break
+            try:
+                self.treasury.check()
+            except (BudgetExhausted, CycleBudgetExceeded) as exc:
+                report.steps.append(f"Nachbessern ausgelassen: {exc}")
+                break
+
+            ergebnis = self.nachbessern(post_id)
+            if not ergebnis.get("ok"):
+                report.steps.append(f"Nachbessern nicht möglich: {ergebnis.get('grund')}")
+                break
+
+            report.steps.append(
+                f"Entwurf {post_id} nachgebessert ({runde + 1}. Runde)"
+                + (f", Endprüfung: {ergebnis['urteil']}" if ergebnis.get("urteil") else "")
+            )
+            zeile = self.store.get_post(post_id)
+            bericht = (
+                Pruefbericht.model_validate(json.loads(zeile["pruefung_json"]))
+                if zeile and zeile["pruefung_json"]
+                else None
+            )
+
+        if bericht is not None and not bericht.darf_raus:
+            report.steps.append(
+                f"Entwurf {post_id} bleibt beanstandet - das entscheidet ein Mensch"
+            )
+        return bericht
+
+    def nachbessern(self, post_id: int) -> dict:
+        """Schreibt einen beanstandeten Entwurf neu und prüft ihn erneut.
+
+        Das ist der Weg, den es bisher nicht gab: Die Endprüfung fand
+        Fehler, und der Entwurf blieb mit dem roten Vermerk liegen. Wer ihn
+        freigab, veröffentlichte die falsche Zahl - eine Kontrolle, die
+        etwas findet, aber nichts bewirkt, ist die schlechteste aller
+        Möglichkeiten.
+
+        Gibt zurück, was passiert ist. Der Entwurf wird an derselben Stelle
+        ersetzt, mit neuem Bild und frischem Prüfbericht.
+        """
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur ein Entwurf lässt sich nachbessern."}
+        if not zeile["pruefung_json"]:
+            return {"ok": False, "grund": "Ohne Prüfbericht gibt es nichts nachzubessern."}
+
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+
+        alt = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        bericht = Pruefbericht.model_validate(json.loads(zeile["pruefung_json"]))
+        if not bericht.beanstandet and bericht.darf_raus:
+            return {"ok": False, "grund": "Hier hat die Endprüfung nichts beanstandet."}
+
+        self.treasury.check()
+        neu = ueberarbeite_beitrag(
+            self.brain,
+            identity=identity,
+            strategy=self.strategy,
+            draft=alt,
+            bericht=bericht,
+            max_hashtags=self.settings.posting.max_hashtags,
+            modell=self._modell("chef"),
+        )
+        if not neu.visual.footer.strip():
+            neu.visual.footer = f"@{identity.handle}"
+
+        # Ein neues Bild, denn der Text darauf hat sich geändert. Der alte
+        # Dateiname bliebe sonst stehen und zeigte die falsche Zahl.
+        bericht_lauf = CycleReport(started_at=datetime.now(timezone.utc))
+        self._bilder_heute_aus = getattr(self, "_bilder_heute_aus", None)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        basis = f"{stamp}-nachgebessert-{post_id}"
+        bild = render_post_image(
+            neu.visual,
+            self.settings.media_dir / f"{basis}.png",
+            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+        )
+        if erzeugt := self._erzeuge_bild(neu, basis, identity, bericht_lauf):
+            bild = erzeugt
+
+        self.store.ersetze_entwurf(post_id, neu, str(bild))
+
+        # Und noch einmal durch dieselbe Prüfung - sonst wäre die
+        # Nachbesserung nur eine Behauptung.
+        zweiter = self._pruefe(post_id, neu, identity, bericht_lauf)
+        self.store.log(
+            "nachbesserung",
+            f"Entwurf {post_id} nachgebessert"
+            + (f", Endprüfung: {zweiter.urteil}" if zweiter else ""),
+        )
+        return {
+            "ok": True,
+            "urteil": zweiter.urteil if zweiter else None,
+            "offen": len(zweiter.beanstandet) if zweiter else None,
+            "schritte": bericht_lauf.steps,
+        }
 
     def bildsprache_erneuern(self):
         """Lässt den Agenten seine Bildsprache neu schreiben und übernimmt sie.

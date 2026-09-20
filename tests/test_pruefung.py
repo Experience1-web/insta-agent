@@ -330,3 +330,114 @@ def test_ein_gewoehnlicher_bildfehler_haelt_die_bildsprache_nicht_auf(agent_mit_
 
     assert not [s for s in bericht.steps if "Bildsprache uebersprungen" in s]
     assert len([s for s in bericht.steps if "Bildsprache: Niveau" in s]) == 2
+
+
+# --- Nachbessern statt vorlegen -------------------------------------------
+
+
+def _mit_befund(urteil="ablehnen"):
+    return Pruefbericht(
+        urteil=urteil,
+        zusammenfassung="Die Zahl steht so nirgends.",
+        befunde=[Befund(behauptung="12 von 1.000", urteil="falsch", begruendung="-")],
+    )
+
+
+def test_ein_beanstandeter_entwurf_wird_selbst_nachgebessert(agent_mit_doppel, monkeypatch):
+    """Sonst legt er dem Betreiber falsche Zahlen vor und laesst ihn machen."""
+    urteile = [_mit_befund(), Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber.")]
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag", lambda *a, **k: urteile.pop(0) if urteile else urteile
+    )
+
+    bericht = agent_mit_doppel.run_cycle()
+
+    assert any("nachgebessert (1. Runde)" in s for s in bericht.steps)
+    assert not any("bleibt beanstandet" in s for s in bericht.steps)
+
+
+def test_nach_der_nachbesserung_wird_erneut_geprueft(agent_mit_doppel, monkeypatch):
+    """Eine Nachbesserung ohne zweite Pruefung waere nur eine Behauptung."""
+    aufrufe = {"n": 0}
+
+    def zaehlend(*a, **k):
+        aufrufe["n"] += 1
+        return _mit_befund() if aufrufe["n"] == 1 else Pruefbericht(
+            urteil="freigabe", zusammenfassung="ok"
+        )
+
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", zaehlend)
+    agent_mit_doppel.run_cycle()
+
+    assert aufrufe["n"] == 2
+
+
+def test_es_wird_nicht_endlos_nachgebessert(agent_mit_doppel, monkeypatch):
+    """Ein Thema, das nicht traegt, traegt auch nach der fuenften Runde nicht."""
+    aufrufe = {"n": 0}
+
+    def immer_schlecht(*a, **k):
+        aufrufe["n"] += 1
+        return _mit_befund()
+
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", immer_schlecht)
+    bericht = agent_mit_doppel.run_cycle()
+
+    # Eine Erstpruefung plus genau eine Nachbesserung mit ihrer Pruefung.
+    assert aufrufe["n"] == 2
+    assert any("bleibt beanstandet" in s for s in bericht.steps)
+
+
+def test_ohne_nachbesserungen_bleibt_alles_wie_vorher(agent_mit_doppel, monkeypatch):
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+
+    bericht = agent.run_cycle()
+
+    assert not any("nachgebessert" in s for s in bericht.steps)
+
+
+def test_ein_sauberer_beitrag_wird_nicht_nachgebessert(agent_mit_doppel):
+    """Sonst kostet jeder Beitrag doppelt, ohne dass sich etwas aendert."""
+    bericht = agent_mit_doppel.run_cycle()
+
+    assert not any("nachgebessert" in s for s in bericht.steps)
+
+
+def test_nachbessern_ersetzt_bild_und_befunde(agent_mit_doppel, monkeypatch):
+    """Der alte Prüfbericht gilt für den alten Text - er darf nicht stehenbleiben."""
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+
+    entwurf = agent.store.pending_drafts()[0]
+    altes_bild = entwurf["image_path"]
+
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+    ergebnis = agent.nachbessern(entwurf["id"])
+
+    assert ergebnis["ok"] and ergebnis["urteil"] == "freigabe"
+    danach = agent.store.get_post(entwurf["id"])
+    assert danach["image_path"] != altes_bild
+    assert "Jetzt sauber" in danach["pruefung_json"]
+
+
+def test_ein_freigegebener_beitrag_wird_nicht_mehr_angefasst(agent_mit_doppel, monkeypatch):
+    """Was schon unterwegs ist, darf sich nicht unter der Hand aendern."""
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+
+    entwurf = agent.store.pending_drafts()[0]
+    agent.store.freigeben(entwurf["id"])
+
+    ergebnis = agent.nachbessern(entwurf["id"])
+
+    assert not ergebnis["ok"]
+    assert "Entwurf" in ergebnis["grund"]
