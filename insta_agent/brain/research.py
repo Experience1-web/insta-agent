@@ -31,11 +31,17 @@ def run_market_research(brain: Brain, *, identity=None, focus: str | None = None
 # Auftrag
 Recherchiere den aktuellen Stand für diesen Bereich auf Instagram: {topic}
 
-Suche gezielt nach:
-- Welche Formate und Themen dort gerade Reichweite bekommen
+Dein Account ist bildgetrieben: Ein einzelnes erzeugtes Bild muss den
+Beitrag tragen. Suche deshalb gezielt nach:
+
+- Welche bildstarken Themen dort gerade Reichweite bekommen, und woran
+  man ihre Beiträge im Feed schon am Bild erkennt
+- Wo ein starkes Bild nicht nur angeschaut, sondern gespeichert oder
+  weitergeschickt wird - und warum
 - Welche Accounts das Feld besetzen und was ihnen fehlt
 - Welche Lücke ein neuer Account glaubwürdig besetzen kann
-- Was gerade übersättigt ist und wovon du die Finger lassen solltest
+- Was übersättigt ist. Beliebige KI-Kunst, Landschaften und Zitatkacheln
+  gibt es zehntausendfach - such nach dem, was daneben noch frei ist
 
 Du hast höchstens {brain.suchbudget} Suchanfragen. Plane sie,
 bevor du die erste stellst - jede weitere wird abgelehnt und ist verloren.

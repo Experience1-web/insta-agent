@@ -173,3 +173,50 @@ def test_eine_leere_eingabe_bricht_ab():
 
     assert "" in NEIN_WOERTER
     assert "" not in JA_WOERTER
+
+
+# --- Bildgetriebene Ausrichtung -------------------------------------------
+
+
+def test_die_identitaet_verlangt_eine_bildgetriebene_nische():
+    """Vorher stand dort "Du hast kein Fotostudio" - das trieb ihn zum Text."""
+    import inspect
+
+    from insta_agent.brain import identity
+
+    quelle = inspect.getsource(identity.invent_identity)
+    assert "das Bild trägt den Beitrag" in quelle
+    assert "Ein einzelnes Bild muss das Thema tragen" in quelle
+    # Die alte Einschränkung darf nicht zurückkommen.
+    assert "Farbflächen, klare Typografie" not in quelle
+
+
+def test_der_bildprompt_steht_im_auftrag_an_erster_stelle():
+    """Was zuerst gefordert wird, bekommt die meiste Sorgfalt."""
+    import inspect
+
+    from insta_agent.brain import content
+
+    quelle = inspect.getsource(content.create_post_draft)
+    assert quelle.index("## image_generation_prompt") < quelle.index("## hook_text_on_screen")
+
+
+def test_der_bildprompt_verlangt_platz_fuer_die_schrift():
+    """Sonst steht der Hook auf einem unruhigen Bild und ist unlesbar."""
+    import inspect
+
+    from insta_agent.brain import content
+
+    quelle = inspect.getsource(content.create_post_draft)
+    assert "no text, no logos" in quelle
+    assert "ruhige Fläche für die Schrift" in quelle
+
+
+def test_die_nische_darf_keine_echten_belege_verlangen():
+    """Er erzeugt Bilder. Ein erzeugtes Bild darf sich nie als Beweis ausgeben."""
+    import inspect
+
+    from insta_agent.brain import identity
+
+    quelle = inspect.getsource(identity.invent_identity)
+    assert "es darf sich nur nicht als Beweis ausgeben" in quelle

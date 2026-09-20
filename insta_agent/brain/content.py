@@ -48,18 +48,27 @@ def create_post_draft(
 # Auftrag
 Schreibe den nächsten Beitrag. Er zahlt auf dein Wochenziel ein.
 
-## hook_text_on_screen
-Der Satz, der auf dem Bild steht. Höchstens {MAX_HOOK_WOERTER} Wörter.
-Das ist der Musterbruch - er muss dem widersprechen, was der Daumen beim
-Weiterwischen erwartet. Keine Frage, die man mit ja oder nein abnickt.
-Keine Ankündigung ("So geht X"), sondern eine Behauptung, die hängenbleibt.
+## image_generation_prompt - das Wichtigste an diesem Beitrag
+Der Daumen bleibt wegen des Bildes stehen. Alles andere kommt danach.
 
-## image_generation_prompt
-Auf Englisch, für Flux oder Midjourney. Beschreibe Bildinhalt, Licht,
-Farbstimmung, Stil und Kameraperspektive, und schließe mit dem Format
-9:16. Konkret genug, dass zweimal ein ähnliches Bild herauskäme. Lass Platz
-in der Bildmitte oder im oberen Drittel, damit der Hook-Text darauf lesbar
-bleibt. Keine Schrift im Bild - die Schrift kommt später darüber.
+Auf Englisch, für Flux oder Midjourney. Beschreibe:
+Bildinhalt und Motiv, Kameraperspektive und Bildausschnitt, Lichtquelle
+und Lichtrichtung, Farbklima, Material und Oberfläche, Stimmung, Stil
+und Körnung. Schließe mit dem Format 9:16.
+
+Konkret genug, dass zweimal ein ähnliches Bild herauskäme - "beautiful
+landscape" ist kein Prompt. Halte dich an deine Bildsprache, damit man
+den Beitrag im Feed erkennt, bevor man den Namen liest.
+
+Zwei Regeln: Lass eine ruhige Fläche für die Schrift - oberes Drittel
+oder Mitte. Und schreib "no text, no logos" hinein; die Schrift kommt
+erst danach darüber.
+
+## hook_text_on_screen
+Die Zeile, die über dem Bild liegt. Höchstens {MAX_HOOK_WOERTER} Wörter.
+Sie kämpft nicht mit dem Bild, sie dreht es: Sie sagt, was man beim
+Hinsehen nicht sieht. Keine Bildunterschrift, keine Ankündigung ("So geht
+X"), keine Frage, die man mit ja oder nein abnickt.
 
 ## hook (erste Caption-Zeile)
 Die ersten rund 80 Zeichen der Bildunterschrift - mehr sieht niemand,
