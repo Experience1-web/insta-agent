@@ -735,8 +735,14 @@ function pruef_marke(pr) {
 /** Der Reiz des Fundes als Marke: ab 4 hält jemand deswegen an.
  *  Ohne Fund gar keine Marke - dann hat sich der Agent das Thema selbst
  *  gesucht, und genau das war das alte Problem. */
-function reiz_marke(f) {
-  if (!f) return '<span class="marke ungeprueft">ohne Fund</span>';
+function reiz_marke(f, status) {
+  if (!f) {
+    // Bei allem, was schon entschieden ist, waere der Vermerk ein Vorwurf
+    // fuer etwas, das es damals noch nicht gab.
+    return status && status !== "draft"
+      ? ""
+      : '<span class="marke ungeprueft">ohne Fund</span>';
+  }
   const klasse = f.reiz >= 4 ? "gepruft" : f.reiz <= 2 ? "mangel" : "";
   return `<span class="marke ${klasse}">Reiz ${f.reiz}/5</span>`;
 }
@@ -1260,9 +1266,12 @@ function anriss(text, zeichen = 110) {
 }
 
 let letzte_entwuerfe = [];
+// Wer gerade schreibt. Stand hier fest verdrahtet, als es nur einen gab.
+let wer_schreibt = "Er";
 
 function zeichne_beitraege(d) {
   letzte_entwuerfe = d.entwuerfe;
+  wer_schreibt = (d.identitaet && d.identitaet.agent_name) || "Er";
   if (!d.entwuerfe.length) { $("postbox").innerHTML = ""; return; }
 
   // Die Karte zeigt, was man zum Entscheiden braucht: Bild, Stand,
@@ -1281,7 +1290,7 @@ function zeichne_beitraege(d) {
             : `<p class="leerhinweis">Noch kein Bild –<br>es blieb bei der Typografie</p>`}
           <div class="marken">
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
-            ${reiz_marke(p.fund)}
+            ${reiz_marke(p.fund, p.status)}
             ${pruef_marke(p.pruefung)}
           </div>
         </div>
@@ -1291,6 +1300,8 @@ function zeichne_beitraege(d) {
           ${p.status === "draft" ? `<div class="knopfreihe">
             ${zu_bessern(p) ? `<button class="klein warn"
                data-nachbessern="${p.id}">Nachbessern</button>` : ""}
+            ${p.pruefung ? "" : `<button class="klein warn"
+               data-pruefen="${p.id}">Prüfen lassen</button>`}
             <button class="klein" data-bildneu="${p.id}">Bild neu</button>
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
             <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>
@@ -1316,7 +1327,7 @@ function zeige_beitrag(p) {
        src="/media?name=${encodeURIComponent(p.bild)}${anhang}" alt="">` : ""}
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
-      ${reiz_marke(p.fund)}
+      ${reiz_marke(p.fund, p.status)}
       ${pruef_marke(p.pruefung)}
       ${niveau_marke(p.gestaltung)}
       ${p.saeule ? `<span class="marke">${esc(p.saeule)}</span>` : ""}
@@ -1378,6 +1389,8 @@ function zeige_beitrag(p) {
       ${p.status === "draft" ? `
         ${zu_bessern(p) ? `<button class="klein warn"
            data-nachbessern="${p.id}">Nachbessern</button>` : ""}
+        ${p.pruefung ? "" : `<button class="klein warn"
+           data-pruefen="${p.id}">Prüfen lassen</button>`}
         <button class="klein" data-bildneu="${p.id}">Bild neu</button>
         <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
         <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>` : ""}
@@ -1430,7 +1443,7 @@ function verdrahte_entscheidungen(bereich) {
       const offen = ((post && post.pruefung && post.pruefung.befunde) || [])
         .filter(b => b.urteil !== "belegt").length;
       if (!confirm(
-        `Konrad schreibt den Beitrag neu, damit die ${offen} Beanstandung(en) ` +
+        `${wer_schreibt} schreibt den Beitrag neu, damit die ${offen} Beanstandung(en) ` +
         "wegfallen, malt das Bild neu und lässt ihn noch einmal prüfen.\n\n" +
         "Das kostet ungefähr zehn Cent und dauert ein bis zwei Minuten.\n\n" +
         "Weitermachen?")) return;
@@ -1454,6 +1467,31 @@ function verdrahte_entscheidungen(bereich) {
     };
   }
 
+  for (const knopf of bereich.querySelectorAll("[data-pruefen]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm(
+        "Ruth Kellner sieht sich jede Zahl, jede Quelle und jede " +
+        "Tatsachenbehauptung in diesem Beitrag an.\n\n" +
+        "Das kostet ein paar Cent und dauert etwa eine Minute.\n\nWeitermachen?")) return;
+
+      knopf.disabled = true;
+      knopf.textContent = "sie prüft …";
+      schliesse_popup();
+      const ergebnis = await sende("/api/pruefen", { id: Number(knopf.dataset.pruefen) });
+      if (!ergebnis.ok) {
+        alert(ergebnis.grund || "Das hat nicht geklappt.");
+      } else if (ergebnis.urteil === "freigabe") {
+        alert("Geprüft. Ruth hat nichts zu beanstanden.");
+      } else {
+        alert(`Geprüft: ${ergebnis.urteil}, ${ergebnis.offen} Sache(n) beanstandet. ` +
+              "Sieh im Beitrag nach – mit „Nachbessern\u201c lässt er sie beheben.");
+      }
+      gezeichnet.beitraege = null;
+      laden();
+    };
+  }
+
   for (const knopf of bereich.querySelectorAll("[data-freigeben]")) {
     knopf.onclick = e => {
       e.stopPropagation();
@@ -1461,6 +1499,12 @@ function verdrahte_entscheidungen(bereich) {
       const post = letzte_entwuerfe.find(x => String(x.id) === knopf.dataset.freigeben);
       const offen = ((post && post.pruefung && post.pruefung.befunde) || [])
         .filter(b => b.urteil !== "belegt");
+      // Gar kein Bericht ist nicht dasselbe wie ein guter Bericht.
+      if (post && !post.pruefung && !confirm(
+        "Für diesen Beitrag liegt kein Prüfbericht vor – niemand hat die Zahlen " +
+        "und Quellen darin nachgesehen.\n\n" +
+        "Mit „Prüfen lassen\u201c holst du das für ein paar Cent nach.\n\n" +
+        "Trotzdem ungeprüft veröffentlichen?")) return;
       if (offen.length && !confirm(
         `Die Endprüfung hat ${offen.length} Sache(n) beanstandet:\n\n` +
         offen.slice(0, 3).map(b => `· ${b.urteil}: ${b.behauptung}`).join("\n") +

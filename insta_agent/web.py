@@ -689,6 +689,28 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
 
+        def _pruefen(self, rumpf: dict) -> None:
+            """Holt die Endprüfung für einen Entwurf nach, der keine hat."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            try:
+                post_id = int(rumpf.get("id"))
+            except (TypeError, ValueError):
+                self._json({"ok": False, "grund": "Kein gültiger Beitrag."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                ergebnis = agent.pruefe_nach(post_id)
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Prüfung nicht nachgeholt: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+            self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
+
         def _bild_neu(self, rumpf: dict) -> None:
             """Malt das Bild eines Entwurfs neu, ohne den Text anzufassen."""
             if steuerung.nur_lesen:
@@ -896,6 +918,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/portraits",
                 "/api/bildsprache",
                 "/api/nachbessern",
+                "/api/pruefen",
                 "/api/bildneu",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
@@ -930,6 +953,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/nachbessern":
                 self._nachbessern(rumpf)
+                return
+
+            if pfad == "/api/pruefen":
+                self._pruefen(rumpf)
                 return
 
             if pfad == "/api/bildneu":

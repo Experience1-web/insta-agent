@@ -641,7 +641,20 @@ class Agent:
 
         # Und noch einmal durch dieselbe Prüfung - sonst wäre die
         # Nachbesserung nur eine Behauptung.
-        zweiter = self._pruefe(post_id, neu, identity, bericht_lauf)
+        #
+        # Reicht das Geld dafür nicht mehr, bleibt ein neu geschriebener
+        # Entwurf ohne Bericht liegen. Der sieht dann aus wie einer, den
+        # nie jemand geprüft hat - und das ist die gefährlichste aller
+        # Anzeigen. Also wenigstens ins Protokoll damit.
+        try:
+            zweiter = self._pruefe(post_id, neu, identity, bericht_lauf)
+        except (BudgetExhausted, CycleBudgetExceeded):
+            self.store.log(
+                "nachbesserung",
+                f"Entwurf {post_id} nachgebessert, aber nicht mehr geprüft - "
+                "das Budget war aufgebraucht. Vor der Freigabe prüfen lassen.",
+            )
+            raise
         self.store.log(
             "nachbesserung",
             f"Entwurf {post_id} nachgebessert"
@@ -652,6 +665,55 @@ class Agent:
             "urteil": zweiter.urteil if zweiter else None,
             "offen": len(zweiter.beanstandet) if zweiter else None,
             "schritte": bericht_lauf.steps,
+        }
+
+    def pruefe_nach(self, post_id: int) -> dict:
+        """Holt die Endprüfung für einen Entwurf nach, der keinen Bericht hat.
+
+        Ein Entwurf ohne Bericht entsteht auf drei Wegen: Die Prüfung war
+        abgeschaltet, sie ist an einem Netzfehler gescheitert, oder das
+        Geld ging mitten in einer Nachbesserung aus - dann steht dort ein
+        neu geschriebener Text, für den noch niemand nachgesehen hat.
+
+        Alle drei sehen im Dashboard gleich aus: "nicht geprüft". Und
+        solange es keinen Weg gibt, das nachzuholen, bleibt dem Betreiber
+        nur freigeben oder wegwerfen. Das hier ist der dritte Weg.
+        """
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur ein Entwurf lässt sich prüfen."}
+        if zeile["pruefung_json"]:
+            return {"ok": False, "grund": "Dieser Entwurf ist schon geprüft."}
+
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        lauf = CycleReport(started_at=datetime.now(timezone.utc))
+        self.treasury.check()
+
+        # Absichtlich ohne die Abschaltung zu beachten: Wer hier drückt,
+        # will geprüft haben, auch wenn die Prüfung sonst ausgeschaltet ist.
+        bericht = pruefe_beitrag(
+            self.brain,
+            identity=identity,
+            draft=draft,
+            mit_suche=self.treasury.state().mode is Mode.NORMAL,
+            modell=self._modell("pruefung"),
+        )
+        self.store.set_pruefung(post_id, bericht)
+        self.store.log(
+            "pruefung",
+            f"Entwurf {post_id} nachträglich geprüft: {bericht.urteil} - {bericht.zusammenfassung}",
+        )
+        return {
+            "ok": True,
+            "urteil": bericht.urteil,
+            "offen": len(bericht.beanstandet),
+            "schritte": lauf.steps,
         }
 
     def bildsprache_erneuern(self):
