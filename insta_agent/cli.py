@@ -399,48 +399,161 @@ def kasse(
     guthaben: float = typer.Argument(
         None, help="Was wirklich auf dem Konto ist, in USD. Ohne Angabe wird nur gezeigt."
     ),
+    schluessel: bool = typer.Option(
+        False, "--schluessel", help="Admin-Schluessel eintragen, damit er selbst nachrechnet."
+    ),
     config: Path = typer.Option(None),
 ) -> None:
-    """Gleicht die Kasse mit dem echten Guthaben ab.
+    """Zeigt die Kasse und gleicht sie mit dem echten Konto ab.
 
     Der Agent rechnet mit, was ein Aufruf kosten sollte - aus Tokenzahl
-    und Preisliste. Das ist eine Schaetzung. Was auf console.anthropic.com
-    steht, ist die Wahrheit. Trag sie hier ein, damit er seine Grenzen auf
-    echten Zahlen zieht und nicht auf geratenen.
+    und Preisliste. Das ist eine Schaetzung. Mit einem Admin-Schluessel
+    liest er stattdessen die echte Abrechnung und fuehrt seinen Stand von
+    allein nach; ohne ihn traegst du den Stand hier von Hand ein.
     """
+    from .config import set_env_value
+
+    if schluessel:
+        _admin_schluessel_eintragen(set_env_value)
+        return
+
     agent = _agent(config)
     try:
-        stand = agent.treasury.state()
+        vorher = agent.treasury.state()
+
         if guthaben is None:
-            console.print(
-                f"Der Agent rechnet mit [bold]{stand.balance_usd:.2f} USD[/bold]"
-                f" ({stand.mode.value}).\n"
-                "[dim]Echten Stand eintragen: insta-agent kasse 1.11[/dim]"
-            )
+            _kasse_zeigen(agent, vorher)
             return
 
-        differenz = agent.treasury.abgleichen(guthaben)
+        bereits = _bereits_heute(agent)
+        differenz = agent.treasury.setze_anker(guthaben, bereits)
         neu = agent.treasury.state()
         if differenz == 0:
             console.print(f"[green]Stimmt schon:[/green] {neu.balance_usd:.2f} USD.")
         else:
+            farbe = "green" if differenz > 0 else "yellow"
             console.print(
-                f"Vorher [bold]{stand.balance_usd:.2f}[/bold], jetzt "
-                f"[bold]{neu.balance_usd:.2f} USD[/bold] "
-                f"([{'green' if differenz > 0 else 'yellow'}]{differenz:+.2f}[/])."
+                f"Vorher [bold]{vorher.balance_usd:.2f}[/bold], jetzt "
+                f"[bold]{neu.balance_usd:.2f} USD[/bold] ([{farbe}]{differenz:+.2f}[/])."
             )
-        if neu.mode.value == "frugal":
+        if bereits is None:
             console.print(
-                "\n[yellow]Sparbetrieb.[/yellow] Er arbeitet weiter, aber mit dem"
-                " billigen Modell und ohne Websuche."
+                "\n[dim]Den Stand musst du weiter selbst eintragen. Damit er das"
+                " allein kann:\n  insta-agent kasse --schluessel[/dim]"
             )
-        elif neu.mode.value == "halted":
+        else:
             console.print(
-                "\n[red]Zu wenig zum Arbeiten.[/red] Lad Guthaben auf unter"
-                " console.anthropic.com."
+                "\n[green]Ab jetzt rechnet er selbst nach.[/green]"
+                " Vor jedem Zyklus liest er die echte Abrechnung."
             )
+        _modus_hinweis(neu)
     finally:
         agent.close()
+
+
+def _kasse_zeigen(agent, stand) -> None:
+    """Zeigt den Stand - und fuehrt ihn vorher nach, wenn er das kann."""
+    if agent.abrechnung is not None and agent.treasury.rechnet_selbst():
+        try:
+            agent.treasury.aus_abrechnung(agent.abrechnung)
+        except Exception as exc:  # noqa: BLE001 - der Grund gehoert auf den Schirm
+            console.print(f"[yellow]Abrechnung nicht erreichbar:[/yellow] {exc}")
+        else:
+            stand = agent.treasury.state()
+            console.print("[dim]Aus der echten Abrechnung nachgefuehrt.[/dim]")
+
+    console.print(f"Stand: [bold]{stand.balance_usd:.2f} USD[/bold] ({stand.mode.value}).")
+    console.print(
+        f"[dim]Ausgegeben {stand.spent_usd:.2f}, selbst verdient {stand.earned_usd:.2f}.[/dim]"
+    )
+    if not agent.treasury.rechnet_selbst():
+        console.print(
+            "\n[dim]Er schaetzt. Echten Stand eintragen: insta-agent kasse 1.11\n"
+            "Oder ihn selbst nachrechnen lassen: insta-agent kasse --schluessel[/dim]"
+        )
+    _modus_hinweis(stand)
+
+
+def _bereits_heute(agent) -> float | None:
+    """Was heute vor dem Eintragen schon angefallen ist - None ohne Schluessel.
+
+    Die Abrechnung loest nur ganze Tage auf. Ohne diesen Wert wuerde der
+    heutige Verbrauch spaeter ein zweites Mal vom Guthaben abgehen.
+    """
+    if agent.abrechnung is None:
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        return agent.abrechnung.kosten_seit(datetime.now(timezone.utc))
+    except Exception as exc:  # noqa: BLE001 - kein Grund, den Eintrag zu verlieren
+        console.print(f"[yellow]Abrechnung nicht erreichbar:[/yellow] {exc}")
+        return None
+
+
+def _modus_hinweis(stand) -> None:
+    if stand.mode.value == "frugal":
+        console.print(
+            "\n[yellow]Sparbetrieb.[/yellow] Er arbeitet weiter, aber mit dem"
+            " billigen Modell und ohne Websuche."
+        )
+    elif stand.mode.value == "halted":
+        console.print(
+            "\n[red]Zu wenig zum Arbeiten.[/red] Lad Guthaben auf unter"
+            " console.anthropic.com."
+        )
+
+
+def _admin_schluessel_eintragen(set_env_value) -> None:
+    console.print(
+        Panel(
+            "Damit er seinen Kontostand selbst nachrechnet, braucht er Lesezugriff\n"
+            "auf die Abrechnung. Dafuer gibt es einen eigenen Schluessel.\n\n"
+            "[bold]So kommst du daran:[/bold]\n"
+            "  1. console.anthropic.com oeffnen\n"
+            "  2. Settings -> Admin keys -> Create Admin key\n"
+            "  3. Den Schluessel kopieren (faengt mit sk-ant-admin an)\n\n"
+            "[yellow]Wichtig zu wissen:[/yellow] Dieser Schluessel kann mehr als\n"
+            "lesen - er darf auch API-Schluessel anlegen und widerrufen. Der Agent\n"
+            "bekommt ihn nie zu sehen: Er wird nur fuer diesen einen Abruf benutzt\n"
+            "und gerät in keinen Prompt. Wenn dir das zu viel ist, lass es - dann\n"
+            "traegst du den Stand weiter von Hand ein.\n\n"
+            "[dim]Einzelkonten haben keinen Zugang zu dieser Schnittstelle. Falls\n"
+            "die Probe fehlschlaegt, ist das der Grund - dann bleibt es beim\n"
+            "Eintragen von Hand.[/dim]",
+            title="Kontostand selbst nachrechnen",
+        )
+    )
+
+    token = _frag_schluessel("Admin-Schluessel")
+    if not token.startswith("sk-ant-admin"):
+        console.print(
+            "[yellow]Admin-Schluessel fangen mit 'sk-ant-admin' an. Deiner nicht -"
+            " vermutlich ist das der normale API-Schluessel.[/yellow]"
+        )
+        if not _bestaetigt("Trotzdem eintragen?"):
+            raise typer.Exit(1)
+
+    console.print("\n[dim]Probe: rufe die Abrechnung ab ...[/dim]")
+    from datetime import datetime, timezone
+
+    from .economy.abrechnung import Abrechnung, Abrechnungsfehler
+
+    probe = Abrechnung(token)
+    try:
+        kosten = probe.kosten_seit(datetime.now(timezone.utc))
+    except Abrechnungsfehler as exc:
+        console.print(f"[red]Geht nicht:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    finally:
+        probe.close()
+
+    set_env_value("ANTHROPIC_ADMIN_KEY", token)
+    console.print(
+        f"[green]Probe bestanden.[/green] Heute abgerechnet: {kosten:.2f} USD.\n\n"
+        "Jetzt noch einmal den echten Stand eintragen, dann rechnet er ab da\n"
+        "allein weiter:\n  [bold]insta-agent kasse 1.11[/bold]"
+    )
 
 
 @app.command()

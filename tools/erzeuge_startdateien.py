@@ -115,10 +115,13 @@ echo.
 echo   Der Agent schaetzt seine Kosten selbst. Die Wahrheit steht auf
 echo   console.anthropic.com unter "Organisations-Credits".
 echo.
-echo   Trag die Zahl hier ein, damit er seine Grenzen auf echten
-echo   Zahlen zieht. Punkt statt Komma: 1.11
+echo   Trag die Zahl hier ein. Punkt statt Komma: 1.11
 echo.
-set /p BETRAG=Guthaben in USD (leer lassen zeigt nur den Stand): 
+echo   Leer lassen zeigt nur den Stand.
+echo   Ein s richtet ein, dass er selbst nachrechnet.
+echo.
+set /p BETRAG=Guthaben in USD: 
+if /i "%BETRAG%"=="s" goto schluessel
 if "%BETRAG%"=="" goto zeigen
 %PY% -m insta_agent.cli kasse %BETRAG%
 echo.
@@ -126,6 +129,11 @@ pause
 exit /b
 :zeigen
 %PY% -m insta_agent.cli kasse
+echo.
+pause
+exit /b
+:schluessel
+%PY% -m insta_agent.cli kasse --schluessel
 echo.
 pause""",
     "14 - Jetzt posten.bat": f"""{KOPF}

@@ -184,6 +184,10 @@ class Settings:
     draft_dir: Path = REPO_ROOT / "out" / "drafts"
 
     anthropic_api_key: str | None = None
+    # Nur zum Lesen der Abrechnung, damit die Kasse ohne Zutun stimmt.
+    # Ein Admin-Schlüssel kann mehr als das, deshalb wird er ausschließlich
+    # in economy/abrechnung.py verwendet und gerät nie in einen Prompt.
+    admin_api_key: str | None = None
     ig_user_id: str | None = None
     ig_access_token: str | None = None
     meta_app_id: str | None = None
@@ -254,6 +258,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         _merge(settings.bild, raw.get("bild"))
 
     settings.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    settings.admin_api_key = os.getenv("ANTHROPIC_ADMIN_KEY") or None
     if anbieter := os.getenv("BILD_ANBIETER"):
         settings.bild.anbieter = anbieter
     settings.bild.token = (

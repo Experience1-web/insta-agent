@@ -10,12 +10,14 @@ bleibt eine bewusste menschliche Entscheidung.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 
 from ..config import EconomyConfig
 from ..store import Store
 
 TREASURY_SEED_KEY = "treasury_seeded_usd"
+TREASURY_ANKER_KEY = "treasury_anker"
 
 # Geld, das vom Betreiber kommt und nicht vom Agenten verdient wurde:
 # das Startkapital und spätere Korrekturen am Kontostand. Beides darf
@@ -103,6 +105,51 @@ class Treasury:
     def earn(self, amount_usd: float, category: str, note: str = "", meta: object = None) -> None:
         """Bucht eine Einnahme aus einem Geschäft des Agenten."""
         self.store.add_ledger_entry("revenue", category, abs(amount_usd), note, meta)
+
+    def setze_anker(self, guthaben: float, bereits_heute: float | None = None) -> float:
+        """Merkt sich einen echten Kontostand als Ausgangspunkt.
+
+        `bereits_heute` ist, was an diesem Tag vor dem Eintragen schon
+        angefallen ist. Die Abrechnung löst nur ganze Tage auf, also muss
+        dieser Teil später wieder abgezogen werden - sonst würde er ein
+        zweites Mal vom Guthaben abgehen.
+
+        Ohne diesen Wert bleibt es beim Eintragen von Hand: Es fehlt der
+        Bezugspunkt, um später allein weiterzurechnen.
+        """
+        self.store.set_json(
+            TREASURY_ANKER_KEY,
+            {
+                "zeitpunkt": datetime.now(timezone.utc).isoformat(),
+                "guthaben": float(guthaben),
+                "bereits": None if bereits_heute is None else float(bereits_heute),
+            },
+        )
+        return self.abgleichen(guthaben)
+
+    def anker(self) -> dict | None:
+        return self.store.get_json(TREASURY_ANKER_KEY)
+
+    def rechnet_selbst(self) -> bool:
+        """Ob der Agent seinen Stand ohne Zutun fortschreiben kann."""
+        anker = self.anker()
+        return bool(anker) and anker.get("bereits") is not None
+
+    def aus_abrechnung(self, abrechnung: object) -> float | None:
+        """Schreibt den Kontostand aus der echten Abrechnung fort.
+
+        Gibt die gebuchte Differenz zurück, oder None, wenn es nichts
+        fortzuschreiben gibt - dann bleibt es bei der Schätzung.
+        """
+        anker = self.anker()
+        if not anker or anker.get("bereits") is None:
+            return None
+
+        seit = datetime.fromisoformat(anker["zeitpunkt"])
+        # Was seit dem Ankertag abgerechnet wurde, ohne den Teil dieses
+        # Tages, der schon vor dem Ankern angefallen war.
+        verbraucht = abrechnung.kosten_seit(seit) - float(anker["bereits"])
+        return self.abgleichen(float(anker["guthaben"]) - max(verbraucht, 0.0))
 
     def abgleichen(self, ist_guthaben: float) -> float:
         """Setzt den Kontostand auf den echten Wert und gibt die Differenz zurück.

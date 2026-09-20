@@ -79,6 +79,12 @@ class Agent:
         self.settings = settings
         self.store = Store(settings.db_path)
         self.treasury = Treasury(self.store, settings.economy)
+
+        from .economy.abrechnung import baue_abrechnung
+
+        # Ohne Admin-Schlüssel bleibt es beim Schätzen - kein Fehler, nur
+        # ungenauer.
+        self.abrechnung = baue_abrechnung(settings.admin_api_key)
         self.brain = Brain(settings.llm, self.treasury, settings.anthropic_api_key)
 
         self.ig: InstagramClient | None = None
@@ -108,6 +114,8 @@ class Agent:
     def close(self) -> None:
         if self.ig:
             self.ig.close()
+        if self.abrechnung is not None:
+            self.abrechnung.close()
         if self.bildgenerator is not None and hasattr(self.bildgenerator, "close"):
             self.bildgenerator.close()
         self.store.close()
@@ -262,12 +270,35 @@ class Agent:
         )
         return identity
 
+    def _kasse_nachfuehren(self) -> None:
+        """Den Kontostand aus der echten Abrechnung fortschreiben.
+
+        Vor jedem Zyklus, denn daran hängen Sparbetrieb und Stopp. Schlägt
+        es fehl, wird weitergearbeitet: Eine nicht erreichbare Abrechnung
+        ist kein Grund, den Tag ausfallen zu lassen - dann gelten eben die
+        geschätzten Zahlen wie vorher.
+        """
+        if self.abrechnung is None:
+            return
+        try:
+            differenz = self.treasury.aus_abrechnung(self.abrechnung)
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Kasse nicht nachgefuehrt: %s", exc)
+            return
+        if differenz:
+            log.info(
+                "Kasse nachgefuehrt: %+.4f USD, Stand %.2f USD",
+                differenz,
+                self.treasury.state().balance_usd,
+            )
+
     # -- Ein Zyklus --------------------------------------------------------
 
     def run_cycle(self, *, operator_hint: str | None = None) -> CycleReport:
         cycle = self.store.next_cycle_number()
         report = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.begin_cycle()
+        self._kasse_nachfuehren()
 
         try:
             self._run_cycle_inner(cycle, report, operator_hint)
