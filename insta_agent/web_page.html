@@ -113,13 +113,29 @@
 
   /* ---------- Das Vorhaben ---------- */
   .vorhaben { border-left: 3px solid var(--akzent); }
-  .ziel { font-size: clamp(19px, 2.5vw, 25px); font-weight: 700; line-height: 1.3;
-          letter-spacing: -0.02em; margin: 0 0 14px; }
+  /* Frueher stand das Ziel in Ueberschriftengroesse. Das ging, solange es
+     ein Satz war - inzwischen schreibt er Absaetze, und ein Absatz in 25px
+     fett ist eine Wand. Gross genug, um herauszustechen, klein genug, um
+     ein Absatz sein zu duerfen. */
+  .ziel { font-size: clamp(16.5px, 1.5vw, 19px); font-weight: 600; line-height: 1.5;
+          letter-spacing: -0.01em; margin: 0 0 12px; max-width: 68ch; }
+  /* Im Fenster ist das Ziel ein Absatz, keine Schlagzeile - fett ueber
+     fuenf Zeilen liest sich niemand durch. */
+  .popup-inhalt .ziel { font-size: 17px; font-weight: 500; line-height: 1.6;
+                        border-left: 3px solid var(--akzent); padding-left: 16px; }
   .begruendung { color: var(--leise); margin: 0 0 18px; max-width: 72ch; }
   dl.fakten { display: grid; grid-template-columns: max-content 1fr;
-              gap: 9px 22px; margin: 0; font-size: 14.5px; }
+              gap: 14px 24px; margin: 0; font-size: 14.5px; }
   dl.fakten dt { color: var(--leise); }
-  dl.fakten dd { margin: 0; }
+  /* Ohne eigene Zeilenhoehe backen mehrzeilige Werte ineinander. */
+  dl.fakten dd { margin: 0; line-height: 1.6; }
+  dl.fakten ul { margin: 0; padding-left: 18px; }
+  dl.fakten li { margin: 3px 0; }
+  @media (max-width: 620px) {
+    /* Nebeneinander bleibt auf dem Handy kein Platz fuer den Wert. */
+    dl.fakten { grid-template-columns: 1fr; gap: 4px; }
+    dl.fakten dt { margin-top: 10px; }
+  }
 
   /* ---------- Beiträge ---------- */
   /* Zwei Beitraege nebeneinander, das Bild daneben statt darueber: So
@@ -133,6 +149,9 @@
   .beitrag img { width: 100%; display: block; background: #000; }
   @media (min-width: 900px) {
     .beitrag { display: grid; grid-template-columns: 200px 1fr; align-items: start; }
+    /* Ohne Bild bliebe die Bildspalte leer stehen und der Text quetschte
+       sich in die Haelfte der Karte. */
+    .beitrag.ohnebild { grid-template-columns: 1fr; }
     /* Beide Knoepfe sollen nebeneinander passen und nicht umbrechen. */
     .beitrag .knopfreihe > * { flex: 1 1 auto; text-align: center; }
     /* Kein festes Seitenverhaeltnis: Der Renderer liefert je nach
@@ -359,6 +378,13 @@
                       border-color 0.16s ease; }
   .beitrag.klickbar:hover { transform: translateY(-3px); border-color: var(--akzent); }
   .beitrag .inhalt > div:first-child { display: flex; flex-wrap: wrap; gap: 6px; }
+  .vorhabenfuss { display: flex; align-items: center; gap: 12px;
+                    flex-wrap: wrap; margin-top: 2px; }
+  .vorhabenfuss .mehr { margin: 0; }
+  .karte.klickbar { cursor: pointer; transition: transform 0.16s ease,
+                    border-color 0.16s ease; }
+  .karte.klickbar:hover { transform: translateY(-2px); border-color: var(--akzent); }
+  .karte.klickbar:hover .mehr::after { transform: translateX(3px); }
   .mehr {
     font-size: 13px; color: var(--akzent); margin-top: 2px;
     display: inline-flex; align-items: center; gap: 5px;
@@ -972,20 +998,45 @@ function zeichne_kasse(d) {
     </div>`;
 }
 
+/** Der erste Satz - genug, um zu wissen, worum es geht. */
+function erster_satz(text, hoechstens = 150) {
+  const sauber = String(text || "").replace(/\s+/g, " ").trim();
+  const punkt = sauber.search(/[.!?]\s/);
+  const satz = punkt > 20 ? sauber.slice(0, punkt + 1) : sauber;
+  return satz.length <= hoechstens ? satz : anriss(satz, hoechstens);
+}
+
+function fakten_html(s) {
+  const liste = w => `<ul>${w.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  return `
+    <dl class="fakten">
+      <dt>Taktung</dt><dd>${esc(s.posting_cadence)}</dd>
+      <dt>Woran er misst</dt><dd>${liste(s.kpis_to_watch)}</dd>
+      ${s.changes.length ? `<dt>Was er ändert</dt><dd>${liste(s.changes)}</dd>` : ""}
+      ${s.experiments.length ? `<dt>Was er testet</dt><dd>${liste(s.experiments)}</dd>` : ""}
+    </dl>`;
+}
+
 function zeichne_vorhaben(d) {
   const s = d.strategie;
+  // Auf der Seite steht der erste Satz und die Taktung. Alles andere ist
+  // inzwischen zu lang, um im Vorbeigehen gelesen zu werden - das gehoert
+  // ins Fenster, nicht auf die Seite.
   $("vorhabenbox").innerHTML = !s ? "" : `
     <h2>Sein Vorhaben für diese Woche</h2>
-    <div class="karte vorhaben">
-      <p class="ziel">${esc(s.current_goal)}</p>
-      <p class="begruendung">${esc(s.reasoning)}</p>
-      <dl class="fakten">
-        <dt>Taktung</dt><dd>${esc(s.posting_cadence)}</dd>
-        <dt>Woran er misst</dt><dd>${s.kpis_to_watch.map(esc).join(" · ")}</dd>
-        ${s.changes.length ? `<dt>Was er ändert</dt><dd>${s.changes.map(esc).join("<br>")}</dd>` : ""}
-        ${s.experiments.length ? `<dt>Was er testet</dt><dd>${s.experiments.map(esc).join("<br>")}</dd>` : ""}
-      </dl>
+    <div class="karte vorhaben klickbar" id="vorhabenkarte">
+      <p class="ziel">${esc(erster_satz(s.current_goal))}</p>
+      <div class="vorhabenfuss">
+        <span class="marke">${esc(anriss(s.posting_cadence, 44))}</span>
+        <span class="mehr">Ganzes Vorhaben</span>
+      </div>
     </div>`;
+
+  const karte = $("vorhabenkarte");
+  if (karte) karte.onclick = () => oeffne_popup("Vorhaben für diese Woche", `
+    <p class="ziel">${esc(s.current_goal)}</p>
+    <p class="begruendung">${esc(s.reasoning)}</p>
+    ${fakten_html(s)}`);
 }
 
 function zeichne_protokoll(d) {
@@ -1080,7 +1131,7 @@ function zeichne_beitraege(d) {
     <h2>Seine Arbeit</h2>
     <p class="hinweis" style="margin:-6px 0 16px">${arbeitsweise(d)}</p>
     <div class="gitter beitraege">${d.entwuerfe.map((p, i) => `
-      <article class="beitrag klickbar" data-oeffnen="${p.id}"
+      <article class="beitrag klickbar ${p.bild ? "" : "ohnebild"}" data-oeffnen="${p.id}"
                style="animation-delay:${Math.min(i, 8) * 45}ms">
         ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"
              alt="" loading="lazy">` : ""}
