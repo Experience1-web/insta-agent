@@ -677,3 +677,166 @@ def test_das_format_ist_nah_am_hochformat():
     b, h = LeonardoGenerator.BREITE, LeonardoGenerator.HOEHE
     assert b % 8 == 0 and h % 8 == 0
     assert 0.78 <= b / h <= 0.82
+
+
+# --- Pollinations: ohne Konto, ohne Schluessel -----------------------------
+
+
+def _pollinations(handler, token=None):
+    import httpx
+
+    from insta_agent.imaging.generator import PollinationsGenerator
+
+    g = PollinationsGenerator(token)
+    g.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return g
+
+
+def test_pollinations_holt_das_bild_in_einem_aufruf(tmp_path):
+    """Der ganze Dienst ist eine Adresse - kein Auftrag, kein Nachfragen."""
+    import httpx
+
+    gesehen = {}
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        gesehen["pfad"] = anfrage.url.path
+        gesehen["roh"] = str(anfrage.url)
+        gesehen["params"] = dict(anfrage.url.params)
+        return httpx.Response(200, content=b"\x89PNG-echt",
+                              headers={"content-type": "image/png"})
+
+    ziel = _pollinations(antworte).erzeuge("ein Flur mit hartem Licht", tmp_path / "b.png")
+
+    assert ziel.read_bytes() == b"\x89PNG-echt"
+    # Der Prompt steht im Pfad und muss dort kodiert sein - sonst zerlegt
+    # ein Leerzeichen oder ein Schraegstrich die Adresse.
+    assert " " not in gesehen["roh"].split("?")[0]
+    assert gesehen["pfad"].endswith("ein Flur mit hartem Licht")
+    assert gesehen["params"]["model"] == "flux"
+
+
+def test_jeder_aufruf_bekommt_eine_andere_saat(tmp_path):
+    """Ohne das kaeme bei gleichem Prompt immer dasselbe Bild - und der
+    Knopf "Bild neu" waere wirkungslos."""
+    import httpx
+
+    saaten = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        saaten.append(anfrage.url.params.get("seed"))
+        return httpx.Response(200, content=b"x", headers={"content-type": "image/png"})
+
+    g = _pollinations(antworte)
+    for i in range(5):
+        g.erzeuge("derselbe Prompt", tmp_path / f"b{i}.png")
+
+    assert len(set(saaten)) == 5
+
+
+def test_ohne_schluessel_geht_kein_schluessel_mit(tmp_path):
+    import httpx
+
+    gesehen = {}
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        gesehen.update(dict(anfrage.url.params))
+        return httpx.Response(200, content=b"x", headers={"content-type": "image/png"})
+
+    _pollinations(antworte).erzeuge("x", tmp_path / "b.png")
+
+    assert "token" not in gesehen
+
+
+def test_eine_fehlerseite_wird_nicht_als_bild_gespeichert(tmp_path):
+    """Sonst liegt HTML mit der Endung .png im Medienordner."""
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _pollinations(lambda a: httpx.Response(
+        200, text="<html>overloaded</html>", headers={"content-type": "text/html"}))
+
+    with pytest.raises(Bildfehler, match="kein Bild"):
+        g.erzeuge("x", tmp_path / "b.png")
+    assert not (tmp_path / "b.png").exists()
+
+
+def test_ueberlastung_wird_verstaendlich_gemeldet(tmp_path):
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _pollinations(lambda a: httpx.Response(429))
+
+    with pytest.raises(Bildfehler, match="überlastet"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+# --- Cloudflare Workers AI -------------------------------------------------
+
+
+def _cloudflare(handler, token="konto123:schluessel456"):
+    import httpx
+
+    from insta_agent.imaging.generator import CloudflareGenerator
+
+    g = CloudflareGenerator(token)
+    g.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return g
+
+
+def test_cloudflare_entschluesselt_das_bild(tmp_path):
+    import base64
+
+    import httpx
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        assert "konto123" in str(anfrage.url)
+        assert "flux-1-schnell" in str(anfrage.url)
+        return httpx.Response(200, json={
+            "result": {"image": base64.b64encode(b"\x89PNG-cf").decode()}})
+
+    ziel = _cloudflare(antworte).erzeuge("ein Flur", tmp_path / "b.png")
+
+    assert ziel.read_bytes() == b"\x89PNG-cf"
+
+
+def test_konto_und_schluessel_stehen_in_einer_einstellung():
+    """Zwei Felder waeren eine Stelle mehr, an der man sich vertut."""
+    from insta_agent.imaging.generator import CloudflareGenerator
+
+    g = CloudflareGenerator("abc123:geheim")
+    assert g.konto == "abc123"
+    assert g.schluessel == "geheim"
+
+
+def test_eine_halbe_angabe_sagt_was_fehlt(tmp_path):
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _cloudflare(lambda a: httpx.Response(200), token="nur-ein-schluessel")
+
+    with pytest.raises(Bildfehler, match="Doppelpunkt"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_ein_erschoepftes_tageskontingent_sagt_wann_es_weitergeht(tmp_path):
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _cloudflare(lambda a: httpx.Response(429, json={"errors": [{"message": "limit"}]}))
+
+    with pytest.raises(Bildfehler, match="Mitternacht"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_beide_neuen_wege_stehen_zur_auswahl():
+    from insta_agent.imaging.generator import ANBIETER, OHNE_SCHLUESSEL
+
+    assert "pollinations" in ANBIETER
+    assert "cloudflare" in ANBIETER
+    # Pollinations braucht nicht einmal ein Konto.
+    assert "pollinations" in OHNE_SCHLUESSEL
+    assert "cloudflare" not in OHNE_SCHLUESSEL

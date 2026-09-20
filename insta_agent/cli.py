@@ -660,18 +660,25 @@ def bilder(
         Panel(
             "Der Agent schreibt die Bildbeschreibung selbst. Malen lassen muss\n"
             "er sie woanders - Claude kann das nicht.\n\n"
-            "[bold]1  Google Gemini[/bold]  [green]kostenlos moeglich[/green]\n"
+            "[bold]1  Pollinations[/bold]  [green]kostenlos, nichts einzurichten[/green]\n"
+            "   FLUX ohne Konto und ohne Schluessel. Sofort einsatzbereit.\n"
+            "   [dim]Ohne kostenloses Konto kann ein Wasserzeichen im Bild\n"
+            "   landen, und ein Dienst ohne Anmeldung gibt keine Zusagen -\n"
+            "   bei Ueberlastung bleibt es bei der Typografie.[/dim]\n\n"
+            "[bold]2  Cloudflare[/bold]  [green]rund 170 Bilder am Tag frei[/green]\n"
+            "   FLUX.1 schnell. Braucht ein kostenloses Cloudflare-Konto,\n"
+            "   Kontonummer und einen Schluessel mit dem Recht 'Workers AI'.\n"
+            "   Setzt sich jede Nacht zurueck.\n\n"
+            "[bold]3  Google Gemini[/bold]  [green]kostenlos moeglich[/green]\n"
             "   Schluessel auf aistudio.google.com, ohne Zahlungsdaten.\n"
-            "   Google gibt ein Freikontingent pro Tag - knapp, aber fuer\n"
-            "   ein paar Beitraege reicht es. Ist es aufgebraucht, bleibt es\n"
-            "   bis zum naechsten Tag bei der Typografie.\n\n"
-            "[bold]2  Eigener Rechner[/bold]  [green]dauerhaft kostenlos[/green]\n"
+            "   Knappes Freikontingent pro Tag.\n\n"
+            "[bold]4  Eigener Rechner[/bold]  [green]dauerhaft kostenlos[/green]\n"
             "   Braucht eine NVIDIA-Karte ab 8 GB und ein laufendes\n"
             "   Bildprogramm (AUTOMATIC1111, Forge, SD.Next) mit --api.\n"
             "   Einmal aufbauen, danach keine Grenzen.\n\n"
-            "[bold]3  Replicate[/bold]  wenige Cent je Bild\n"
+            "[bold]5  Replicate[/bold]  wenige Cent je Bild\n"
             "   Kein Aufbau, keine Grenzen, beste Qualitaet.\n\n"
-            "[bold]4  Leonardo.ai[/bold]  [green]5 USD Startguthaben[/green]\n"
+            "[bold]6  Leonardo.ai[/bold]  [green]5 USD Startguthaben[/green]\n"
             "   FLUX und Phoenix. Neue Zugaenge bekommen 5 USD, die nicht\n"
             "   verfallen - etwa hundert Bilder, deutlich besser als Gemini.\n"
             "   [dim]Achtung: Die 150 Freitoken am Tag gelten fuer die Webseite,\n"
@@ -681,9 +688,9 @@ def bilder(
         )
     )
 
-    wahl = typer.prompt("Welcher Weg? [1/2/3/4]", default="1").strip()[:1]
+    wahl = typer.prompt("Welcher Weg? [1/2/3/4/5/6]", default="1").strip()[:1]
 
-    if wahl == "2":
+    if wahl == "4":
         adresse = typer.prompt("Adresse des Bildprogramms", default="http://127.0.0.1:7860")
         set_env_value("BILD_ANBIETER", "lokal")
         set_env_value("BILD_TOKEN", adresse.strip().rstrip("/"))
@@ -699,7 +706,7 @@ def bilder(
         _bild_fertig()
         return
 
-    if wahl == "3":
+    if wahl == "5":
         token = _frag_schluessel("Schluessel von replicate.com")
         set_env_value("BILD_ANBIETER", "replicate")
         set_env_value("BILD_TOKEN", token)
@@ -714,7 +721,7 @@ def bilder(
         _bild_fertig()
         return
 
-    if wahl == "4":
+    if wahl == "6":
         console.print(
             "\n[dim]Den Schluessel bekommst du unter app.leonardo.ai ->\n"
             "User Settings -> API Access -> Create New Key. Beim ersten Mal\n"
@@ -738,15 +745,48 @@ def bilder(
         _bild_fertig()
         return
 
-    token = _frag_schluessel("Schluessel von aistudio.google.com")
-    set_env_value("BILD_ANBIETER", "gemini")
-    set_env_value("BILD_TOKEN", token)
-    set_env_value("BILD_MODELL", "gemini-2.5-flash-image")
-    set_env_value("BILD_KOSTEN", "0")
+    if wahl == "2":
+        console.print(
+            "\n[dim]Beides steht im Cloudflare-Dashboard:\n"
+            "  Kontonummer: rechts in der Seitenleiste unter 'Account ID'\n"
+            "  Schluessel:  Mein Profil -> API-Tokens -> Token erstellen,\n"
+            "               Recht 'Workers AI' -> Read[/dim]\n"
+        )
+        konto = typer.prompt("Kontonummer (Account ID)").strip()
+        schluessel = _frag_schluessel("Zugriffsschluessel")
+        set_env_value("BILD_ANBIETER", "cloudflare")
+        # Beide Angaben in einer Einstellung: eine Stelle weniger, an der
+        # man sich vertun kann.
+        set_env_value("BILD_TOKEN", f"{konto}:{schluessel}")
+        set_env_value("BILD_MODELL", "")
+        set_env_value("BILD_KOSTEN", "0")
+        _bild_fertig()
+        return
+
+    if wahl == "3":
+        token = _frag_schluessel("Schluessel von aistudio.google.com")
+        set_env_value("BILD_ANBIETER", "gemini")
+        set_env_value("BILD_TOKEN", token)
+        set_env_value("BILD_MODELL", "gemini-2.5-flash-image")
+        set_env_value("BILD_KOSTEN", "0")
+        console.print(
+            "\n[dim]Falls du dort spaeter Zahlungsdaten hinterlegst, trag die Kosten\n"
+            "pro Bild mit `insta-agent bilder` neu ein - sonst rechnet er mit null.[/dim]"
+        )
+        _bild_fertig()
+        return
+
+    # Weg 1: Pollinations. Nichts einzurichten - deshalb die Voreinstellung.
     console.print(
-        "\n[dim]Falls du dort spaeter Zahlungsdaten hinterlegst, trag die Kosten\n"
-        "pro Bild mit `insta-agent bilder` neu ein - sonst rechnet er mit null.[/dim]"
+        "\n[dim]Pollinations braucht keinen Schluessel. Wenn du auf\n"
+        "auth.pollinations.ai einen kostenlosen Zugang anlegst, faellt das\n"
+        "Wasserzeichen weg - sonst einfach leer lassen.[/dim]\n"
     )
+    token = _frag_schluessel("Schluessel von Pollinations (oder leer lassen)", noetig=False)
+    set_env_value("BILD_ANBIETER", "pollinations")
+    set_env_value("BILD_TOKEN", token)
+    set_env_value("BILD_MODELL", "flux")
+    set_env_value("BILD_KOSTEN", "0")
     _bild_fertig()
 
 

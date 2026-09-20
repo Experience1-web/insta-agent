@@ -14,10 +14,12 @@ bekommt None und nimmt die typografische Fassung, die immer funktioniert.
 
 from __future__ import annotations
 
+import base64
 import logging
+import random
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -458,15 +460,167 @@ def _leonardo_fehler(antwort: httpx.Response) -> Bildfehler:
     return Bildfehler(f"Leonardo antwortete mit {antwort.status_code}: {antwort.text[:200]}")
 
 
+
+class PollinationsGenerator:
+    """Pollinations: FLUX ohne Konto, ohne Schlüssel, ohne Guthaben.
+
+    Der ganze Aufruf ist eine Adresse: Prompt hinein, Bild heraus. Damit
+    ist es der einzige Weg, der sofort funktioniert - keine Anmeldung, kein
+    Schlüssel, nichts einzurichten.
+
+    Zwei Dinge dazu, damit niemand sich täuscht: Ohne Konto kann ein
+    Wasserzeichen im Bild landen (mit `token` fällt es weg, kostenlos zu
+    bekommen). Und ein Dienst ohne Anmeldung gibt keine Zusagen - wenn er
+    überlastet ist, dauert es oder es kommt nichts. Deshalb bleibt die
+    typografische Fassung die Rückfallebene.
+    """
+
+    name = "pollinations"
+    ADRESSE = "https://image.pollinations.ai/prompt"
+
+    # 4:5 für den Feed, beide Maße durch 8 teilbar.
+    BREITE, HOEHE = 864, 1080
+
+    # Ein Bild kann eine Weile brauchen - der Dienst rechnet beim Abruf.
+    def __init__(self, token: str | None = None, modell: str = "", *, timeout: float = 180.0) -> None:
+        self.token = (token or "").strip()
+        self.modell = modell.strip() or "flux"
+        self.client = httpx.Client(timeout=timeout, follow_redirects=True)
+
+    def close(self) -> None:
+        self.client.close()
+
+    def erzeuge(self, prompt: str, ziel: Path) -> Path:
+        from urllib.parse import quote
+
+        params: dict[str, Any] = {
+            "model": self.modell,
+            "width": self.BREITE,
+            "height": self.HOEHE,
+            # Ohne das kommt bei gleichem Prompt immer dasselbe Bild - und
+            # "Bild neu" wäre wirkungslos.
+            "seed": random.randint(1, 2_000_000_000),
+            "nologo": "true",
+        }
+        if self.token:
+            params["token"] = self.token
+
+        antwort = self.client.get(f"{self.ADRESSE}/{quote(prompt[:1800], safe='')}", params=params)
+        if antwort.status_code >= 400:
+            raise _pollinations_fehler(antwort)
+
+        typ = antwort.headers.get("content-type", "")
+        if not typ.startswith("image/"):
+            raise Bildfehler(
+                f"Pollinations schickte kein Bild, sondern {typ or 'nichts Erkennbares'}: "
+                f"{antwort.text[:160]}"
+            )
+
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_bytes(antwort.content)
+        log.info("Bild von Pollinations: %s", ziel)
+        return ziel
+
+
+def _pollinations_fehler(antwort: httpx.Response) -> Bildfehler:
+    if antwort.status_code == 429:
+        return Bildfehler(
+            "Pollinations ist gerade überlastet oder das Kontingent ist erreicht. "
+            "Später nochmal - es bleibt solange bei der Typografie."
+        )
+    if antwort.status_code in (401, 403):
+        return Bildfehler("Pollinations weist den Zugang zurück.")
+    return Bildfehler(f"Pollinations antwortete mit {antwort.status_code}.")
+
+
+class CloudflareGenerator:
+    """FLUX.1 schnell über Cloudflare Workers AI.
+
+    Cloudflare gibt jedem Konto ein Tageskontingent umsonst - genug für
+    etwa 170 Bilder am Tag. Das ist mehr, als dieser Account je brauchen
+    wird, und es setzt sich jeden Tag zurück.
+
+    Gebraucht werden zwei Angaben statt einer: die Kontonummer und ein
+    Zugriffsschlüssel. Beide stehen im Cloudflare-Dashboard.
+    """
+
+    name = "cloudflare"
+    MODELL = "@cf/black-forest-labs/flux-1-schnell"
+
+    def __init__(self, token: str, modell: str = "", *, timeout: float = 120.0) -> None:
+        # In `token` steht "Kontonummer:Schlüssel" - eine Einstellung, zwei
+        # Angaben. Ein zweites Feld in der .env wäre eine Stelle mehr, an
+        # der man sich vertun kann.
+        konto, _, schluessel = token.partition(":")
+        self.konto = konto.strip()
+        self.schluessel = schluessel.strip()
+        self.modell = modell.strip() or self.MODELL
+        self.client = httpx.Client(
+            timeout=timeout,
+            headers={
+                "Authorization": f"Bearer {self.schluessel}",
+                "Content-Type": "application/json",
+            },
+        )
+
+    def close(self) -> None:
+        self.client.close()
+
+    def erzeuge(self, prompt: str, ziel: Path) -> Path:
+        if not self.konto or not self.schluessel:
+            raise Bildfehler(
+                "Für Cloudflare braucht es Kontonummer und Schlüssel, getrennt "
+                "durch einen Doppelpunkt. Neu eintragen mit `insta-agent bilder`."
+            )
+
+        antwort = self.client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{self.konto}/ai/run/{self.modell}",
+            json={"prompt": prompt[:2000], "seed": random.randint(1, 2_000_000_000)},
+        )
+        if antwort.status_code >= 400:
+            raise _cloudflare_fehler(antwort)
+
+        daten = antwort.json() or {}
+        roh = (daten.get("result") or {}).get("image")
+        if not roh:
+            raise Bildfehler(f"Cloudflare lieferte kein Bild: {str(daten)[:200]}")
+
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_bytes(base64.b64decode(roh))
+        log.info("Bild von Cloudflare: %s", ziel)
+        return ziel
+
+
+def _cloudflare_fehler(antwort: httpx.Response) -> Bildfehler:
+    if antwort.status_code in (401, 403):
+        return Bildfehler(
+            "Cloudflare weist den Zugang zurück. Der Schlüssel braucht das Recht "
+            "'Workers AI' und muss zur Kontonummer passen."
+        )
+    if antwort.status_code == 429:
+        return Bildfehler(
+            "Das Tageskontingent bei Cloudflare ist aufgebraucht. Es setzt sich "
+            "um Mitternacht UTC zurück."
+        )
+    try:
+        meldung = (antwort.json().get("errors") or [{}])[0].get("message", "")
+    except Exception:  # noqa: BLE001 - die Fehlermeldung darf nie selbst scheitern
+        meldung = antwort.text[:160]
+    return Bildfehler(f"Cloudflare antwortete mit {antwort.status_code}: {meldung}")
+
+
 ANBIETER: dict[str, type] = {
     "gemini": GeminiGenerator,
     "replicate": ReplicateGenerator,
     "lokal": LokalerGenerator,
     "leonardo": LeonardoGenerator,
+    "pollinations": PollinationsGenerator,
+    "cloudflare": CloudflareGenerator,
 }
 
 # Der lokale Weg braucht keinen Schlüssel, sondern eine Adresse.
-OHNE_SCHLUESSEL = {"lokal"}
+# Pollinations braucht nicht einmal ein Konto.
+OHNE_SCHLUESSEL = {"lokal", "pollinations"}
 
 
 def baue_generator(anbieter: str, token: str | None, modell: str) -> Bildgenerator | None:
