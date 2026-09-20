@@ -44,6 +44,27 @@ def _agent(config: Path | None) -> Agent:
 # --------------------------------------------------------------------------
 
 
+JA_WOERTER = {"j", "ja", "y", "yes"}
+NEIN_WOERTER = {"n", "nein", "no", ""}
+
+
+def _bestaetigt(frage: str) -> bool:
+    """Fragt nach - und versteht sowohl j als auch y.
+
+    `typer.confirm` akzeptiert nur die englischen Wörter. Wer auf einem
+    deutschen Rechner sitzt, tippt aber j, bekommt eine englische
+    Fehlermeldung und weiß nicht, was er falsch gemacht hat.
+    """
+    while True:
+        antwort = typer.prompt(f"{frage} [j/n]", default="n", show_default=False)
+        wort = antwort.strip().lower()
+        if wort in JA_WOERTER:
+            return True
+        if wort in NEIN_WOERTER:
+            return False
+        console.print("[yellow]Bitte j für ja oder n für nein.[/yellow]")
+
+
 @app.command()
 def setup() -> None:
     """Richtet den Agenten ein: fragt nach dem API-Schlüssel und legt die .env an.
@@ -442,7 +463,7 @@ def neustart(
         else:
             console.print("[dim]Er hat noch kein Profil - es gibt nichts wegzuwerfen.[/dim]")
 
-        if not ja and not typer.confirm("Wirklich neu anfangen?"):
+        if not ja and not _bestaetigt("Wirklich neu anfangen?"):
             console.print("Abgebrochen. Es bleibt alles, wie es war.")
             raise typer.Exit(0)
 

@@ -13,7 +13,7 @@ echo   Seine Kasse, sein Arbeitsprotokoll und die schon geschriebenen
 echo   Beitraege bleiben erhalten.
 echo.
 echo   Gleich kommt eine Rueckfrage. Tippe  j  und druecke Enter.
-echo   Wenn du es dir anders ueberlegst: n  und Enter.
+echo   ^(y geht auch^). Wenn du es dir anders ueberlegst: n und Enter.
 echo.
 %PY% -m insta_agent.cli neustart
 echo.

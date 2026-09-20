@@ -153,3 +153,23 @@ def test_die_seite_zeigt_bildprompt_und_ersten_kommentar():
     # Fremder Text darf nie ungeprüft in ein Attribut.
     assert 'data-text="${esc(p.bildprompt)}"' in seite
     assert 'data-text="${esc(p.erster_kommentar)}"' in seite
+
+
+def test_die_rueckfrage_versteht_j_und_y():
+    """Auf einem deutschen Rechner tippt man j, nicht y."""
+    from insta_agent.cli import JA_WOERTER, NEIN_WOERTER
+
+    for wort in ("j", "ja", "y", "yes", "J", "Ja"):
+        assert wort.strip().lower() in JA_WOERTER
+    for wort in ("n", "nein", "no", ""):
+        assert wort.strip().lower() in NEIN_WOERTER
+    # Kein Wort darf in beiden Mengen stehen.
+    assert not (JA_WOERTER & NEIN_WOERTER)
+
+
+def test_eine_leere_eingabe_bricht_ab():
+    """Wer nur Enter drückt, soll nichts löschen."""
+    from insta_agent.cli import JA_WOERTER, NEIN_WOERTER
+
+    assert "" in NEIN_WOERTER
+    assert "" not in JA_WOERTER
