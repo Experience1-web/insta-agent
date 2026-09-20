@@ -66,6 +66,16 @@ class Brain:
         self.treasury = treasury
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
+    @property
+    def suchbudget(self) -> int:
+        """Wie viele Websuchen ein Aufruf höchstens stellen darf.
+
+        Die Aufrufer sagen das dem Modell im Prompt, damit es seine Suchen
+        plant. Ohne den Hinweis stellt es eine Anfrage zu viel, bekommt
+        `max_uses_exceeded` und hat die Frage umsonst formuliert.
+        """
+        return self.config.max_web_searches
+
     # -- Modellwahl --------------------------------------------------------
 
     def _output_config(self, model: str, task: str) -> dict[str, Any] | None:
@@ -199,6 +209,23 @@ class Brain:
         )
 
 
+# Die Fehlercodes der Websuche sind englische Kürzel. Im Protokoll des
+# Betreibers soll stehen, was wirklich passiert ist.
+SUCHFEHLER = {
+    "max_uses_exceeded": (
+        "Er wollte noch einmal nachschlagen, hatte seine Suchen aber schon "
+        "aufgebraucht. Er arbeitet mit dem weiter, was er gefunden hat."
+    ),
+    "too_many_requests": "Zu viele Anfragen auf einmal - die Suche wurde gedrosselt.",
+    "query_too_long": "Die Suchanfrage war zu lang.",
+    "unavailable": "Die Websuche war kurz nicht erreichbar.",
+}
+
+
+def _suchfehler(code: str | None, roh: Any) -> str:
+    return SUCHFEHLER.get(code or "", f"Unerwartete Antwort der Websuche: {code or roh}")
+
+
 def _extract_sources(content: list[Any]) -> list[str]:
     """Zieht die URLs aus den Blöcken der Websuche."""
     urls: list[str] = []
@@ -208,7 +235,8 @@ def _extract_sources(content: list[Any]) -> list[str]:
         results = getattr(block, "content", None)
         # Bei einem Fehler ist content ein einzelnes Objekt, kein Array.
         if not isinstance(results, list):
-            log.warning("Websuche meldete einen Fehler: %s", getattr(results, "error_code", results))
+            code = getattr(results, "error_code", None)
+            log.warning("Websuche: %s", _suchfehler(code, results))
             continue
         for result in results:
             if url := getattr(result, "url", None):

@@ -37,6 +37,10 @@ Suche gezielt nach:
 - Welche Lücke ein neuer Account glaubwürdig besetzen kann
 - Was gerade übersättigt ist und wovon du die Finger lassen solltest
 
+Du hast höchstens {brain.suchbudget} Suchanfragen. Plane sie,
+bevor du die erste stellst - jede weitere wird abgelehnt und ist verloren.
+Lieber vier breite, gut gewählte Suchen als vier zu enge.
+
 Schreibe das Ergebnis als dichten Fließtext. Nenne Zahlen, wo du welche
 findest, und sage dazu, wie belastbar sie sind. Wenn du etwas nicht
 herausfindest, schreib das hin, statt es zu erfinden.""",

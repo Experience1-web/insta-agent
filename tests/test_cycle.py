@@ -31,6 +31,7 @@ class FakeBrain:
     def __init__(self, config, treasury, api_key=None):
         self.treasury = treasury
         self.aufrufe: list[str] = []
+        self.suchbudget = config.max_web_searches
 
     def _buchen(self, label: str) -> None:
         self.treasury.check()
@@ -256,6 +257,8 @@ def test_eine_teure_recherche_geht_nicht_verloren(monkeypatch):
 
     class HalbKaputtesBrain:
         """Die Websuche gelingt, das Strukturieren nicht."""
+
+        suchbudget = 4
 
         def text(self, **kwargs):
             return CallResult(

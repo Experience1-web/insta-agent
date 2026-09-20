@@ -92,3 +92,31 @@ def test_die_recherche_denkt_weniger_tief():
 
     assert recherche == {"effort": "medium"}
     assert denken == {"effort": "high"}
+
+
+# --- Meldungen der Websuche ----------------------------------------------
+
+
+def test_die_erschoepfte_websuche_wird_auf_deutsch_erklaert():
+    """Im Protokoll stand vorher nur "max_uses_exceeded"."""
+    from insta_agent.llm import _suchfehler
+
+    text = _suchfehler("max_uses_exceeded", None)
+    assert "aufgebraucht" in text
+    assert "max_uses" not in text
+
+
+def test_ein_unbekannter_fehlercode_geht_nicht_verloren():
+    from insta_agent.llm import _suchfehler
+
+    assert "brandneu" in _suchfehler("brandneu", None)
+
+
+def test_der_agent_erfaehrt_wie_viele_suchen_er_hat():
+    """Sonst stellt er eine fünfte Anfrage, die verworfen wird."""
+    import inspect
+
+    from insta_agent.brain import research
+
+    quelle = inspect.getsource(research.run_market_research)
+    assert "{brain.suchbudget} Suchanfragen" in quelle
