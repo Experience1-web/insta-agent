@@ -151,8 +151,12 @@ class BildConfig:
     das ist kein Fehler, nur weniger.
     """
 
+    # "replicate" laesst beim Anbieter malen, "lokal" auf dem eigenen
+    # Rechner. Lokal kostet nichts ausser Strom und Rechenzeit.
     anbieter: str = "replicate"
     modell: str = "black-forest-labs/flux-1.1-pro"
+    # Beim Anbieter der Schluessel, beim lokalen Weg die Adresse des
+    # eigenen Bildprogramms.
     token: str | None = None
     # Was ein Bild beim Anbieter kostet. Steht auf dessen Preisseite und
     # ändert sich dort, nicht hier - deshalb einstellbar statt fest
@@ -162,7 +166,8 @@ class BildConfig:
 
     @property
     def aktiv(self) -> bool:
-        return bool(self.token)
+        """Der lokale Weg braucht keinen Schluessel, nur ein laufendes Programm."""
+        return self.anbieter == "lokal" or bool(self.token)
 
 
 @dataclass(slots=True)
@@ -220,7 +225,11 @@ def load_settings(config_path: Path | None = None) -> Settings:
         _merge(settings.bild, raw.get("bild"))
 
     settings.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    settings.bild.token = os.getenv("BILD_TOKEN") or os.getenv("REPLICATE_API_TOKEN") or None
+    if anbieter := os.getenv("BILD_ANBIETER"):
+        settings.bild.anbieter = anbieter
+    settings.bild.token = (
+        os.getenv("BILD_TOKEN") or os.getenv("REPLICATE_API_TOKEN") or None
+    )
     if modell := os.getenv("BILD_MODELL"):
         settings.bild.modell = modell
     if preis := os.getenv("BILD_KOSTEN"):

@@ -430,12 +430,14 @@ class Agent:
             self.store.log("image_error", str(exc))
             return None
 
-        # Erst buchen, wenn wirklich ein Bild da ist.
-        self.treasury.charge(
-            self.settings.bild.kosten_pro_bild_usd,
-            category="image",
-            note=f"Bild ({self.settings.bild.modell})",
-        )
+        # Erst buchen, wenn wirklich ein Bild da ist - und nur, wenn es
+        # etwas gekostet hat. Auf dem eigenen Rechner ist der Preis null.
+        if (preis := self.settings.bild.kosten_pro_bild_usd) > 0:
+            self.treasury.charge(
+                preis,
+                category="image",
+                note=f"Bild ({self.settings.bild.modell or self.settings.bild.anbieter})",
+            )
 
         fertig = self.settings.media_dir / f"{basis}-fertig.png"
         try:

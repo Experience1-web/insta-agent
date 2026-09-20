@@ -350,6 +350,23 @@ def check() -> None:
         maskiert = f"{schluessel[:11]}…{schluessel[-4:]} ({len(schluessel)} Zeichen)"
         table.add_row("Claude API", f"[green]{maskiert}[/green]")
 
+    if not settings.bild.aktiv:
+        table.add_row("Bilder", "[dim]typografisch (insta-agent bilder)[/dim]")
+    elif settings.bild.anbieter == "lokal":
+        table.add_row("Bilder", f"[green]eigener Rechner[/green] unter {settings.bild.token}")
+    else:
+        table.add_row(
+            "Bilder",
+            f"[green]{settings.bild.anbieter}[/green] · "
+            f"{settings.bild.kosten_pro_bild_usd:.3f} USD je Bild",
+        )
+
+    table.add_row(
+        "Freigabe",
+        "[green]du entscheidest[/green]"
+        if settings.posting.freigabe_noetig
+        else "[yellow]Autopilot - er postet ohne Rückfrage[/yellow]",
+    )
     table.add_row(
         "Instagram",
         "[green]verbunden[/green]" if settings.instagram_ready else "[dim]nicht nötig für Entwürfe[/dim]",
@@ -441,45 +458,65 @@ def run(
 @app.command()
 def bilder(
     config: Path = typer.Option(None),
-    loeschen: bool = typer.Option(False, "--loeschen", help="Schlüssel wieder entfernen"),
+    loeschen: bool = typer.Option(False, "--loeschen", help="Bilderzeugung wieder abschalten"),
 ) -> None:
-    """Trägt den Schlüssel des Bilddienstes ein, damit er selbst Bilder malt.
+    """Richtet ein, wer die Bilder malt - der eigene Rechner oder ein Anbieter.
 
-    Claude erzeugt keine Bilder. Ohne diesen zweiten Schlüssel bleibt es
-    bei der typografischen Fassung.
+    Claude erzeugt keine Bilder. Ohne diese Einrichtung bleibt es bei der
+    typografischen Fassung.
     """
     from .config import set_env_value
 
     if loeschen:
+        set_env_value("BILD_ANBIETER", "")
         set_env_value("BILD_TOKEN", "")
-        console.print("[green]Entfernt.[/green] Es bleibt bei der Typografie.")
+        console.print("[green]Abgeschaltet.[/green] Es bleibt bei der Typografie.")
         return
 
     console.print(
         Panel(
             "Der Agent schreibt die Bildbeschreibung selbst. Malen lassen muss\n"
-            "er sie woanders - Claude kann das nicht.\n\n"
-            "[bold]So kommst du an den Schlüssel:[/bold]\n"
-            "  1. replicate.com öffnen und ein Konto anlegen\n"
-            "  2. Unter Account → API tokens einen Schlüssel erzeugen\n"
-            "  3. Dort ein kleines Guthaben hinterlegen\n\n"
-            "[dim]Ein Bild kostet je nach Modell wenige Cent. Was genau, steht\n"
-            "auf der Preisseite des Anbieters - trag es unten ein, damit der\n"
-            "Agent weiß, was ihn ein Beitrag kostet.[/dim]",
-            title="Bilder erzeugen lassen",
+            "er sie woanders - Claude kann das nicht. Du hast zwei Wege:\n\n"
+            "[bold]1  Eigener Rechner[/bold]  - kostet nichts ausser Strom\n"
+            "   Du brauchst eine NVIDIA-Grafikkarte mit mindestens 8 GB und\n"
+            "   ein laufendes Bildprogramm (AUTOMATIC1111, Forge oder\n"
+            "   SD.Next), gestartet mit  --api.\n"
+            "   Ein Bild dauert dann 20 bis 60 Sekunden.\n\n"
+            "[bold]2  Anbieter (Replicate)[/bold]  - wenige Cent je Bild\n"
+            "   Kein Aufbau, keine Grafikkarte noetig, bessere Qualitaet.\n"
+            "   Konto auf replicate.com, dort ein Guthaben hinterlegen.",
+            title="Wer malt die Bilder?",
         )
     )
 
-    roh = typer.prompt("Schlüssel", hide_input=True)
-    # Mehrzeiliges Einfügen zerlegt den Schlüssel sonst still.
+    wahl = typer.prompt("Welcher Weg? [1/2]", default="1").strip()
+
+    if wahl.startswith("1"):
+        adresse = typer.prompt("Adresse des Bildprogramms", default="http://127.0.0.1:7860")
+        set_env_value("BILD_ANBIETER", "lokal")
+        set_env_value("BILD_TOKEN", adresse.strip().rstrip("/"))
+        set_env_value("BILD_KOSTEN", "0")
+        modell = typer.prompt(
+            "Name der Modelldatei (leer lassen fuer die aktuell geladene)", default=""
+        ).strip()
+        set_env_value("BILD_MODELL", modell)
+        console.print(
+            "\n[green]Eingetragen.[/green] Lass das Bildprogramm laufen, wenn der "
+            "Agent arbeitet.\n[dim]Pruefen: insta-agent check[/dim]"
+        )
+        return
+
+    roh = typer.prompt("Schluessel von replicate.com", hide_input=True)
+    # Mehrzeiliges Einfuegen zerlegt den Schluessel sonst still.
     token = "".join(roh.split()).strip("\"'")
     if not token:
         console.print("[yellow]Nichts eingetragen.[/yellow]")
         raise typer.Exit(1)
 
+    set_env_value("BILD_ANBIETER", "replicate")
     set_env_value("BILD_TOKEN", token)
 
-    preis = typer.prompt("Kosten pro Bild in USD", default="0.04")
+    preis = typer.prompt("Kosten pro Bild in USD (steht auf der Preisseite)", default="0.04")
     try:
         float(preis)
     except ValueError:
@@ -488,8 +525,8 @@ def bilder(
         set_env_value("BILD_KOSTEN", preis)
 
     console.print(
-        "\n[green]Eingetragen.[/green] Ab dem nächsten Zyklus malt er seine "
-        "Bilder selbst.\n[dim]Prüfen: insta-agent check[/dim]"
+        "\n[green]Eingetragen.[/green] Ab dem naechsten Zyklus malt er seine "
+        "Bilder selbst.\n[dim]Pruefen: insta-agent check[/dim]"
     )
 
 

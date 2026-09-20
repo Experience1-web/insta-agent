@@ -324,3 +324,101 @@ def test_ohne_prompt_wird_kein_bild_bestellt(agent):
 
     assert dienst.prompts == []
     assert [z for z in agent.store.ledger_entries(50) if z["category"] == "image"] == []
+
+
+# --- Der kostenlose Weg: eigener Rechner ----------------------------------
+
+import base64  # noqa: E402
+
+from insta_agent.imaging.generator import LokalerGenerator  # noqa: E402
+
+
+def _lokal(handler) -> LokalerGenerator:
+    g = LokalerGenerator("http://127.0.0.1:7860")
+    g.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return g
+
+
+def test_der_lokale_weg_braucht_keinen_schluessel():
+    """Was auf dem eigenen Rechner laeuft, muss sich nirgends ausweisen."""
+    g = baue_generator("lokal", None, "")
+    assert g is not None and g.name == "lokal"
+    assert g.adresse == "http://127.0.0.1:7860"
+    g.close()
+
+
+def test_eine_eigene_adresse_wird_uebernommen():
+    g = baue_generator("lokal", "http://192.168.0.5:7860/", "")
+    assert g.adresse == "http://192.168.0.5:7860"
+    g.close()
+
+
+def test_das_lokale_bild_wird_entschluesselt_und_gespeichert(tmp_path):
+    def antworte(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"images": [base64.b64encode(PNG).decode()]})
+
+    ziel = _lokal(antworte).erzeuge("a lighthouse", tmp_path / "b.png")
+
+    assert ziel.read_bytes() == PNG
+
+
+def test_ein_datentyp_vorspann_stoert_nicht(tmp_path):
+    """Manche Fassungen schicken "data:image/png;base64,..." zurueck."""
+    def antworte(request: httpx.Request) -> httpx.Response:
+        daten = "data:image/png;base64," + base64.b64encode(PNG).decode()
+        return httpx.Response(200, json={"images": [daten]})
+
+    assert _lokal(antworte).erzeuge("x", tmp_path / "b.png").read_bytes() == PNG
+
+
+def test_das_lokale_bild_ist_hochformat(tmp_path):
+    gesehen = {}
+
+    def antworte(request: httpx.Request) -> httpx.Response:
+        import json as _json
+
+        gesehen.update(_json.loads(request.content))
+        return httpx.Response(200, json={"images": [base64.b64encode(PNG).decode()]})
+
+    _lokal(antworte).erzeuge("x", tmp_path / "b.png")
+
+    assert round(gesehen["height"] / gesehen["width"], 2) == round(16 / 9, 2)
+    # Beide Maße muessen durch 8 teilbar sein, sonst lehnt das Modell ab.
+    assert gesehen["width"] % 8 == 0 and gesehen["height"] % 8 == 0
+    # Schrift im erzeugten Bild wuerde mit dem Hook kollidieren.
+    assert "text" in gesehen["negative_prompt"]
+
+
+def test_ein_nicht_laufendes_programm_wird_erklaert(tmp_path):
+    def verweigere(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(Bildfehler, match="Läuft das Bildprogramm"):
+        _lokal(verweigere).erzeuge("x", tmp_path / "b.png")
+
+
+def test_ein_programm_ohne_api_wird_erklaert(tmp_path):
+    g = _lokal(lambda r: httpx.Response(404))
+
+    with pytest.raises(Bildfehler, match="--api"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_eine_zu_langsame_grafikkarte_wird_erklaert(tmp_path):
+    def zu_langsam(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("zu lange")
+
+    with pytest.raises(Bildfehler, match="Grafikkarte"):
+        _lokal(zu_langsam).erzeuge("x", tmp_path / "b.png")
+
+
+def test_lokal_erzeugte_bilder_kosten_nichts(agent):
+    """Der eigene Rechner taucht nicht in der Kasse auf."""
+    agent.bildgenerator = LiefernderDienst()
+    agent.settings.bild.kosten_pro_bild_usd = 0.0
+
+    agent.run_cycle()
+
+    assert [z for z in agent.store.ledger_entries(50) if z["category"] == "image"] == []
+    # Das Bild ist trotzdem da.
+    assert Path(agent.store.pending_drafts()[0]["image_path"]).exists()

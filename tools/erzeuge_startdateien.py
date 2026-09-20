@@ -109,6 +109,18 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "10 - Bilder einrichten.bat": f"""{KOPF}
+title Bilder einrichten
+echo.
+echo   Wer soll die Bilder malen?
+echo.
+echo   Claude kann keine Bilder erzeugen. Du hast zwei Wege:
+echo   dein eigener Rechner (kostenlos, braucht eine Grafikkarte)
+echo   oder ein Anbieter (wenige Cent pro Bild, kein Aufbau).
+echo.
+%PY% -m insta_agent.cli bilder
+echo.
+pause""",
     "9 - Neu anfangen.bat": f"""{KOPF}
 title Neu anfangen
 echo.

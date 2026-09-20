@@ -162,15 +162,108 @@ def _lesbarer_fehler(antwort: httpx.Response) -> str:
     return f"Der Bilddienst antwortete mit {antwort.status_code}: {str(detail)[:200]}"
 
 
-ANBIETER: dict[str, type] = {"replicate": ReplicateGenerator}
+class LokalerGenerator:
+    """Ein Bildmodell, das auf dem eigenen Rechner läuft.
+
+    Der einzige wirklich kostenlose Weg: Du zahlst mit deiner Grafikkarte
+    und etwas Strom statt mit Guthaben. Voraussetzung ist ein laufendes
+    Stable-Diffusion-Webinterface mit eingeschalteter Programmierschnittstelle
+    - AUTOMATIC1111, Forge oder SD.Next sprechen alle dieselbe Sprache.
+
+    Bewusst diese Schnittstelle und nicht die von ComfyUI: Hier genügt ein
+    Prompt, dort müsste ein ganzer Arbeitsablauf als Datenstruktur
+    mitgeschickt werden, der bei jedem Modellwechsel anders aussieht.
+    """
+
+    name = "lokal"
+
+    def __init__(self, adresse: str, modell: str = "", *, timeout: float = 300.0) -> None:
+        # Ein Bild auf einer Mittelklasse-Karte dauert 20 bis 60 Sekunden,
+        # beim ersten Mal deutlich länger, weil das Modell geladen wird.
+        self.adresse = (adresse or "http://127.0.0.1:7860").rstrip("/")
+        self.modell = modell
+        self.client = httpx.Client(timeout=timeout)
+
+    def close(self) -> None:
+        self.client.close()
+
+    def erzeuge(self, prompt: str, ziel: Path) -> Path:
+        # Genau 9:16 und durch 8 teilbar, sonst lehnt das Modell ab. Rund
+        # 1,1 Millionen Bildpunkte - das ist der Bereich, in dem SDXL
+        # zuverlaessig arbeitet. Groesser wird langsam und instabil.
+        breite, hoehe = 792, 1408
+        nutzlast: dict[str, object] = {
+            "prompt": prompt,
+            "negative_prompt": "text, watermark, logo, signature, letters, caption",
+            "width": breite,
+            "height": hoehe,
+            "steps": 28,
+            "cfg_scale": 5.0,
+            "sampler_name": "DPM++ 2M",
+        }
+        if self.modell:
+            nutzlast["override_settings"] = {"sd_model_checkpoint": self.modell}
+
+        try:
+            antwort = self.client.post(f"{self.adresse}/sdapi/v1/txt2img", json=nutzlast)
+        except httpx.ConnectError as exc:
+            raise Bildfehler(
+                f"Unter {self.adresse} antwortet nichts. Läuft das Bildprogramm, "
+                "und ist es mit --api gestartet?"
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            raise Bildfehler(
+                "Der eigene Rechner hat zu lange gebraucht. Ohne passende "
+                "Grafikkarte dauert ein Bild viele Minuten."
+            ) from exc
+
+        if antwort.status_code == 404:
+            raise Bildfehler(
+                "Das Bildprogramm kennt diese Schnittstelle nicht. Starte es "
+                "mit --api (AUTOMATIC1111, Forge oder SD.Next)."
+            )
+        if antwort.status_code >= 400:
+            raise Bildfehler(_lesbarer_fehler(antwort))
+
+        bilder = antwort.json().get("images") or []
+        if not bilder:
+            raise Bildfehler("Das Bildprogramm lieferte kein Bild zurück.")
+
+        import base64
+
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        # Manche Fassungen hängen einen Datentyp-Vorspann an.
+        roh = bilder[0].split(",", 1)[-1]
+        ziel.write_bytes(base64.b64decode(roh))
+        log.info("Bild lokal erzeugt: %s", ziel.name)
+        return ziel
+
+
+ANBIETER: dict[str, type] = {
+    "replicate": ReplicateGenerator,
+    "lokal": LokalerGenerator,
+}
+
+# Der lokale Weg braucht keinen Schlüssel, sondern eine Adresse.
+OHNE_SCHLUESSEL = {"lokal"}
 
 
 def baue_generator(anbieter: str, token: str | None, modell: str) -> Bildgenerator | None:
-    """Gibt None zurück, wenn kein Schlüssel hinterlegt ist - das ist kein Fehler."""
-    if not token:
-        return None
+    """Baut den passenden Generator, oder None.
+
+    None ist kein Fehler: Ohne eingerichteten Bilddienst bleibt es bei der
+    typografischen Fassung, und der Zyklus läuft genauso durch.
+
+    Beim lokalen Weg steht in `token` die Adresse des eigenen
+    Bildprogramms statt eines Schlüssels - er kostet nichts, also gibt es
+    auch nichts zu authentifizieren.
+    """
     klasse = ANBIETER.get(anbieter)
     if klasse is None:
         log.warning("Unbekannter Bildanbieter %r - es bleibt bei der Typografie", anbieter)
+        return None
+    if anbieter in OHNE_SCHLUESSEL:
+        return klasse(token or "http://127.0.0.1:7860", modell)
+    if not token:
         return None
     return klasse(token, modell)
