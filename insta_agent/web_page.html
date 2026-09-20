@@ -219,6 +219,119 @@
     .held { grid-template-columns: 1fr; gap: 20px; text-align: left; }
     .portrait { width: 104px; height: 104px; box-shadow: 0 0 0 6px var(--akzent-weich); }
   }
+
+  /* ---------- Popup: alles Lange steckt hier drin ----------
+     Die Seite war zugebaut, weil jeder Beitrag seinen vollen Text zeigte.
+     Jetzt zeigt die Karte, was man zum Entscheiden braucht; alles Weitere
+     kommt auf Klick. */
+  .popup-grund {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(6, 8, 12, 0.72);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 5vh 18px; overflow-y: auto;
+    animation: einblenden 0.18s ease-out;
+  }
+  .popup {
+    background: var(--flaeche); border: 1px solid var(--rand);
+    border-radius: var(--radius); max-width: 760px; width: 100%;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+    animation: hochkommen 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .popup-kopf {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 22px; border-bottom: 1px solid var(--rand);
+    position: sticky; top: 0; background: var(--flaeche);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .popup-kopf h3 { margin: 0; font-size: 19px; flex: 1; }
+  .popup-inhalt { padding: 22px; }
+  .popup-inhalt a { color: var(--akzent); }
+  .popup-inhalt ul { margin: 6px 0; padding-left: 20px; }
+  .popup-inhalt li { margin: 4px 0; word-break: break-word; }
+  .popup-inhalt .feld:first-child { margin-top: 0; }
+  .zu {
+    background: none; border: 1px solid var(--rand); color: var(--leise);
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    font-size: 19px; line-height: 1; flex: none;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
+  }
+  .zu:hover { background: var(--flaeche-hoch); color: var(--text); transform: rotate(90deg); }
+
+  @keyframes einblenden { from { opacity: 0; } }
+  @keyframes hochkommen {
+    from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  }
+  @keyframes auftauchen {
+    from { opacity: 0; transform: translateY(10px); }
+  }
+
+  /* ---------- Die Mannschaft ---------- */
+  .mannschaft { display: grid; gap: 12px; }
+  .person {
+    display: flex; align-items: center; gap: 15px; text-align: left;
+    background: var(--flaeche); border: 1px solid var(--rand);
+    border-radius: var(--radius); padding: 15px 18px; cursor: pointer;
+    color: inherit; font: inherit;
+    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  }
+  .person:hover { transform: translateY(-2px); border-color: var(--akzent); }
+  /* Die Unterstellung wird sichtbar, nicht nur behauptet. */
+  /* Im Raster genuegt der Einzug; eine feste Breite wuerde ihn auf
+     schmalen Schirmen ueber den Rand schieben. */
+  .person.geprueft { margin-left: 34px; position: relative; }
+  @media (max-width: 520px) { .person.geprueft { margin-left: 22px; } }
+  .person.geprueft::before {
+    content: ""; position: absolute; left: -22px; top: -12px; bottom: 50%;
+    width: 22px; border-left: 1px solid var(--rand);
+    border-bottom: 1px solid var(--rand); border-bottom-left-radius: 8px;
+  }
+  .zeichen {
+    width: 42px; height: 42px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-weight: 800; font-size: 15px;
+    background: var(--akzent-weich); color: var(--akzent);
+    border: 1px solid var(--akzent);
+  }
+  .person.geprueft .zeichen {
+    background: var(--flaeche-hoch); color: var(--leise); border-color: var(--rand);
+  }
+  .person .wer { flex: 1; min-width: 0; }
+  .person .wer b { display: block; font-size: 15px; }
+  .person .wer span { font-size: 13px; color: var(--leise); }
+  .person .schlafend { font-size: 12px; color: var(--warnung); }
+
+  /* ---------- Prüfmarken ---------- */
+  .marke.gepruft { background: rgba(74, 222, 128, 0.16); color: var(--gut); }
+  .marke.mangel  { background: rgba(251, 191, 36, 0.16); color: var(--warnung); }
+  .marke.abgelehnt { background: rgba(248, 113, 113, 0.16); color: var(--schlecht); }
+  .marke.ungeprueft { background: var(--flaeche-hoch); color: var(--leise); }
+
+  .befund {
+    border-left: 3px solid var(--rand); padding: 2px 0 2px 14px; margin: 12px 0;
+  }
+  .befund.falsch, .befund.unbelegbar { border-left-color: var(--schlecht); }
+  .befund.ungenau { border-left-color: var(--warnung); }
+  .befund.belegt { border-left-color: var(--gut); }
+  .befund p { margin: 4px 0; }
+  .befund .zitat { font-style: italic; }
+
+  /* ---------- Beitragskarte, jetzt knapp ---------- */
+  .beitrag { animation: auftauchen 0.3s ease-out backwards; }
+  .beitrag.klickbar { cursor: pointer; transition: transform 0.16s ease,
+                      border-color 0.16s ease; }
+  .beitrag.klickbar:hover { transform: translateY(-3px); border-color: var(--akzent); }
+  .beitrag .inhalt > div:first-child { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mehr {
+    font-size: 13px; color: var(--akzent); margin-top: 2px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .mehr::after { content: "→"; transition: transform 0.16s ease; }
+  .beitrag.klickbar:hover .mehr::after { transform: translateX(3px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    html { scroll-behavior: auto; }
+  }
 </style>
 </head>
 <body>
@@ -232,6 +345,7 @@
 <div id="warnbox"></div>
 <div id="heldbox"></div>
 
+<div id="mannschaftbox"></div>
 <div id="kassebox"></div>
 <div class="karte" id="kassekorrektur">
   <div class="zeile">
@@ -298,6 +412,8 @@
 <div id="verlaufbox"></div>
 
 </div>
+
+<div id="popupanker"></div>
 
 <script>
 const TOKEN_SCHLUESSEL = "insta-agent-token";
@@ -419,6 +535,137 @@ function lesbar(hex) {
   return "#" + aktuell.map(w => w.toString(16).padStart(2, "0")).join("");
 }
 
+/** Öffnet ein Fenster über der Seite. Alles Lange gehört hier hinein,
+ *  damit die Seite selbst überschaubar bleibt. */
+function oeffne_popup(titel, inhalt) {
+  schliesse_popup();
+  const grund = document.createElement("div");
+  grund.className = "popup-grund";
+  grund.innerHTML = `
+    <div class="popup" role="dialog" aria-modal="true" aria-label="${esc(titel)}">
+      <div class="popup-kopf">
+        <h3>${esc(titel)}</h3>
+        <button class="zu" title="Schließen" aria-label="Schließen">×</button>
+      </div>
+      <div class="popup-inhalt">${inhalt}</div>
+    </div>`;
+
+  // Klick daneben schließt, Klick hinein nicht.
+  grund.onclick = e => { if (e.target === grund) schliesse_popup(); };
+  grund.querySelector(".zu").onclick = schliesse_popup;
+  $("popupanker").appendChild(grund);
+  document.body.style.overflow = "hidden";
+  grund.querySelector(".zu").focus();
+  verdrahte_kopierknoepfe(grund);
+}
+
+function schliesse_popup() {
+  $("popupanker").innerHTML = "";
+  document.body.style.overflow = "";
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") schliesse_popup();
+});
+
+/** Kopierknöpfe innerhalb eines Bereichs zum Leben erwecken. */
+function verdrahte_kopierknoepfe(bereich) {
+  for (const knopf of bereich.querySelectorAll("[data-text]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(knopf.dataset.text);
+        knopf.textContent = "kopiert";
+        knopf.classList.add("fertig");
+        setTimeout(() => {
+          knopf.textContent = "kopieren";
+          knopf.classList.remove("fertig");
+        }, 1600);
+      } catch {
+        alert("Kopieren hat nicht geklappt – markier den Text von Hand.");
+      }
+    };
+  }
+}
+
+/** Wie der Prüfbericht als Marke aussieht. Kein Bericht ist nicht dasselbe
+ *  wie ein guter Bericht - deshalb eine eigene, graue Marke dafür. */
+const PRUEFMARKEN = {
+  freigabe:    ["gepruft", "geprüft"],
+  nachbessern: ["mangel", "nachbessern"],
+  ablehnen:    ["abgelehnt", "abgelehnt"],
+};
+
+function pruef_marke(pr) {
+  if (!pr) return '<span class="marke ungeprueft">nicht geprüft</span>';
+  const [klasse, text] = PRUEFMARKEN[pr.urteil] || PRUEFMARKEN.nachbessern;
+  const zahl = (pr.befunde || []).filter(b => b.urteil !== "belegt").length;
+  return `<span class="marke ${klasse}">${text}${zahl ? " · " + zahl : ""}</span>`;
+}
+
+function pruef_bericht_html(pr) {
+  if (!pr) {
+    return `<p class="hinweis">Für diesen Beitrag liegt kein Prüfbericht vor.
+      Das heißt nicht, dass er sauber ist – es heißt, dass niemand nachgesehen hat.</p>`;
+  }
+  const befunde = (pr.befunde || []).map(b => `
+    <div class="befund ${esc(b.urteil)}">
+      <p class="zitat">„${esc(b.behauptung)}"</p>
+      <p><b>${esc(b.urteil)}</b> – ${esc(b.begruendung)}</p>
+      ${b.beleg ? `<p class="hinweis">${esc(b.beleg)}</p>` : ""}
+    </div>`).join("");
+
+  return `
+    <p>${esc(pr.zusammenfassung)}</p>
+    ${!pr.mit_suche ? `<p class="hinweis">Diesmal ohne Websuche geprüft – es konnte
+      nichts nachgeschlagen werden. Was hier „unbelegbar" heißt, kann trotzdem
+      stimmen; belegt ist es deshalb nicht.</p>` : ""}
+    ${befunde || '<p class="hinweis">Keine prüfbare Tatsachenbehauptung gefunden.</p>'}
+    ${(pr.korrekturen || []).length ? `<div class="feld">
+      <div class="feldkopf"><span>Was zu ändern wäre</span></div>
+      <ul>${pr.korrekturen.map(k => `<li>${esc(k)}</li>`).join("")}</ul>
+    </div>` : ""}
+    ${(pr.quellen || []).length ? `<div class="feld">
+      <div class="feldkopf"><span>Nachgeschlagen</span></div>
+      <ul>${pr.quellen.map(q => `<li><a href="${esc(q)}" target="_blank"
+        rel="noopener noreferrer">${esc(q)}</a></li>`).join("")}</ul>
+    </div>` : ""}
+    <p class="hinweis" style="margin-top:16px">Geprüft von ${esc(pr.geprueft_von || "?")}.</p>`;
+}
+
+function zeichne_mannschaft(d) {
+  const leute = d.mannschaft || [];
+  $("mannschaftbox").innerHTML = !leute.length ? "" : `
+    <h2>Wer hier arbeitet</h2>
+    <div class="mannschaft">
+      ${leute.map((m, i) => `
+        <button class="person ${esc(m.rang)}" data-person="${i}">
+          <span class="zeichen">${esc(initialen(m.name))}</span>
+          <span class="wer">
+            <b>${esc(m.name)}</b>
+            <span>${esc(m.rolle)}</span>
+          </span>
+          ${m.aktiv ? "" : '<span class="schlafend">abgeschaltet</span>'}
+        </button>`).join("")}
+    </div>`;
+
+  for (const knopf of $("mannschaftbox").querySelectorAll("[data-person]")) {
+    const m = leute[+knopf.dataset.person];
+    knopf.onclick = () => oeffne_popup(m.name, `
+      <p class="rolle">${esc(m.rolle)}</p>
+      <p>${esc(m.aufgabe)}</p>
+      <div class="feld">
+        <div class="feldkopf"><span>Womit gearbeitet wird</span></div>
+        <p class="bildtext">${esc(m.modell)}</p>
+      </div>
+      ${m.aktiv ? "" : `<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>`}`);
+  }
+}
+
+function initialen(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+}
+
 function zeichne(d) {
   // Die Seite nimmt die Farben des Agenten an - aber nur so weit, wie
   // man sie auf dunklem Grund noch lesen kann. Jonas' Tiefblau etwa
@@ -467,6 +714,7 @@ function zeichne(d) {
   // wieder zu, markierter Text verliert die Markierung und das
   // "Kopiert" am Knopf ist weg, bevor man es gelesen hat.
   wenn_neu("held", [d.identitaet, d.farben], () => zeichne_held(d));
+  wenn_neu("mannschaft", d.mannschaft, () => zeichne_mannschaft(d));
   wenn_neu("vorhaben", d.strategie, () => zeichne_vorhaben(d));
   wenn_neu("beitraege", d.entwuerfe, () => zeichne_beitraege(d));
   wenn_neu("ideen", d.plan, () => zeichne_ideen(d));
@@ -626,107 +874,142 @@ async function entscheide(id, wahl, knopf) {
   }
 }
 
+/** Der Text eines Beitrags, so wie er bei Instagram stehen würde. */
+function volltext(post) {
+  const teile = [post.caption];
+  if (post.aufruf && !post.caption.includes(post.aufruf)) teile.push(post.aufruf);
+  if (post.hashtags.length) teile.push(post.hashtags.map(h => "#" + h).join(" "));
+  return teile.join("\n\n");
+}
+
+/** Der erste Satz reicht, um einen Beitrag wiederzuerkennen. */
+function anriss(text, zeichen = 110) {
+  const sauber = text.replace(/\s+/g, " ").trim();
+  return sauber.length <= zeichen ? sauber : sauber.slice(0, zeichen).trimEnd() + " …";
+}
+
 function zeichne_beitraege(d) {
   if (!d.entwuerfe.length) { $("postbox").innerHTML = ""; return; }
 
+  // Die Karte zeigt, was man zum Entscheiden braucht: Bild, Stand,
+  // Prüfurteil, der erste Satz. Alles Weitere steckt im Popup - sonst
+  // ist die Seite nach drei Beiträgen unlesbar.
   $("postbox").innerHTML = `
     <h2>Seine Arbeit</h2>
     <p class="hinweis" style="margin:-6px 0 16px">${arbeitsweise(d)}</p>
-    <div class="gitter beitraege">${d.entwuerfe.map(p => `
-      <article class="beitrag">
+    <div class="gitter beitraege">${d.entwuerfe.map((p, i) => `
+      <article class="beitrag klickbar" data-oeffnen="${p.id}"
+               style="animation-delay:${Math.min(i, 8) * 45}ms">
         ${p.bild ? `<img src="/media?name=${encodeURIComponent(p.bild)}${anhang}"
              alt="" loading="lazy">` : ""}
         <div class="inhalt">
           <div>
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
+            ${pruef_marke(p.pruefung)}
             <span class="marke">${esc(p.saeule)}</span>
           </div>
-          <p class="caption">${esc(p.caption)}</p>
-          ${p.bildtext ? `<div class="feld">
-            <div class="feldkopf">
-              <span>Text fürs Bild</span>
-              <button class="winzig" data-text="${esc(p.bildtext)}">kopieren</button>
-            </div>
-            <p class="bildtext">${esc(p.bildtext)}</p>
-          </div>` : ""}
-          ${p.bildprompt ? `<div class="feld">
-            <div class="feldkopf">
-              <span>Bild-Prompt für Flux / Midjourney</span>
-              <button class="winzig" data-text="${esc(p.bildprompt)}">kopieren</button>
-            </div>
-            <code class="prompt">${esc(p.bildprompt)}</code>
-          </div>` : ""}
-          ${p.erster_kommentar ? `<div class="feld">
-            <div class="feldkopf">
-              <span>Erster Kommentar</span>
-              <button class="winzig" data-text="${esc(p.erster_kommentar)}">kopieren</button>
-            </div>
-            <p class="frage">${esc(p.erster_kommentar)}</p>
-          </div>` : ""}
-          <div class="tags">${p.hashtags.map(h => "#" + esc(h)).join(" ")}</div>
+          <p class="caption">${esc(anriss(p.bildtext || p.caption))}</p>
+          <span class="mehr">Alles ansehen</span>
           ${p.status === "draft" ? `<div class="knopfreihe">
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
             <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>
           </div>` : ""}
-          <div class="knopfreihe">
-            <button class="klein" data-kopieren="${p.id}">Text kopieren</button>
-            ${p.bild ? `<a class="klein knopf" style="padding:8px 13px; font-size:13px"
-               href="/media?name=${encodeURIComponent(p.bild)}${anhang}"
-               download="${esc(p.bild)}">Bild speichern</a>` : ""}
-          </div>
-          ${p.zeitpunkt || p.erwartung ? `<details>
-            <summary>Was er sich dabei gedacht hat</summary>
-            <div class="hinweis" style="margin-top:7px">
-              ${p.zeitpunkt ? `<div><b>Zeitpunkt:</b> ${esc(p.zeitpunkt)}</div>` : ""}
-              ${p.erwartung ? `<div><b>Erwartung:</b> ${esc(p.erwartung)}</div>` : ""}
-            </div></details>` : ""}
         </div>
       </article>`).join("")}</div>`;
 
-  for (const knopf of document.querySelectorAll("[data-text]")) {
-    knopf.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(knopf.dataset.text);
-        knopf.textContent = "kopiert";
-        knopf.classList.add("fertig");
-        setTimeout(() => {
-          knopf.textContent = "kopieren";
-          knopf.classList.remove("fertig");
-        }, 1600);
-      } catch {
-        alert("Kopieren hat nicht geklappt – markier den Text von Hand.");
-      }
+  for (const karte of $("postbox").querySelectorAll("[data-oeffnen]")) {
+    const post = d.entwuerfe.find(x => String(x.id) === karte.dataset.oeffnen);
+    karte.onclick = e => {
+      // Die Knöpfe auf der Karte machen ihre eigene Sache.
+      if (e.target.closest("button, a")) return;
+      zeige_beitrag(post);
     };
   }
-  for (const knopf of document.querySelectorAll("[data-freigeben]")) {
-    knopf.onclick = () => entscheide(knopf.dataset.freigeben, "freigeben", knopf);
+  verdrahte_entscheidungen($("postbox"));
+}
+
+/** Der ganze Beitrag: Text, Bild-Prompt, Prüfbericht, Hintergedanken. */
+function zeige_beitrag(p) {
+  oeffne_popup(anriss(p.bildtext || p.caption, 60), `
+    <div>
+      <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
+      ${pruef_marke(p.pruefung)}
+      ${p.saeule ? `<span class="marke">${esc(p.saeule)}</span>` : ""}
+    </div>
+    ${p.bildtext ? `<div class="feld">
+      <div class="feldkopf">
+        <span>Text fürs Bild</span>
+        <button class="winzig" data-text="${esc(p.bildtext)}">kopieren</button>
+      </div>
+      <p class="bildtext">${esc(p.bildtext)}</p>
+    </div>` : ""}
+    <div class="feld">
+      <div class="feldkopf">
+        <span>Bildunterschrift</span>
+        <button class="winzig" data-text="${esc(volltext(p))}">kopieren</button>
+      </div>
+      <p class="caption">${esc(p.caption)}</p>
+      <div class="tags">${p.hashtags.map(h => "#" + esc(h)).join(" ")}</div>
+    </div>
+    ${p.erster_kommentar ? `<div class="feld">
+      <div class="feldkopf">
+        <span>Erster Kommentar</span>
+        <button class="winzig" data-text="${esc(p.erster_kommentar)}">kopieren</button>
+      </div>
+      <p class="frage">${esc(p.erster_kommentar)}</p>
+    </div>` : ""}
+
+    <div class="feld">
+      <div class="feldkopf"><span>Endprüfung</span></div>
+      ${pruef_bericht_html(p.pruefung)}
+    </div>
+
+    ${p.zeitpunkt || p.erwartung ? `<div class="feld">
+      <div class="feldkopf"><span>Was er sich dabei gedacht hat</span></div>
+      ${p.zeitpunkt ? `<p><b>Zeitpunkt:</b> ${esc(p.zeitpunkt)}</p>` : ""}
+      ${p.erwartung ? `<p><b>Erwartung:</b> ${esc(p.erwartung)}</p>` : ""}
+    </div>` : ""}
+
+    ${p.bildprompt ? `<details>
+      <summary>Bild-Prompt</summary>
+      <div class="feldkopf" style="margin-top:8px">
+        <span>Womit das Bild gemalt wurde</span>
+        <button class="winzig" data-text="${esc(p.bildprompt)}">kopieren</button>
+      </div>
+      <code class="prompt">${esc(p.bildprompt)}</code>
+    </details>` : ""}
+
+    <div class="knopfreihe" style="margin-top:20px">
+      ${p.status === "draft" ? `
+        <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
+        <button class="klein" data-verwerfen="${p.id}">Verwerfen</button>` : ""}
+      <button class="klein" data-text="${esc(volltext(p))}">Text kopieren</button>
+      ${p.bild ? `<a class="klein knopf" style="padding:8px 13px; font-size:13px"
+         href="/media?name=${encodeURIComponent(p.bild)}${anhang}"
+         download="${esc(p.bild)}">Bild speichern</a>` : ""}
+    </div>`);
+  verdrahte_entscheidungen($("popupanker"));
+}
+
+/** Freigeben und Verwerfen - auf der Karte wie im Popup. */
+function verdrahte_entscheidungen(bereich) {
+  for (const knopf of bereich.querySelectorAll("[data-freigeben]")) {
+    knopf.onclick = e => {
+      e.stopPropagation();
+      schliesse_popup();
+      entscheide(knopf.dataset.freigeben, "freigeben", knopf);
+    };
   }
-  for (const knopf of document.querySelectorAll("[data-verwerfen]")) {
-    knopf.onclick = () => {
+  for (const knopf of bereich.querySelectorAll("[data-verwerfen]")) {
+    knopf.onclick = e => {
+      e.stopPropagation();
       if (confirm("Diesen Entwurf verwerfen? Er geht dann nie raus.")) {
+        schliesse_popup();
         entscheide(knopf.dataset.verwerfen, "verwerfen", knopf);
       }
     };
   }
-  for (const knopf of document.querySelectorAll("[data-kopieren]")) {
-    const post = d.entwuerfe.find(x => String(x.id) === knopf.dataset.kopieren);
-    knopf.onclick = async () => {
-      const teile = [post.caption];
-      if (post.aufruf && !post.caption.includes(post.aufruf)) teile.push(post.aufruf);
-      if (post.hashtags.length) teile.push(post.hashtags.map(h => "#" + h).join(" "));
-      try {
-        await navigator.clipboard.writeText(teile.join("\n\n"));
-        knopf.textContent = "Kopiert";
-        knopf.classList.add("fertig");
-        setTimeout(() => {
-          knopf.textContent = "Text kopieren";
-          knopf.classList.remove("fertig");
-        }, 1800);
-      } catch {
-        alert("Kopieren hat nicht geklappt – markier den Text von Hand.");
-      }
-    };
-  }
+  verdrahte_kopierknoepfe(bereich);
 }
 
 function zeichne_ideen(d) {

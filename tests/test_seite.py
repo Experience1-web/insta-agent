@@ -97,3 +97,39 @@ def test_der_starthinweis_kennt_die_lage():
     abschnitt = QUELLE[stelle : stelle + 300]
     assert "d.kann_posten" in abschnitt
     assert "Hinaus geht nur, was du freigibst" in abschnitt
+
+
+# --- Popups und die Mannschaft --------------------------------------------
+
+
+def test_jedes_popup_laesst_sich_wieder_schliessen():
+    """Ein Fenster ohne Ausgang ist eine Sackgasse - auf dem Handy erst recht."""
+    assert 'class="zu"' in QUELLE
+    assert 'e.key === "Escape"' in QUELLE
+    assert "if (e.target === grund) schliesse_popup();" in QUELLE
+
+
+def test_das_popup_gibt_die_seite_wieder_frei():
+    """Sonst bleibt die Seite gesperrt, nachdem das Fenster zu ist."""
+    assert QUELLE.count('document.body.style.overflow = ""') >= 1
+
+
+def test_ein_nicht_geprueftes_urteil_sieht_anders_aus_als_ein_gutes():
+    """Kein Bericht ist nicht dasselbe wie ein sauberer Bericht."""
+    assert "nicht geprüft" in QUELLE
+    assert "ungeprueft" in QUELLE
+
+
+def test_alle_urteile_der_pruefung_haben_eine_marke():
+    for urteil in ("freigabe", "nachbessern", "ablehnen"):
+        assert f"{urteil}:" in QUELLE or f'"{urteil}"' in QUELLE, urteil
+
+
+def test_die_knoepfe_auf_der_karte_oeffnen_nicht_das_popup():
+    """Sonst geht beim Freigeben gleichzeitig das Fenster auf."""
+    assert 'if (e.target.closest("button, a")) return;' in QUELLE
+
+
+def test_bewegung_laesst_sich_abschalten():
+    """Wer Animationen ausgeschaltet hat, meint das ernst."""
+    assert "prefers-reduced-motion" in QUELLE

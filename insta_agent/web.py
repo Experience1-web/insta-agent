@@ -206,6 +206,13 @@ class Steuerung:
                         "bildtext": daten.get("hook_text_on_screen", ""),
                         "bildprompt": daten.get("image_generation_prompt", ""),
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
+                        # Was die Endprüfung gefunden hat. None heißt:
+                        # nicht geprüft - das ist etwas anderes als sauber.
+                        "pruefung": (
+                            json.loads(zeile["pruefung_json"])
+                            if zeile["pruefung_json"]
+                            else None
+                        ),
                     }
                 )
 
@@ -238,6 +245,7 @@ class Steuerung:
                     "traegt_sich": kasse.self_sustaining,
                 },
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
+                "mannschaft": _mannschaft(identitaet, self.settings),
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
@@ -258,6 +266,40 @@ class Steuerung:
             }
         finally:
             agent.close()
+
+
+def _mannschaft(identitaet, settings) -> list[dict]:
+    """Wer hier arbeitet, und woran.
+
+    Der Agent ist nicht allein: Die Endprüfung ist eine eigene Rolle mit
+    eigenem Auftrag, eigenem Modell und eigener Haltung. Das gehört
+    sichtbar gemacht - sonst sieht es aus, als kontrolliere er sich selbst.
+    """
+    from .brain import PRUEFER_AUFGABE, PRUEFER_NAME, PRUEFER_ROLLE
+
+    leute = []
+    if identitaet:
+        leute.append(
+            {
+                "name": identitaet.agent_name,
+                "rolle": "Betreibt den Account",
+                "aufgabe": identitaet.motto,
+                "rang": "chef",
+                "modell": settings.llm.model,
+                "aktiv": True,
+            }
+        )
+    leute.append(
+        {
+            "name": PRUEFER_NAME,
+            "rolle": PRUEFER_ROLLE,
+            "aufgabe": PRUEFER_AUFGABE,
+            "rang": "geprueft",
+            "modell": settings.llm.research_model,
+            "aktiv": settings.posting.pruefung_noetig,
+        }
+    )
+    return leute
 
 
 def pids_auf_port(netstat_ausgabe: str, port: int) -> set[str]:

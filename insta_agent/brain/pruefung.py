@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 # Die Endprüfung ist eine eigene Rolle im Betrieb, keine Laune des
 # Hauptagenten. Deshalb steht der Name fest und wechselt nicht mit jedem
 # Zyklus - man muss wissen, wer unterschrieben hat.
-PRUEFER_NAME = "Mara Ehlers"
+PRUEFER_NAME = "Ruth Kellner"
 PRUEFER_ROLLE = "Endprüfung"
 PRUEFER_AUFGABE = (
     "Prüft jeden Beitrag vor der Freigabe auf Zahlen, Quellen und "

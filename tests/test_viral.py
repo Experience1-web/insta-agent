@@ -148,7 +148,9 @@ def test_die_seite_zeigt_bildprompt_und_ersten_kommentar():
 
     seite = (Path(__file__).resolve().parent.parent
              / "insta_agent" / "web_page.html").read_text("utf-8")
-    assert "Bild-Prompt für Flux / Midjourney" in seite
+    # Der Prompt steckt im Popup, nicht mehr auf der Karte - sichtbar
+    # bleiben muss er trotzdem.
+    assert "Bild-Prompt" in seite
     assert "Erster Kommentar" in seite
     # Fremder Text darf nie ungeprüft in ein Attribut.
     assert 'data-text="${esc(p.bildprompt)}"' in seite
