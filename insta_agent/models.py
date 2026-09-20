@@ -100,16 +100,66 @@ class VisualSpec(BaseModel):
 
 
 class PostDraft(BaseModel):
-    """Ein fertiger Post-Entwurf."""
+    """Ein fertiger Post-Entwurf.
+
+    Die Felder folgen der Reihenfolge, in der ein Zuschauer sie trifft:
+    zuerst das Bild mit dem Text darauf, dann die erste Caption-Zeile, dann
+    der Rest. Was in den ersten anderthalb Sekunden nicht zieht, wird nie
+    gelesen - deshalb ist `hook_text_on_screen` ein eigenes Feld und nicht
+    ein Nebenprodukt der Caption.
+    """
 
     pillar: str = Field(description="Zu welcher Themensäule der Post gehört")
-    hook: str = Field(description="Die ersten Worte der Caption, die zum Weiterlesen zwingen")
+
+    # -- Der Hook: was auf dem Bild steht ---------------------------------
+    hook_text_on_screen: str = Field(
+        default="",
+        description=(
+            "Der Text auf dem Bild selbst. Höchstens 7 Wörter. Muss sofort "
+            "Neugier, Erstaunen oder Widerspruch auslösen - ein Musterbruch."
+        ),
+    )
+    image_generation_prompt: str = Field(
+        default="",
+        description=(
+            "Englischer Prompt für Flux oder Midjourney: Bildinhalt, Licht, "
+            "Stil, Format 9:16. Konkret genug, dass zweimal dasselbe Bild "
+            "entsteht."
+        ),
+    )
+
+    # -- Die Caption in ihren drei Teilen ---------------------------------
+    hook: str = Field(description="Die erste Caption-Zeile, die zum Weiterlesen zwingt")
     caption: str = Field(description="Vollständige Caption inklusive Hook, max 2200 Zeichen")
-    hashtags: list[str] = Field(description="Ohne #, gemischt aus groß, mittel und klein")
+    body_text: str = Field(
+        default="",
+        description="Der Haupttext mit Absätzen und Emojis, ohne die Hook-Zeile",
+    )
     call_to_action: str = Field(description="Was der Leser tun soll")
+
+    hashtags: list[str] = Field(description="Ohne #, gemischt aus groß, mittel und klein")
+
+    first_comment_prompt: str = Field(
+        default="",
+        description=(
+            "Eine offene Frage, die du selbst als ersten Kommentar setzt, "
+            "damit die Diskussion beginnt. Nicht mit ja oder nein zu "
+            "beantworten."
+        ),
+    )
+
     visual: VisualSpec
     best_time_hint: str = Field(description="Wann dieser Post laufen sollte und warum")
     expected_outcome: str = Field(description="Was der Agent sich davon verspricht")
+
+    @property
+    def bildtext(self) -> str:
+        """Was aufs Bild gehört - notfalls die Headline aus der Bildspezifikation.
+
+        Ältere Entwürfe aus der Datenbank kennen `hook_text_on_screen` noch
+        nicht. Sie sollen trotzdem ein Bild bekommen.
+        """
+        return self.hook_text_on_screen.strip() or self.visual.headline
 
 
 # --------------------------------------------------------------------------

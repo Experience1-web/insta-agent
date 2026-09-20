@@ -4,8 +4,13 @@ Der Agent hat kein Fotostudio und kein Bildmodell. Er hat Farbe, Schrift
 und einen Satz, der sitzt. Das reicht für Zitatkacheln, Zahlenkarten und
 Listen - genau die Formate, die auf Instagram geteilt werden.
 
-Porträt 1080x1350 ist bewusst gewählt: es nimmt im Feed mehr Höhe ein
-als ein Quadrat und wird dadurch länger gesehen.
+Zwei Formate:
+
+- FEED (1080x1350) für den normalen Beitrag. Nimmt mehr Höhe ein als ein
+  Quadrat und wird dadurch länger gesehen.
+- STORY (1080x1920) im Verhältnis 9:16, für Reels und Stories. Hier steht
+  der Hook allein und bildschirmfüllend - das ist das Format, in dem der
+  Daumen entscheidet.
 """
 
 from __future__ import annotations
@@ -19,7 +24,10 @@ from ..models import VisualSpec
 
 log = logging.getLogger(__name__)
 
-WIDTH, HEIGHT = 1080, 1350
+FEED = (1080, 1350)
+STORY = (1080, 1920)  # 9:16
+
+WIDTH, HEIGHT = FEED  # Voreinstellung, für Aufrufer ohne Formatwunsch
 MARGIN = 96
 
 # Reihenfolge nach Präferenz; die erste vorhandene Schrift gewinnt.
@@ -144,19 +152,26 @@ def _fit_text(
     return font, _wrap_to_width(draw, text, font, max_width) or [text]
 
 
-def render_post_image(spec: VisualSpec, out_path: Path) -> Path:
-    """Rendert den Bauplan zu einer fertigen PNG-Datei."""
+def render_post_image(
+    spec: VisualSpec, out_path: Path, *, groesse: tuple[int, int] = FEED
+) -> Path:
+    """Rendert den Bauplan zu einer fertigen PNG-Datei.
+
+    `groesse` ist FEED oder STORY. Im Story-Format bekommt die Headline
+    mehr Höhe, weil sie dort allein wirken muss.
+    """
+    breite, hoehe = groesse
     background = _hex_to_rgb(spec.background_hex, (17, 19, 24))
     text_color = _ensure_readable(_hex_to_rgb(spec.text_hex, (245, 245, 240)), background)
     accent = _hex_to_rgb(spec.accent_hex, (228, 87, 46))
 
-    image = Image.new("RGB", (WIDTH, HEIGHT), background)
+    image = Image.new("RGB", (breite, hoehe), background)
     draw = ImageDraw.Draw(image)
 
     # Akzentbalken oben - gibt dem Feed einen Wiedererkennungswert.
-    draw.rectangle([(0, 0), (WIDTH, 18)], fill=accent)
+    draw.rectangle([(0, 0), (breite, 18)], fill=accent)
 
-    inner_width = WIDTH - 2 * MARGIN
+    inner_width = breite - 2 * MARGIN
     body_lines = [line for line in spec.body_lines if line.strip()][:5]
 
     # Jedes Element bekommt seinen eigenen Höhenanteil, damit die Headline
@@ -164,11 +179,14 @@ def render_post_image(spec: VisualSpec, out_path: Path) -> Path:
     reserved = 120  # Akzentbalken und Fußzeile
     reserved += len(body_lines) * 64 + (40 if body_lines else 0)
     reserved += 120 if spec.subline.strip() else 0
-    headline_budget = max(HEIGHT - 2 * MARGIN - reserved, 240)
+    headline_budget = max(hoehe - 2 * MARGIN - reserved, 240)
 
     # Kurze Sätze dürfen groß werden, lange fangen kleiner an - sonst
     # zerfällt die Headline in sieben Zeilen.
     start_size = 112 if len(spec.headline) <= 34 else 92 if len(spec.headline) <= 60 else 76
+    # Im Hochformat ist mehr Platz - und der Hook soll ihn auch nutzen.
+    if hoehe > breite * 1.5:
+        start_size = int(start_size * 1.25)
     font, lines = _fit_text(
         draw,
         spec.headline,
@@ -180,7 +198,7 @@ def render_post_image(spec: VisualSpec, out_path: Path) -> Path:
 
     line_height = int(font.size * 1.25) if hasattr(font, "size") else 40
     block_height = len(lines) * line_height
-    y = max(MARGIN + 60, (HEIGHT - block_height) // 2 - (len(body_lines) * 34))
+    y = max(MARGIN + 60, (hoehe - block_height) // 2 - (len(body_lines) * 34))
 
     for line in lines:
         draw.text((MARGIN, y), line, font=font, fill=text_color)
@@ -204,7 +222,7 @@ def render_post_image(spec: VisualSpec, out_path: Path) -> Path:
 
     if spec.footer.strip():
         footer_font = _load_font(30, bold=False)
-        draw.text((MARGIN, HEIGHT - MARGIN), spec.footer, font=footer_font, fill=accent, anchor="ls")
+        draw.text((MARGIN, hoehe - MARGIN), spec.footer, font=footer_font, fill=accent, anchor="ls")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(out_path, "PNG", optimize=True)

@@ -190,6 +190,9 @@ class Steuerung:
                         "zeitpunkt": daten.get("best_time_hint", ""),
                         "erwartung": daten.get("expected_outcome", ""),
                         "aufruf": daten.get("call_to_action", ""),
+                        "bildtext": daten.get("hook_text_on_screen", ""),
+                        "bildprompt": daten.get("image_generation_prompt", ""),
+                        "erster_kommentar": daten.get("first_comment_prompt", ""),
                     }
                 )
 

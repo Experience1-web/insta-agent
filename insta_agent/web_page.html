@@ -122,14 +122,30 @@
     .beitrag { display: grid; grid-template-columns: 200px 1fr; align-items: start; }
     /* Beide Knoepfe sollen nebeneinander passen und nicht umbrechen. */
     .beitrag .knopfreihe > * { flex: 1 1 auto; text-align: center; }
-    /* 4:5 ist das Format, das der Renderer ausgibt. Mit demselben
-       Seitenverhaeltnis wird nichts abgeschnitten. */
-    .beitrag img { aspect-ratio: 4 / 5; object-fit: contain; }
+    /* Kein festes Seitenverhaeltnis: Der Renderer liefert je nach
+       Einstellung 4:5 oder 9:16. Das Bild bringt seine Maße selbst mit,
+       dann wird nichts beschnitten und nichts mit Balken aufgefuellt. */
+    .beitrag img { height: auto; align-self: start; }
   }
   .beitrag .inhalt { padding: 16px 18px; display: flex; flex-direction: column;
                      flex: 1; gap: 10px; }
   .beitrag .caption { white-space: pre-wrap; font-size: 14.5px; margin: 0; flex: 1; }
   .tags { color: var(--leise); font-size: 13px; word-break: break-word; }
+  .feld { border-top: 1px solid var(--rand); padding-top: 11px; }
+  .feldkopf { display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+              font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+              color: var(--leise); font-weight: 600; }
+  .feldkopf span { flex: 1; }
+  .winzig { padding: 3px 9px; font-size: 11px; border-radius: 99px;
+            background: var(--rand); color: var(--text); border: none; cursor: pointer; }
+  .winzig:hover { background: #333b4b; }
+  .winzig.fertig { background: var(--gut); color: #05240f; }
+  .prompt { display: block; font-size: 12.5px; line-height: 1.5; color: var(--leise);
+            background: var(--bg); border: 1px solid var(--rand); border-radius: 9px;
+            padding: 10px 12px; white-space: pre-wrap; word-break: break-word;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .frage { margin: 0; font-size: 14px; font-style: italic; color: var(--text); }
+  .bildtext { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
   .marke {
     display: inline-block; font-size: 10.5px; padding: 3px 9px; border-radius: 99px;
     background: var(--rand); color: var(--leise); text-transform: uppercase;
@@ -589,6 +605,27 @@ function zeichne_beitraege(d) {
             <span class="marke">${esc(p.saeule)}</span>
           </div>
           <p class="caption">${esc(p.caption)}</p>
+          ${p.bildtext ? `<div class="feld">
+            <div class="feldkopf">
+              <span>Text fürs Bild</span>
+              <button class="winzig" data-text="${esc(p.bildtext)}">kopieren</button>
+            </div>
+            <p class="bildtext">${esc(p.bildtext)}</p>
+          </div>` : ""}
+          ${p.bildprompt ? `<div class="feld">
+            <div class="feldkopf">
+              <span>Bild-Prompt für Flux / Midjourney</span>
+              <button class="winzig" data-text="${esc(p.bildprompt)}">kopieren</button>
+            </div>
+            <code class="prompt">${esc(p.bildprompt)}</code>
+          </div>` : ""}
+          ${p.erster_kommentar ? `<div class="feld">
+            <div class="feldkopf">
+              <span>Erster Kommentar</span>
+              <button class="winzig" data-text="${esc(p.erster_kommentar)}">kopieren</button>
+            </div>
+            <p class="frage">${esc(p.erster_kommentar)}</p>
+          </div>` : ""}
           <div class="tags">${p.hashtags.map(h => "#" + esc(h)).join(" ")}</div>
           ${p.status === "draft" ? `<div class="knopfreihe">
             <button class="klein gut" data-freigeben="${p.id}">Freigeben</button>
@@ -609,6 +646,21 @@ function zeichne_beitraege(d) {
         </div>
       </article>`).join("")}</div>`;
 
+  for (const knopf of document.querySelectorAll("[data-text]")) {
+    knopf.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(knopf.dataset.text);
+        knopf.textContent = "kopiert";
+        knopf.classList.add("fertig");
+        setTimeout(() => {
+          knopf.textContent = "kopieren";
+          knopf.classList.remove("fertig");
+        }, 1600);
+      } catch {
+        alert("Kopieren hat nicht geklappt – markier den Text von Hand.");
+      }
+    };
+  }
   for (const knopf of document.querySelectorAll("[data-freigeben]")) {
     knopf.onclick = () => entscheide(knopf.dataset.freigeben, "freigeben", knopf);
   }

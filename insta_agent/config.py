@@ -129,6 +129,8 @@ class PostingConfig:
     # Lokale Uhrzeiten, zu denen der Agent veröffentlichen darf.
     preferred_hours: list[int] = field(default_factory=lambda: [8, 12, 18])
     max_hashtags: int = 20
+    # "story" ist 9:16 fuer Reels, "feed" ist 4:5 fuer den normalen Beitrag.
+    bildformat: str = "story"
     # Ohne --live veröffentlicht der Agent nichts, er schreibt nur Entwürfe.
     live: bool = False
 

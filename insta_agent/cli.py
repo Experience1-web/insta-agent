@@ -418,6 +418,45 @@ def run(
 
 
 @app.command()
+def neustart(
+    config: Path = typer.Option(None),
+    ja: bool = typer.Option(False, "--ja", help="Ohne Rückfrage durchführen"),
+) -> None:
+    """Lässt den Agenten seine Nische, seinen Namen und seine Strategie neu suchen.
+
+    Veröffentlichte Beiträge, Kasse und Journal bleiben erhalten. Der
+    nächste Zyklus beginnt wieder bei der Marktanalyse - und kostet
+    entsprechend.
+    """
+    agent = _agent(config)
+    try:
+        alt = agent.identity
+        if alt:
+            console.print(
+                Panel(
+                    f"[bold]{alt.agent_name}[/bold] · @{alt.handle}\n"
+                    f"[dim]{alt.niche}[/dim]",
+                    title="Das wirft er weg",
+                )
+            )
+        else:
+            console.print("[dim]Er hat noch kein Profil - es gibt nichts wegzuwerfen.[/dim]")
+
+        if not ja and not typer.confirm("Wirklich neu anfangen?"):
+            console.print("Abgebrochen. Es bleibt alles, wie es war.")
+            raise typer.Exit(0)
+
+        geloescht = agent.neu_erfinden()
+        console.print(
+            f"[green]Fertig.[/green] {len(geloescht)} Entscheidungen gelöscht.\n"
+            "Beim nächsten Lauf recherchiert er neu und erfindet sich neu.\n"
+            "[dim]Denk daran, danach auch Instagram-Name und Bio anzupassen.[/dim]"
+        )
+    finally:
+        agent.close()
+
+
+@app.command()
 def identity(config: Path = typer.Option(None)) -> None:
     """Zeigt, wer der Agent zu sein beschlossen hat."""
     agent = _agent(config)

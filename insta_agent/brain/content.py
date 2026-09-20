@@ -1,4 +1,8 @@
-"""Post-Erstellung: Caption, Hashtags und der Bauplan fürs Bild."""
+"""Post-Erstellung nach den drei Viralitätsregeln.
+
+Reihenfolge der Aufmerksamkeit: Bild mit Hook-Text, erste Caption-Zeile,
+Fließtext, Aufruf. Der erste Kommentar startet die Diskussion.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,13 @@ from ..models import PostDraft
 from .prompts import PERSONA, identity_block, strategy_block, with_context
 
 MAX_CAPTION = 2200
+MAX_HOOK_WOERTER = 7
+
+
+def _kuerze_auf_woerter(text: str, hoechstens: int) -> str:
+    """Setzt die Wortgrenze durch, statt auf das Modell zu hoffen."""
+    woerter = text.split()
+    return text if len(woerter) <= hoechstens else " ".join(woerter[:hoechstens])
 
 
 def create_post_draft(
@@ -35,32 +46,65 @@ def create_post_draft(
             f"# Was deine Zahlen sagen\n{performance_note}" if performance_note else "",
             f"""\
 # Auftrag
-Schreibe den nächsten Post. Er zahlt auf dein Wochenziel ein.
+Schreibe den nächsten Beitrag. Er zahlt auf dein Wochenziel ein.
 
-Der Hook sind die ersten rund 80 Zeichen - mehr sieht niemand, bevor er auf
-"mehr" tippt. Wenn der Hook nicht trägt, ist der Rest egal. Keine Frage
-als Hook, die man mit ja oder nein abnicken kann.
+## hook_text_on_screen
+Der Satz, der auf dem Bild steht. Höchstens {MAX_HOOK_WOERTER} Wörter.
+Das ist der Musterbruch - er muss dem widersprechen, was der Daumen beim
+Weiterwischen erwartet. Keine Frage, die man mit ja oder nein abnickt.
+Keine Ankündigung ("So geht X"), sondern eine Behauptung, die hängenbleibt.
 
-Die Caption gibt etwas Konkretes her: eine Beobachtung, eine Zahl, einen
-Schritt, den jemand heute gehen kann. Allgemeinplätze werden nicht
-geteilt, und geteilt zu werden ist dein einziger Wachstumsweg.
+## image_generation_prompt
+Auf Englisch, für Flux oder Midjourney. Beschreibe Bildinhalt, Licht,
+Farbstimmung, Stil und Kameraperspektive, und schließe mit dem Format
+9:16. Konkret genug, dass zweimal ein ähnliches Bild herauskäme. Lass Platz
+in der Bildmitte oder im oberen Drittel, damit der Hook-Text darauf lesbar
+bleibt. Keine Schrift im Bild - die Schrift kommt später darüber.
 
-Hashtags: höchstens {max_hashtags}, ohne Raute. Misch bewusst - ein paar
-große für Volumen, mehr mittlere, und einige kleine, spitze, in denen du
-tatsächlich sichtbar bleibst. Reine Reichweiten-Tags ohne Bezug zum Inhalt
-schaden dir.
+## hook (erste Caption-Zeile)
+Die ersten rund 80 Zeichen der Bildunterschrift - mehr sieht niemand,
+bevor er auf "mehr" tippt.
 
-Das Bild entsteht rein typografisch: Farbfläche, eine starke Zeile, dazu
-optional wenige Stützzeilen. Halte die Headline unter 60 Zeichen, sonst
-wird sie im Feed unleserlich. Die Farben wählst du aus deiner Bildsprache
-und achtest auf harten Kontrast zwischen Text und Hintergrund.
+## body_text
+Der Haupttext, in kurzen Absätzen, mit Emojis als Gliederung. Gib etwas
+Konkretes her: ein Gefühl, eine Anekdote, eine Beobachtung, die jemand
+aufheben will. Allgemeinplätze werden weder gespeichert noch geteilt.
 
-Die Caption darf höchstens {MAX_CAPTION} Zeichen haben.""",
+## caption
+Hook-Zeile und body_text zusammen, wie sie unter dem Beitrag stehen.
+Höchstens {MAX_CAPTION} Zeichen.
+
+## call_to_action
+Dezent, aber bestimmt. Ein Satz mit einem Grund darin - nicht "folge mir",
+sondern warum es sich lohnt.
+
+## hashtags
+Höchstens {max_hashtags}, ohne Raute. Misch bewusst: ein paar große für
+Volumen, mehr mittlere, einige kleine und spitze, in denen du tatsächlich
+sichtbar bleibst. Reine Reichweiten-Tags ohne Bezug zum Inhalt schaden dir.
+
+## first_comment_prompt
+Eine offene Frage, die du selbst als ersten Kommentar setzt. Nicht mit ja
+oder nein zu beantworten. Sie soll jemanden dazu bringen, von sich zu
+erzählen - Kommentare sind das stärkste Signal, das du erzeugen kannst.
+
+## visual
+Der Bauplan für die Notfassung: Falls kein Bild erzeugt wird, rendert das
+Programm den Hook typografisch. Setz headline gleich dem
+hook_text_on_screen, wähl Farben aus deiner Bildsprache und achte auf
+harten Kontrast zwischen Text und Hintergrund.""",
         ),
     )
 
-    # Harte Grenzen der Plattform durchsetzen, statt auf das Modell zu hoffen.
+    # Harte Grenzen durchsetzen, statt auf das Modell zu hoffen.
     draft.hashtags = [h.lstrip("#").strip() for h in draft.hashtags if h.strip()][:max_hashtags]
+    draft.hook_text_on_screen = _kuerze_auf_woerter(
+        draft.hook_text_on_screen.strip(), MAX_HOOK_WOERTER
+    )
     if len(draft.caption) > MAX_CAPTION:
         draft.caption = draft.caption[: MAX_CAPTION - 1].rstrip() + "…"
+
+    # Das Bild zeigt den Hook, auch wenn das Modell die Felder auseinanderlaufen ließ.
+    if draft.hook_text_on_screen:
+        draft.visual.headline = draft.hook_text_on_screen
     return draft

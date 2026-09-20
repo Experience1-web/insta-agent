@@ -28,7 +28,7 @@ from .brain import (
 )
 from .config import Settings
 from .economy.ledger import BudgetExhausted, CycleBudgetExceeded, Mode, Treasury
-from .imaging import render_post_image
+from .imaging import FEED, STORY, render_post_image
 from .instagram import InstagramClient, Publisher
 from .llm import Brain, ModelRefused
 from .models import (
@@ -190,6 +190,29 @@ class Agent:
 
     # -- Einmalige Geburt --------------------------------------------------
 
+    def neu_erfinden(self) -> list[str]:
+        """Löscht, was der Agent über sich entschieden hat.
+
+        Der nächste Zyklus fängt dann bei der Marktanalyse an und sucht
+        sich Nische, Name und Bildsprache neu. Veröffentlichte Beiträge,
+        Kasse und Journal bleiben stehen - sie sind seine Geschichte, und
+        die Kasse ist ohnehin echtes Geld.
+        """
+        geloescht = []
+        for schluessel in (
+            KEY_IDENTITY,
+            KEY_STRATEGY,
+            KEY_ANALYSIS,
+            KEY_REFLECTION,
+            KEY_ASSESSMENT,
+        ):
+            if self.store.get_json(schluessel) is not None:
+                self.store.set_json(schluessel, None)
+                geloescht.append(schluessel)
+
+        self.store.log("identity", "Der Agent fängt von vorne an und sucht sich eine neue Nische")
+        return geloescht
+
     def bootstrap(self, *, operator_hint: str | None = None, cycle: int = 0) -> Identity:
         """Der Agent erfindet sich selbst. Passiert genau einmal."""
         if existing := self.identity:
@@ -346,7 +369,9 @@ class Agent:
 
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             image_path = render_post_image(
-                draft.visual, self.settings.media_dir / f"{stamp}-{cycle}-{index}.png"
+                draft.visual,
+                self.settings.media_dir / f"{stamp}-{cycle}-{index}.png",
+                groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
             )
             post_id = self.store.add_draft(draft, str(image_path))
 
