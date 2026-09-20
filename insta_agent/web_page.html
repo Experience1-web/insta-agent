@@ -233,6 +233,18 @@
 <div id="heldbox"></div>
 
 <div id="kassebox"></div>
+<div class="karte" id="kassekorrektur">
+  <div class="zeile">
+    <input id="guthaben" type="number" step="0.01" min="0" placeholder="Guthaben in USD"
+           style="max-width:160px; min-width:130px">
+    <button id="kassesetzen" class="klein">Kontostand übernehmen</button>
+  </div>
+  <p class="hinweis" style="margin:13px 0 0">
+    Er schätzt seine Kosten aus Tokenzahl und Preisliste. Die Wahrheit steht auf
+    console.anthropic.com unter „Organisations-Credits“. Trag sie hier ein – vor allem
+    nach jedem Aufladen, sonst hält er sich für ärmer, als er ist.
+  </p>
+</div>
 <div id="vorhabenbox"></div>
 
 <h2 id="steuerungstitel">Ihn arbeiten lassen</h2>
@@ -429,7 +441,8 @@ function zeichne(d) {
   $("start").textContent = d.laeuft ? "Läuft …" : "Starten";
 
   const sichtbar = d.nur_lesen ? "none" : "";
-  for (const id of ["steuerung", "steuerungstitel", "einnahmebox", "einnahmetitel"]) {
+  for (const id of ["steuerung", "steuerungstitel", "einnahmebox", "einnahmetitel",
+                    "kassekorrektur"]) {
     $(id).style.display = sichtbar;
   }
   // Was ein Lauf bewirkt, haengt davon ab, ob er scharf geschaltet ist.
@@ -822,6 +835,34 @@ function zeichne_verlauf(d) {
       </div>`).join("")}
     </div>`;
 }
+
+$("kassesetzen").onclick = async () => {
+  const guthaben = parseFloat($("guthaben").value);
+  if (isNaN(guthaben) || guthaben < 0) { alert("Bitte den Kontostand in USD eintragen."); return; }
+
+  const knopf = $("kassesetzen");
+  knopf.disabled = true;
+  const antwort = await fetch("/api/kasse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...kopf },
+    body: JSON.stringify({ guthaben }),
+  });
+  const ergebnis = await antwort.json();
+  knopf.disabled = false;
+
+  if (ergebnis.ok) {
+    $("guthaben").value = "";
+    knopf.textContent = "Übernommen";
+    knopf.classList.add("fertig");
+    setTimeout(() => {
+      knopf.textContent = "Kontostand übernehmen";
+      knopf.classList.remove("fertig");
+    }, 1800);
+    laden();
+  } else {
+    alert(ergebnis.grund || "Das hat nicht geklappt.");
+  }
+};
 
 $("buchen").onclick = async () => {
   const betrag = parseFloat($("betrag").value);

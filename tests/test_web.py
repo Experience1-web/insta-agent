@@ -649,3 +649,105 @@ def test_die_seite_verlangt_das_portrait_als_tabsymbol():
     seite = (Path(__file__).resolve().parent.parent
              / "insta_agent" / "web_page.html").read_text("utf-8")
     assert '<link rel="icon" href="/avatar">' in seite
+
+
+# --- Kontostand über die Oberfläche ---------------------------------------
+
+
+def _sende(port: int, pfad: str, rumpf: dict):
+    import json
+    import urllib.request
+
+    anfrage = urllib.request.Request(
+        f"http://127.0.0.1:{port}{pfad}",
+        data=json.dumps(rumpf).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+        return json.loads(antwort.read())
+
+
+def _server(settings):
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(Steuerung(settings), None))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+def test_der_kontostand_laesst_sich_ueber_die_oberflaeche_setzen(settings):
+    """Nach dem Aufladen soll niemand ins schwarze Fenster müssen."""
+    from insta_agent.runner import Agent
+
+    settings.anthropic_api_key = "sk-ant-test"
+    server, port = _server(settings)
+
+    try:
+        ergebnis = _sende(port, "/api/kasse", {"guthaben": 6.11})
+        assert ergebnis["ok"] is True
+        assert ergebnis["stand"] == 6.11
+
+        agent = Agent(settings)
+        try:
+            stand = agent.treasury.state()
+            assert stand.balance_usd == pytest.approx(6.11)
+            # Nachgelegtes Geld ist kein Verdienst des Agenten.
+            assert stand.earned_usd == 0.0
+        finally:
+            agent.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ein_kontostand_der_keine_zahl_ist_wird_abgelehnt(settings):
+    import urllib.error
+
+    server, port = _server(settings)
+    try:
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            _sende(port, "/api/kasse", {"guthaben": "viel"})
+        assert fehler.value.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_ein_negativer_kontostand_wird_abgelehnt(settings):
+    import urllib.error
+
+    server, port = _server(settings)
+    try:
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            _sende(port, "/api/kasse", {"guthaben": -1})
+        assert fehler.value.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_die_nur_lese_ansicht_darf_die_kasse_nicht_anfassen(settings):
+    """Vom Handy aus nachsehen, ja. Die Kasse verstellen, nein."""
+    import urllib.error
+
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.web import Steuerung, _handler_klasse
+
+    steuerung = Steuerung(settings, nur_lesen=True)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(steuerung, None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    try:
+        with pytest.raises(urllib.error.HTTPError) as fehler:
+            _sende(port, "/api/kasse", {"guthaben": 5.0})
+        assert fehler.value.code == 409
+    finally:
+        server.shutdown()
+        server.server_close()

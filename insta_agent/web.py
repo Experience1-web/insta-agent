@@ -553,6 +553,42 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json({"ok": True})
 
+        def _setze_kasse(self, rumpf: dict) -> None:
+            """Trägt den echten Kontostand ein.
+
+            Der Agent schätzt seine Kosten aus Tokenzahl und Preisliste.
+            Was auf der Abrechnungsseite steht, ist die Wahrheit - und
+            daran hängen Sparbetrieb und Stopp. Nach jedem Aufladen gehört
+            die neue Zahl hier hinein.
+            """
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            try:
+                guthaben = float(rumpf.get("guthaben"))
+            except (TypeError, ValueError):
+                self._json({"ok": False, "grund": "Das ist keine Zahl."}, 400)
+                return
+            if guthaben < 0:
+                self._json({"ok": False, "grund": "Ein Guthaben ist nicht negativ."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                bereits = _bereits_heute(agent)
+                agent.treasury.setze_anker(guthaben, bereits)
+                stand = agent.treasury.state()
+                agent.store.log(
+                    "treasury",
+                    f"Kontostand auf {guthaben:.2f} USD gesetzt"
+                    + (" - rechnet ab jetzt selbst nach" if bereits is not None else ""),
+                )
+            finally:
+                agent.close()
+            self._json(
+                {"ok": True, "stand": round(stand.balance_usd, 2), "modus": stand.mode.value}
+            )
+
         def _sende_avatar(self) -> None:
             """Das Portrait des Agenten.
 
@@ -628,7 +664,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 return
 
             pfad = urlparse(self.path).path
-            if pfad not in ("/api/start", "/api/einnahme", "/api/entscheiden"):
+            if pfad not in ("/api/start", "/api/einnahme", "/api/entscheiden", "/api/kasse"):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
 
@@ -641,6 +677,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/entscheiden":
                 self._entscheide(rumpf)
+                return
+
+            if pfad == "/api/kasse":
+                self._setze_kasse(rumpf)
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))
@@ -768,3 +808,20 @@ def starte_server(
         print("\n  Beendet.")
     finally:
         server.server_close()
+
+
+def _bereits_heute(agent) -> float | None:
+    """Was heute vor dem Eintragen schon abgerechnet wurde - None ohne Zugang.
+
+    Die Abrechnung löst nur ganze Tage auf. Ohne diesen Wert ginge der
+    heutige Verbrauch später ein zweites Mal vom Guthaben ab.
+    """
+    if agent.abrechnung is None:
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        return agent.abrechnung.kosten_seit(datetime.now(timezone.utc))
+    except Exception as exc:  # noqa: BLE001 - kein Grund, den Eintrag zu verlieren
+        log.warning("Abrechnung nicht erreichbar: %s", exc)
+        return None
