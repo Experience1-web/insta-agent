@@ -115,6 +115,7 @@ def pruefe_beitrag(
     identity,
     draft: PostDraft,
     mit_suche: bool = True,
+    modell: str | None = None,
 ) -> Pruefbericht:
     """Lässt den Beitrag von der Endprüfung durchgehen.
 
@@ -141,6 +142,7 @@ def pruefe_beitrag(
         label="Endprüfung",
         task="research",
         web_search=mit_suche,
+        modell=modell,
         prompt=with_context(
             identity_block(identity),
             f"""\

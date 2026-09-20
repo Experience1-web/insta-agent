@@ -37,14 +37,20 @@ class FakeBrain:
         self.letzte_quellen: list[str] = []
         # Womit gesucht wurde, damit Tests das nachsehen koennen.
         self.gesucht: list[str] = []
+        # Welches Modell je Aufruf gewuenscht war.
+        self.modelle: dict[str, str | None] = {}
 
     def _buchen(self, label: str) -> None:
         self.treasury.check()
         self.treasury.charge(KOSTEN_PRO_AUFRUF, "llm", label)
         self.aufrufe.append(label)
 
-    def text(self, *, system, prompt, label, task="reasoning", web_search=False, max_rounds=6):
+    def text(
+        self, *, system, prompt, label, task="reasoning", web_search=False,
+        max_rounds=6, modell=None,
+    ):
         self._buchen(label)
+        self.modelle[label] = modell
         return CallResult(
             text="Kurzform-Videos wachsen, Zitatkacheln sind übersättigt.",
             cost_usd=KOSTEN_PRO_AUFRUF,
@@ -53,9 +59,11 @@ class FakeBrain:
         )
 
     def structured(
-        self, *, schema, system, prompt, label, task="reasoning", web_search=False, max_rounds=6
+        self, *, schema, system, prompt, label, task="reasoning", web_search=False,
+        max_rounds=6, modell=None,
     ):
         self._buchen(label)
+        self.modelle[label] = modell
         if web_search:
             self.gesucht.append(label)
             self.letzte_quellen = ["https://beispiel.de/quelle"]

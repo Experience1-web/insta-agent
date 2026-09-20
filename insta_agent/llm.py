@@ -88,10 +88,17 @@ class Brain:
         aufwand = self.config.research_effort if task == "research" else self.config.effort
         return {"effort": aufwand}
 
-    def _model_for(self, task: str) -> str:
-        """Jede Aufgabe bekommt das Modell, das sie wirklich braucht."""
+    def _model_for(self, task: str, wunsch: str | None = None) -> str:
+        """Jede Aufgabe bekommt das Modell, das sie wirklich braucht.
+
+        `wunsch` ist die Wahl des Betreibers für diese Rolle. Sie sticht
+        die Voreinstellung - aber nicht den Sparbetrieb: Wenn das Geld
+        knapp wird, ist die Bremse wichtiger als der Wunsch.
+        """
         if self.treasury.state().mode is Mode.FRUGAL:
             return self.config.cheap_model
+        if wunsch:
+            return wunsch
         if task == "routine":
             return self.config.cheap_model
         if task == "research":
@@ -128,6 +135,7 @@ class Brain:
         task: str = "reasoning",
         web_search: bool = False,
         max_rounds: int = 6,
+        modell: str | None = None,
     ) -> T:
         """Holt eine validierte Antwort nach dem Pydantic-Schema.
 
@@ -138,7 +146,7 @@ class Brain:
         Schema, das der Aufrufer vorgibt.
         """
         self.treasury.check()
-        model = self._model_for(task)
+        model = self._model_for(task, modell)
         tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
         self.letzte_quellen = []
 
@@ -198,10 +206,11 @@ class Brain:
         task: str = "reasoning",
         web_search: bool = False,
         max_rounds: int = 6,
+        modell: str | None = None,
     ) -> CallResult:
         """Ein Textaufruf. Mit web_search recherchiert das Modell selbst."""
         self.treasury.check()
-        model = self._model_for(task)
+        model = self._model_for(task, modell)
         tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]

@@ -465,6 +465,17 @@ class Agent:
 
             recent.append(draft.caption)
 
+    @property
+    def modellwahl(self) -> dict:
+        """Welches Modell der Betreiber welcher Rolle zugewiesen hat."""
+        from .mannschaft import KEY_MODELLWAHL
+
+        return self.store.get_json(KEY_MODELLWAHL) or {}
+
+    def _modell(self, schluessel: str) -> str | None:
+        """Das gewählte Modell einer Rolle, oder None für die Voreinstellung."""
+        return self.modellwahl.get(schluessel)
+
     def _pruefe(self, post_id: int, draft, identity, report: CycleReport):
         """Lässt die Endprüfung über den Entwurf gehen.
 
@@ -483,6 +494,7 @@ class Agent:
                 # Ohne Websuche lässt sich keine Quelle nachschlagen. Geprüft
                 # wird trotzdem - Rechenfehler fallen auch so auf.
                 mit_suche=self.treasury.state().mode is Mode.NORMAL,
+                modell=self._modell("pruefung"),
             )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise
@@ -520,6 +532,7 @@ class Agent:
                 identity=identity,
                 draft=draft,
                 mit_suche=self.treasury.state().mode is Mode.NORMAL,
+                modell=self._modell("bildsprache"),
             )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise

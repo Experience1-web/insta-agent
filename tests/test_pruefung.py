@@ -83,6 +83,23 @@ def test_die_pruefung_darf_nachschlagen():
     assert brain.aufruf["web_search"] is True
 
 
+def test_das_modell_laesst_sich_umstellen():
+    """Der Betreiber soll die Rolle billiger oder besser machen koennen."""
+    brain = FakeBrain()
+
+    _pruefe(brain, modell="claude-haiku-4-5")
+
+    assert brain.aufruf["modell"] == "claude-haiku-4-5"
+
+
+def test_ohne_wahl_bleibt_es_bei_der_voreinstellung():
+    brain = FakeBrain()
+
+    _pruefe(brain)
+
+    assert brain.aufruf["modell"] is None
+
+
 def test_die_pruefung_hat_einen_eigenen_auftrag():
     """Wer den Beitrag geschrieben hat, ist der falsche, um ihn zu pruefen."""
     brain = FakeBrain()

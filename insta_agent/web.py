@@ -25,9 +25,24 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .config import Settings
+from .mannschaft import aufstellung
 from .runner import Agent
 
 log = logging.getLogger(__name__)
+
+
+def _waehlbare_modelle() -> list[str]:
+    """Welche Modelle sich einstellen lassen.
+
+    Nur solche, für die ein Preis hinterlegt ist. Ein Modell ohne Preis
+    wuerde zu teuer geschaetzt und die Kasse verzerren.
+    """
+    from .economy.pricing import PRICING
+
+    return sorted(PRICING)
+
+
+WAEHLBARE_MODELLE = _waehlbare_modelle()
 
 # Die Server-Kennung, an der sich ein laufendes Dashboard erkennen lässt.
 KENNUNG = "insta-agent"
@@ -179,6 +194,7 @@ class Steuerung:
         agent = Agent(self.settings)
         try:
             kasse = agent.treasury.state()
+            modellwahl = agent.modellwahl
             identitaet = agent.identity
             strategie = agent.strategy
             plan = agent.monetization
@@ -213,6 +229,12 @@ class Steuerung:
                             if zeile["pruefung_json"]
                             else None
                         ),
+                        # Was die Bildsprache vor dem Malen gesagt hat.
+                        "gestaltung": (
+                            json.loads(zeile["gestaltung_json"])
+                            if zeile["gestaltung_json"]
+                            else None
+                        ),
                     }
                 )
 
@@ -245,7 +267,8 @@ class Steuerung:
                     "traegt_sich": kasse.self_sustaining,
                 },
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
-                "mannschaft": _mannschaft(identitaet, self.settings),
+                "mannschaft": aufstellung(identitaet, self.settings, modellwahl),
+                "modelle": WAEHLBARE_MODELLE,
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
@@ -266,40 +289,6 @@ class Steuerung:
             }
         finally:
             agent.close()
-
-
-def _mannschaft(identitaet, settings) -> list[dict]:
-    """Wer hier arbeitet, und woran.
-
-    Der Agent ist nicht allein: Die Endprüfung ist eine eigene Rolle mit
-    eigenem Auftrag, eigenem Modell und eigener Haltung. Das gehört
-    sichtbar gemacht - sonst sieht es aus, als kontrolliere er sich selbst.
-    """
-    from .brain import PRUEFER_AUFGABE, PRUEFER_NAME, PRUEFER_ROLLE
-
-    leute = []
-    if identitaet:
-        leute.append(
-            {
-                "name": identitaet.agent_name,
-                "rolle": "Betreibt den Account",
-                "aufgabe": identitaet.motto,
-                "rang": "chef",
-                "modell": settings.llm.model,
-                "aktiv": True,
-            }
-        )
-    leute.append(
-        {
-            "name": PRUEFER_NAME,
-            "rolle": PRUEFER_ROLLE,
-            "aufgabe": PRUEFER_AUFGABE,
-            "rang": "geprueft",
-            "modell": settings.llm.research_model,
-            "aktiv": settings.posting.pruefung_noetig,
-        }
-    )
-    return leute
 
 
 def pids_auf_port(netstat_ausgabe: str, port: int) -> set[str]:
@@ -509,7 +498,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             elif pfad.path in ("/avatar", "/favicon.ico"):
                 # Auch als Symbol im Browsertab: Wer mehrere Fenster offen
                 # hat, erkennt seinen Mitarbeiter am Gesicht.
-                self._sende_avatar()
+                self._sende_avatar(parse_qs(pfad.query).get("wer", ["chef"])[0])
             elif pfad.path == "/qr":
                 self._sende_qr()
             elif pfad.path == "/media":
@@ -631,35 +620,138 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 {"ok": True, "stand": round(stand.balance_usd, 2), "modus": stand.mode.value}
             )
 
-        def _sende_avatar(self) -> None:
-            """Das Portrait des Agenten.
+        def _setze_modell(self, rumpf: dict) -> None:
+            """Stellt um, mit welchem Modell eine Rolle arbeitet.
 
-            Liegt ein eigenes Bild unter assets/portrait.*, gilt das. Der
-            Betreiber soll sein Dashboard aussehen lassen dürfen, wie er
-            möchte - er ist der Einzige, der es sieht.
+            Welches Modell eine Rolle braucht, hängt davon ab, wie gut die
+            Ergebnisse sind und wie viel Geld da ist. Das gehört dem
+            Betreiber in die Hand - ohne Neustart und ohne Datei.
+            """
+            from .mannschaft import KEY_MODELLWAHL, NACH_SCHLUESSEL
+
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            wer = str(rumpf.get("wer") or "")
+            if wer not in NACH_SCHLUESSEL:
+                self._json({"ok": False, "grund": "Diese Rolle gibt es nicht."}, 400)
+                return
+
+            modell = str(rumpf.get("modell") or "").strip()
+            # Leer heisst: zurueck auf die Voreinstellung.
+            if modell and modell not in WAEHLBARE_MODELLE:
+                self._json({"ok": False, "grund": "Dieses Modell kenne ich nicht."}, 400)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                wahl = dict(agent.modellwahl)
+                if modell:
+                    wahl[wer] = modell
+                else:
+                    wahl.pop(wer, None)
+                agent.store.set_json(KEY_MODELLWAHL, wahl)
+                agent.store.log(
+                    "modell",
+                    f"{NACH_SCHLUESSEL[wer].rolle} arbeitet jetzt mit "
+                    + (modell or "der Voreinstellung"),
+                )
+            finally:
+                agent.close()
+            self._json({"ok": True})
+
+        def _male_portraits(self) -> None:
+            """Lässt Porträts für die Mannschaft malen.
+
+            Kostet echtes Geld beim Bilddienst, deshalb nur auf Knopfdruck
+            und nie im Zyklus. Wer schon ein Bild hat, bekommt kein neues.
+            """
+            from .imaging.generator import baue_generator
+            from .imaging.portraits import erzeuge_portrait, portraitpfad
+            from .mannschaft import ROLLEN
+
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            einst = steuerung.settings
+            generator = baue_generator(einst.bild.anbieter, einst.bild.token, einst.bild.modell)
+            if generator is None:
+                self._json(
+                    {
+                        "ok": False,
+                        "grund": "Kein Bilddienst eingerichtet. Im Terminal: insta-agent bilder",
+                    },
+                    409,
+                )
+                return
+
+            agent = Agent(einst)
+            try:
+                identitaet = agent.identity
+                gemalt, gescheitert = [], []
+                for rolle in ROLLEN:
+                    if rolle.schluessel == "chef" and identitaet is None:
+                        continue
+                    ziel = portraitpfad(einst.media_dir, rolle.schluessel)
+                    if ziel.is_file():
+                        continue
+                    if erzeuge_portrait(generator, rolle, ziel, identitaet):
+                        gemalt.append(rolle.schluessel)
+                    else:
+                        gescheitert.append(rolle.schluessel)
+                if gemalt:
+                    agent.store.log("portrait", f"{len(gemalt)} Porträt(s) gemalt")
+            finally:
+                agent.close()
+                if hasattr(generator, "close"):
+                    generator.close()
+
+            self._json({"ok": True, "gemalt": gemalt, "gescheitert": gescheitert})
+
+        def _sende_avatar(self, wer: str = "chef") -> None:
+            """Das Porträt einer Rolle.
+
+            Drei Stufen, in dieser Reihenfolge: ein eigenes Bild des
+            Betreibers unter assets/, ein gemaltes Porträt aus dem
+            Medienordner, und zuletzt das gezeichnete Zeichen aus
+            Initialen und Farben. Die letzte Stufe kann nicht fehlschlagen
+            - es gibt immer etwas zu sehen.
             """
             import mimetypes as mt
 
             from .config import REPO_ROOT
             from .imaging.avatar import render_avatar
+            from .imaging.portraits import portraitpfad
+            from .mannschaft import NACH_SCHLUESSEL
+
+            rolle = NACH_SCHLUESSEL.get(wer) or NACH_SCHLUESSEL["chef"]
+            stamm = "portrait" if rolle.schluessel == "chef" else f"portrait_{rolle.schluessel}"
 
             for endung in ("png", "jpg", "jpeg", "webp", "gif"):
-                eigenes = REPO_ROOT / "assets" / f"portrait.{endung}"
+                eigenes = REPO_ROOT / "assets" / f"{stamm}.{endung}"
                 if eigenes.is_file():
                     typ = mt.guess_type(eigenes.name)[0] or "image/png"
                     self._sende(200, typ, eigenes.read_bytes())
                     return
 
+            gemalt = portraitpfad(steuerung.settings.media_dir, rolle.schluessel)
+            if gemalt.is_file():
+                self._sende(200, "image/png", gemalt.read_bytes())
+                return
+
             zustand = steuerung.zustand()
             identitaet = zustand.get("identitaet")
-            if not identitaet:
+            if rolle.schluessel == "chef" and not identitaet:
                 self._sende(404, "text/plain; charset=utf-8", b"Noch kein Profil")
                 return
 
+            name = identitaet["agent_name"] if rolle.schluessel == "chef" else rolle.name
             farben = zustand.get("farben", {})
-            pfad = steuerung.settings.media_dir / "_portrait.png"
+            pfad = steuerung.settings.media_dir / f"_zeichen_{rolle.schluessel}.png"
             render_avatar(
-                identitaet["agent_name"],
+                name,
                 pfad,
                 background_hex=farben.get("hintergrund", "#111318"),
                 accent_hex=farben.get("akzent", "#E4572E"),
@@ -706,7 +798,14 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 return
 
             pfad = urlparse(self.path).path
-            if pfad not in ("/api/start", "/api/einnahme", "/api/entscheiden", "/api/kasse"):
+            if pfad not in (
+                "/api/start",
+                "/api/einnahme",
+                "/api/entscheiden",
+                "/api/kasse",
+                "/api/modell",
+                "/api/portraits",
+            ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
 
@@ -723,6 +822,14 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/kasse":
                 self._setze_kasse(rumpf)
+                return
+
+            if pfad == "/api/modell":
+                self._setze_modell(rumpf)
+                return
+
+            if pfad == "/api/portraits":
+                self._male_portraits()
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))

@@ -316,7 +316,22 @@
   .person .rechts .mehr { margin: 0; font-size: 12.5px; }
   .person .mehr::after { transition: transform 0.16s ease; }
   .person:hover .mehr::after { transform: translateX(3px); }
-  .zeichen.bild { padding: 0; object-fit: cover; }
+  .zeichen.bild { padding: 0; object-fit: cover; background: var(--flaeche-hoch); }
+  .modellmarke {
+    font-size: 11px; letter-spacing: 0.06em; color: var(--leise);
+    border: 1px solid var(--rand); border-radius: 99px; padding: 3px 9px;
+    white-space: nowrap;
+  }
+  .personkopf { display: flex; gap: 18px; align-items: center; margin-bottom: 18px; }
+  .grossesbild {
+    width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none;
+    background: var(--flaeche-hoch); border: 2px solid var(--akzent);
+  }
+  .eigenschaften { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
+  @media (max-width: 520px) {
+    .modellmarke { display: none; }
+    .personkopf { flex-direction: column; align-items: flex-start; }
+  }
   .person { animation: auftauchen 0.3s ease-out backwards; }
   .popup-inhalt .fakten { margin: 18px 0 0; }
   @media (max-width: 520px) {
@@ -625,6 +640,36 @@ function pruef_marke(pr) {
   return `<span class="marke ${klasse}">${text}${zahl ? " · " + zahl : ""}</span>`;
 }
 
+/** Das Niveau der Bildsprache als Marke: 1 bis 5, ab 4 ist es gut. */
+function niveau_marke(g) {
+  if (!g) return "";
+  const klasse = g.niveau >= 4 ? "gepruft" : g.niveau <= 2 ? "mangel" : "";
+  return `<span class="marke ${klasse}">Bild ${g.niveau}/5</span>`;
+}
+
+function gestaltung_html(g) {
+  if (!g) {
+    return `<p class="hinweis">Die Bildsprache hat sich diesen Beitrag nicht
+      angesehen.</p>`;
+  }
+  const liste = (titel, eintraege) => !eintraege || !eintraege.length ? "" : `
+    <div class="feldkopf" style="margin-top:12px"><span>${titel}</span></div>
+    <ul>${eintraege.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+
+  return `
+    <p><b>Niveau ${g.niveau} von 5.</b> ${esc(g.urteil)}</p>
+    ${liste("Was trägt", g.staerken)}
+    ${liste("Woran man es als Massenware erkennt", g.schwaechen)}
+    ${liste("Was geändert wird", g.verbesserungen)}
+    ${liste("Was gerade alle machen", g.gesehen)}
+    ${g.bildprompt ? `<div class="feldkopf" style="margin-top:12px">
+        <span>Überarbeiteter Prompt – damit wurde gemalt</span>
+        <button class="winzig" data-text="${esc(g.bildprompt)}">kopieren</button>
+      </div>
+      <code class="prompt">${esc(g.bildprompt)}</code>` : ""}
+    <p class="hinweis" style="margin-top:14px">Gesehen von ${esc(g.geprueft_von || "?")}.</p>`;
+}
+
 function pruef_bericht_html(pr) {
   if (!pr) {
     return `<p class="hinweis">Für diesen Beitrag liegt kein Prüfbericht vor.
@@ -661,32 +706,45 @@ function zeichne_mannschaft(d) {
     <h2>Wer hier arbeitet</h2>
     <div class="mannschaft">
       ${leute.map((m, i) => `
-        <button class="person ${esc(m.rang)}" data-person="${i}"
+        <button class="person ${esc(m.rang)}" data-person="${esc(m.schluessel)}"
                 style="animation-delay:${i * 60}ms">
-          ${m.rang === "chef"
-            ? `<img class="zeichen bild" src="/avatar?t=${d.version}${anhang}" alt="">`
-            : `<span class="zeichen">${esc(initialen(m.name))}</span>`}
+          <img class="zeichen bild" alt=""
+               src="/avatar?wer=${encodeURIComponent(m.schluessel)}&t=${d.version}${anhang}">
           <span class="wer">
             <b>${esc(m.name)}</b>
             <span>${esc(m.rolle)}</span>
           </span>
           <span class="rechts">
             ${m.aktiv ? "" : '<span class="schlafend">abgeschaltet</span>'}
+            <span class="modellmarke">${esc(kurzmodell(m.modell))}</span>
             <span class="mehr">ansehen</span>
           </span>
         </button>`).join("")}
-    </div>`;
+    </div>
+    <p class="hinweis" style="margin:12px 0 0">
+      Drei getrennte Aufträge: Wer schreibt, prüft nicht. Wer prüft, gestaltet nicht.
+      <button class="winzig" id="portraitsmalen">Porträts malen lassen</button>
+    </p>`;
 
   for (const knopf of $("mannschaftbox").querySelectorAll("[data-person]")) {
-    const m = leute[+knopf.dataset.person];
-    knopf.onclick = () => oeffne_popup(m.name, person_html(m, d));
+    const m = leute.find(x => x.schluessel === knopf.dataset.person);
+    knopf.onclick = () => zeige_person(m, d);
   }
+  const malen = $("portraitsmalen");
+  if (malen) malen.onclick = male_portraits;
 }
 
-/** Was über eine Person zu sagen ist. Beim Chef ist das der ganze
- *  Steckbrief - der stand vorher in einem eigenen Abschnitt und hat die
- *  Seite lang gemacht, ohne dass man ihn oft braucht. */
-function person_html(m, d) {
+/** "claude-haiku-4-5" liest sich als "Haiku 4.5". */
+function kurzmodell(modell) {
+  return String(modell || "")
+    .replace(/^claude-/, "")
+    // Zwischen Ziffern gehoert ein Punkt, sonst wird aus 4-5 ein "4 5".
+    .replace(/(\d)-(\d)/g, "$1.$2")
+    .replace(/-/g, " ")
+    .replace(/\b[a-z]/g, z => z.toUpperCase());
+}
+
+function zeige_person(m, d) {
   const i = d.identitaet;
   const steckbrief = (m.rang === "chef" && i) ? `
     <dl class="fakten">
@@ -701,19 +759,88 @@ function person_html(m, d) {
       <dt>Warum das aufgeht</dt><dd>${esc(i.why_this_works)}</dd>
     </dl>` : "";
 
-  return `
-    <p class="rolle">${esc(m.rolle)}</p>
-    <p>${esc(m.aufgabe)}</p>
+  oeffne_popup(m.name, `
+    <div class="personkopf">
+      <img class="grossesbild" alt=""
+           src="/avatar?wer=${encodeURIComponent(m.schluessel)}&t=${d.version}${anhang}">
+      <div>
+        <p class="rolle" style="margin:0 0 8px">${esc(m.rolle)}</p>
+        <p style="margin:0">${esc(m.aufgabe)}</p>
+      </div>
+    </div>
+
+    <div class="eigenschaften">
+      ${(m.eigenschaften || []).map(e => `<span class="marke">${esc(e)}</span>`).join("")}
+    </div>
+
     ${steckbrief}
+
     <div class="feld">
       <div class="feldkopf"><span>Womit gearbeitet wird</span></div>
-      <p class="bildtext">${esc(m.modell)}</p>
+      <div class="zeile" style="margin-top:8px">
+        <select id="modellwahl">
+          ${(d.modelle || []).map(x => `
+            <option value="${esc(x)}" ${x === m.modell ? "selected" : ""}>
+              ${esc(kurzmodell(x))}${x === m.standard ? " (Voreinstellung)" : ""}
+            </option>`).join("")}
+        </select>
+        <button class="klein" id="modellsetzen" data-wer="${esc(m.schluessel)}">Übernehmen</button>
+      </div>
+      <p class="hinweis" style="margin:10px 0 0">
+        Gilt ab dem nächsten Aufruf. Im Sparbetrieb wird die Wahl übergangen –
+        dann zählt die Bremse mehr als der Wunsch.
+      </p>
     </div>
-    ${m.aktiv ? "" : '<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>'}`;
+
+    ${m.aktiv ? "" : '<p class="hinweis">Diese Rolle ist gerade abgeschaltet.</p>'}`);
+
+  const setzen = $("modellsetzen");
+  setzen.onclick = async () => {
+    setzen.disabled = true;
+    const antwort = await fetch("/api/modell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...kopf },
+      body: JSON.stringify({ wer: setzen.dataset.wer, modell: $("modellwahl").value }),
+    });
+    const ergebnis = await antwort.json();
+    setzen.disabled = false;
+    if (ergebnis.ok) {
+      setzen.textContent = "Übernommen";
+      setzen.classList.add("fertig");
+      laden();
+      setTimeout(schliesse_popup, 900);
+    } else {
+      alert(ergebnis.grund || "Das hat nicht geklappt.");
+    }
+  };
 }
 
-function initialen(name) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+/** Porträts kosten beim Bilddienst - deshalb nie im Zyklus, nur auf Knopfdruck. */
+async function male_portraits() {
+  const knopf = $("portraitsmalen");
+  knopf.disabled = true;
+  knopf.textContent = "malt …";
+  try {
+    const antwort = await fetch("/api/portraits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...kopf },
+      body: "{}",
+    });
+    const ergebnis = await antwort.json();
+    if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
+    if (!ergebnis.gemalt.length && !ergebnis.gescheitert.length) {
+      alert("Alle haben schon ein Porträt.");
+      return;
+    }
+    if (ergebnis.gescheitert.length) {
+      alert(`${ergebnis.gemalt.length} gemalt, ${ergebnis.gescheitert.length} nicht – ` +
+            "vermutlich ist das Tageslimit des Bilddienstes erreicht.");
+    }
+    laden();
+  } finally {
+    knopf.disabled = false;
+    knopf.textContent = "Porträts malen lassen";
+  }
 }
 
 function zeichne(d) {
@@ -961,6 +1088,7 @@ function zeichne_beitraege(d) {
           <div>
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
             ${pruef_marke(p.pruefung)}
+            ${niveau_marke(p.gestaltung)}
             <span class="marke">${esc(p.saeule)}</span>
           </div>
           <p class="caption">${esc(anriss(p.bildtext || p.caption))}</p>
@@ -989,6 +1117,7 @@ function zeige_beitrag(p) {
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
       ${pruef_marke(p.pruefung)}
+      ${niveau_marke(p.gestaltung)}
       ${p.saeule ? `<span class="marke">${esc(p.saeule)}</span>` : ""}
     </div>
     ${p.bildtext ? `<div class="feld">
@@ -1013,6 +1142,11 @@ function zeige_beitrag(p) {
       </div>
       <p class="frage">${esc(p.erster_kommentar)}</p>
     </div>` : ""}
+
+    <div class="feld">
+      <div class="feldkopf"><span>Bildsprache</span></div>
+      ${gestaltung_html(p.gestaltung)}
+    </div>
 
     <div class="feld">
       <div class="feldkopf"><span>Endprüfung</span></div>

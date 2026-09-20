@@ -108,6 +108,7 @@ def pruefe_gestaltung(
     identity,
     draft: PostDraft,
     mit_suche: bool = True,
+    modell: str | None = None,
 ) -> Gestaltungsurteil:
     """Lässt die Bildsprache über den geplanten Beitrag sehen.
 
@@ -133,6 +134,7 @@ def pruefe_gestaltung(
         label="Bildsprache",
         task="research",
         web_search=mit_suche,
+        modell=modell,
         prompt=with_context(
             identity_block(identity),
             f"""\
