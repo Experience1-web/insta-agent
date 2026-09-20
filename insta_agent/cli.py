@@ -557,6 +557,68 @@ def _bild_fertig() -> None:
 
 
 @app.command()
+def instagram(config: Path = typer.Option(None)) -> None:
+    """Richtet den Instagram-Zugang ein, damit der Agent selbst posten kann.
+
+    Du brauchst drei Angaben von developers.facebook.com. Den Rest -
+    langlebiger Token, Seite finden, Konto-Nummer holen - macht dieser
+    Befehl.
+    """
+    from .config import set_env_value
+    from .instagram.einrichten import Einrichtungsfehler, richte_ein
+
+    console.print(
+        Panel(
+            "Du brauchst drei Angaben aus deiner Meta-App.\n\n"
+            "[bold]App-ID und App-Geheimnis[/bold]\n"
+            "  developers.facebook.com -> deine App -> Einstellungen -> Allgemein\n\n"
+            "[bold]Zugriffsschluessel[/bold]\n"
+            "  developers.facebook.com/tools/explorer\n"
+            "  App auswaehlen, diese Berechtigungen anhaken:\n"
+            "    instagram_basic\n"
+            "    instagram_content_publish\n"
+            "    pages_show_list\n"
+            "    pages_read_engagement\n"
+            "  dann auf 'Generate Access Token' und den Text kopieren.\n\n"
+            "[yellow]Dieser Schluessel haelt nur ein bis zwei Stunden.[/yellow]\n"
+            "Mach den Rest gleich danach - ich tausche ihn hier gegen einen\n"
+            "dauerhaften.",
+            title="Instagram-Zugang einrichten",
+        )
+    )
+
+    app_id = typer.prompt("App-ID").strip()
+    app_secret = _frag_schluessel("App-Geheimnis")
+    kurzer = _frag_schluessel("Zugriffsschluessel aus dem Explorer")
+
+    console.print("\n[dim]Frage bei Meta nach ...[/dim]")
+    try:
+        zugang = richte_ein(kurzer, app_id, app_secret)
+    except Einrichtungsfehler as exc:
+        console.print(f"\n[red]Das hat nicht geklappt.[/red]\n{exc}")
+        raise typer.Exit(1) from None
+
+    set_env_value("IG_USER_ID", zugang.ig_user_id)
+    set_env_value("IG_ACCESS_TOKEN", zugang.seiten_token)
+    set_env_value("META_APP_ID", app_id)
+    set_env_value("META_APP_SECRET", app_secret)
+
+    console.print(
+        Panel(
+            f"Seite:     {zugang.seiten_name}\n"
+            f"Konto:     @{zugang.handle}\n"
+            f"Follower:  {zugang.follower}\n"
+            f"Nummer:    {zugang.ig_user_id}",
+            title="[green]Verbunden[/green]",
+        )
+    )
+    console.print(
+        "\n[dim]Es fehlt noch ein oeffentlicher Platz fuer die Bilder -\n"
+        "Instagram holt sie sich von einer Adresse im Netz.[/dim]"
+    )
+
+
+@app.command()
 def bildtest(config: Path = typer.Option(None)) -> None:
     """Erzeugt ein einzelnes Probebild und sagt genau, was dabei passiert.
 

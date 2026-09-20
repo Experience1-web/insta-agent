@@ -109,6 +109,17 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "11 - Instagram verbinden.bat": f"""{KOPF}
+title Instagram verbinden
+echo.
+echo   Damit der Agent selbst posten kann.
+echo.
+echo   Du brauchst drei Angaben von developers.facebook.com.
+echo   Welche genau, steht gleich auf dem Bildschirm.
+echo.
+%PY% -m insta_agent.cli instagram
+echo.
+pause""",
     "10 - Bilder einrichten.bat": f"""{KOPF}
 title Bilder einrichten
 echo.
