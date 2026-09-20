@@ -562,3 +562,118 @@ def test_beim_beschneiden_bleibt_der_bildausschnitt_unverzerrt(tmp_path):
     kasten = weiss.getbbox()
     breite, hoehe = kasten[2] - kasten[0], kasten[3] - kasten[1]
     assert abs(breite - hoehe) < 12, f"verzerrt: {breite}x{hoehe}"
+
+
+# --- Leonardo --------------------------------------------------------------
+
+
+def _leonardo(handler):
+    import httpx
+
+    from insta_agent.imaging.generator import LeonardoGenerator
+
+    g = LeonardoGenerator("prod-schluessel")
+    g.client = httpx.Client(transport=httpx.MockTransport(handler))
+    g.hol_bytes = lambda url: b"\x89PNG-bild"
+    return g
+
+
+def test_leonardo_gibt_erst_auf_und_fragt_dann_nach(tmp_path):
+    """Die Schnittstelle arbeitet in zwei Schritten."""
+    import httpx
+
+    wege = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        wege.append((anfrage.method, anfrage.url.path))
+        if anfrage.method == "POST":
+            return httpx.Response(200, json={"sdGenerationJob": {"generationId": "abc"}})
+        return httpx.Response(200, json={"generations_by_pk": {
+            "status": "COMPLETE", "generated_images": [{"url": "https://cdn.test/b.png"}]}})
+
+    ziel = _leonardo(antworte).erzeuge("ein Flur mit hartem Licht", tmp_path / "b.png")
+
+    assert ziel.read_bytes() == b"\x89PNG-bild"
+    assert [w[0] for w in wege] == ["POST", "GET"]
+    assert wege[1][1].endswith("/generations/abc")
+
+
+def test_leonardo_wartet_bis_das_bild_fertig_ist(tmp_path, monkeypatch):
+    import httpx
+
+    monkeypatch.setattr("insta_agent.imaging.generator.time.sleep", lambda s: None)
+    zustaende = iter(["PENDING", "PENDING", "COMPLETE"])
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.method == "POST":
+            return httpx.Response(200, json={"sdGenerationJob": {"generationId": "abc"}})
+        stand = next(zustaende)
+        return httpx.Response(200, json={"generations_by_pk": {
+            "status": stand,
+            "generated_images": [{"url": "https://cdn.test/b.png"}] if stand == "COMPLETE" else [],
+        }})
+
+    assert _leonardo(antworte).erzeuge("x", tmp_path / "b.png").exists()
+
+
+def test_der_schluessel_geht_nie_an_den_bildspeicher():
+    """Dieselbe Regel wie bei Replicate: Der Schluessel bleibt bei Leonardo."""
+    import inspect
+
+    from insta_agent.imaging.generator import LeonardoGenerator
+
+    quelle = inspect.getsource(LeonardoGenerator.hol_bytes)
+    assert "self.client" not in quelle
+    assert "httpx.Client(" in quelle
+
+
+def test_ein_webseiten_schluessel_wird_verstaendlich_abgewiesen(tmp_path):
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _leonardo(lambda a: httpx.Response(401, json={"error": "unauthorized"}))
+
+    with pytest.raises(Bildfehler, match="Produktions"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_leeres_guthaben_sagt_was_zu_tun_ist(tmp_path):
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _leonardo(lambda a: httpx.Response(402, json={"error": "no credits"}))
+
+    with pytest.raises(Bildfehler, match="Guthaben"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_eine_falsche_modellkennung_wird_erklaert(tmp_path):
+    """Eine UUID tippt niemand aus dem Kopf richtig."""
+    import httpx
+
+    from insta_agent.imaging.generator import Bildfehler
+
+    g = _leonardo(lambda a: httpx.Response(400, text="unknown model"))
+
+    with pytest.raises(Bildfehler, match="Modell-Kennung"):
+        g.erzeuge("x", tmp_path / "b.png")
+
+
+def test_leonardo_steht_in_der_anbieterliste():
+    from insta_agent.imaging.generator import ANBIETER, baue_generator
+
+    assert "leonardo" in ANBIETER
+    assert baue_generator("leonardo", "k", "").name == "leonardo"
+    # Ohne Schluessel gibt es keinen Generator.
+    assert baue_generator("leonardo", None, "") is None
+
+
+def test_das_format_ist_nah_am_hochformat():
+    """4:5 ist Instagrams Feed - und beide Masse muessen durch 8 teilbar sein."""
+    from insta_agent.imaging.generator import LeonardoGenerator
+
+    b, h = LeonardoGenerator.BREITE, LeonardoGenerator.HOEHE
+    assert b % 8 == 0 and h % 8 == 0
+    assert 0.78 <= b / h <= 0.82

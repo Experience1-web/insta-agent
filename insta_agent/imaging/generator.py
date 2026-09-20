@@ -340,10 +340,129 @@ def _gemini_fehler(antwort: httpx.Response) -> str:
     return f"Google antwortete mit {antwort.status_code}: {str(meldung)[:200]}"
 
 
+
+class LeonardoGenerator:
+    """Leonardo.ai: FLUX und Phoenix über eine eigene Schnittstelle.
+
+    Interessant, weil neue Zugänge ein Startguthaben von 5 USD bekommen,
+    das nicht verfällt. Das reicht für etwa hundert Bilder auf einem
+    Niveau, das Gemini Flash nicht erreicht - und danach kostet es Geld,
+    statt einfach aufzuhören.
+
+    Achtung, ein verbreiteter Irrtum: Die 150 Freitoken am Tag gehören zur
+    Webseite, nicht zur Schnittstelle. Wer sie automatisch nutzen will,
+    braucht einen Produktionsschlüssel, und der rechnet ab.
+
+    Die Schnittstelle arbeitet in zwei Schritten: Auftrag abgeben, dann
+    nachfragen, bis das Bild fertig ist.
+    """
+
+    name = "leonardo"
+    BASIS = "https://cloud.leonardo.ai/api/rest/v1"
+
+    # Phoenix 1.0 - Leonardos eigenes Modell, stark bei Licht und Material.
+    # Ein anderes Modell wird als UUID in BILD_MODELL eingetragen; die
+    # steht auf der Modellseite in Leonardos Oberfläche.
+    STANDARDMODELL = "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3"
+
+    # Vielfache von 8, nah an 4:5. Grösser kostet mehr Token.
+    BREITE, HOEHE = 832, 1040
+
+    def __init__(self, token: str, modell: str = "", *, timeout: float = 60.0) -> None:
+        self.token = token
+        self.modell = modell.strip() or self.STANDARDMODELL
+        self.client = httpx.Client(
+            timeout=timeout,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+
+    def close(self) -> None:
+        self.client.close()
+
+    def erzeuge(self, prompt: str, ziel: Path) -> Path:
+        auftrag = self.client.post(
+            f"{self.BASIS}/generations",
+            json={
+                "prompt": prompt[:1490],
+                "modelId": self.modell,
+                "width": self.BREITE,
+                "height": self.HOEHE,
+                "num_images": 1,
+            },
+        )
+        if auftrag.status_code >= 400:
+            raise _leonardo_fehler(auftrag)
+
+        kennung = ((auftrag.json() or {}).get("sdGenerationJob") or {}).get("generationId")
+        if not kennung:
+            raise Bildfehler(f"Leonardo gab keinen Auftrag zurück: {auftrag.text[:200]}")
+
+        url = self._warte_auf_bild(kennung)
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_bytes(self.hol_bytes(url))
+        log.info("Bild von Leonardo: %s", ziel)
+        return ziel
+
+    def _warte_auf_bild(self, kennung: str, *, versuche: int = 40, pause: float = 3.0) -> str:
+        """Fragt nach, bis das Bild fertig ist."""
+        for _ in range(versuche):
+            antwort = self.client.get(f"{self.BASIS}/generations/{kennung}")
+            if antwort.status_code >= 400:
+                raise _leonardo_fehler(antwort)
+
+            stand = (antwort.json() or {}).get("generations_by_pk") or {}
+            zustand = stand.get("status")
+            if zustand == "COMPLETE":
+                bilder = stand.get("generated_images") or []
+                if bilder and bilder[0].get("url"):
+                    return bilder[0]["url"]
+                raise Bildfehler("Leonardo meldet fertig, liefert aber kein Bild.")
+            if zustand == "FAILED":
+                raise Bildfehler("Leonardo konnte das Bild nicht erzeugen.")
+            time.sleep(pause)
+
+        raise Bildfehler("Leonardo wurde nicht rechtzeitig fertig.")
+
+    def hol_bytes(self, url: str) -> bytes:
+        """Eigener Aufruf ohne Schlüssel: Der gehört nicht zum Bildspeicher."""
+        with httpx.Client(timeout=60.0) as roh:
+            antwort = roh.get(url)
+            antwort.raise_for_status()
+            return antwort.content
+
+
+def _leonardo_fehler(antwort: httpx.Response) -> Bildfehler:
+    if antwort.status_code in (401, 403):
+        return Bildfehler(
+            "Leonardo weist den Schlüssel zurück. Er muss ein Produktions-"
+            "schlüssel sein (API Access), nicht der Zugang zur Webseite."
+        )
+    if antwort.status_code == 402:
+        return Bildfehler(
+            "Das Guthaben bei Leonardo ist aufgebraucht. Unter app.leonardo.ai "
+            "nachlegen - oder mit `insta-agent bilder` auf einen anderen "
+            "Dienst wechseln."
+        )
+    if antwort.status_code == 429:
+        return Bildfehler("Zu viele Aufträge bei Leonardo auf einmal. Gleich nochmal.")
+    if antwort.status_code == 400:
+        return Bildfehler(
+            f"Leonardo lehnt den Auftrag ab: {antwort.text[:200]}\n"
+            "Meist stimmt die Modell-Kennung nicht. Sie steht als UUID auf der "
+            "Modellseite und gehört in `insta-agent bilder`."
+        )
+    return Bildfehler(f"Leonardo antwortete mit {antwort.status_code}: {antwort.text[:200]}")
+
+
 ANBIETER: dict[str, type] = {
     "gemini": GeminiGenerator,
     "replicate": ReplicateGenerator,
     "lokal": LokalerGenerator,
+    "leonardo": LeonardoGenerator,
 }
 
 # Der lokale Weg braucht keinen Schlüssel, sondern eine Adresse.

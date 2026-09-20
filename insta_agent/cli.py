@@ -670,12 +670,18 @@ def bilder(
             "   Bildprogramm (AUTOMATIC1111, Forge, SD.Next) mit --api.\n"
             "   Einmal aufbauen, danach keine Grenzen.\n\n"
             "[bold]3  Replicate[/bold]  wenige Cent je Bild\n"
-            "   Kein Aufbau, keine Grenzen, beste Qualitaet.",
+            "   Kein Aufbau, keine Grenzen, beste Qualitaet.\n\n"
+            "[bold]4  Leonardo.ai[/bold]  [green]5 USD Startguthaben[/green]\n"
+            "   FLUX und Phoenix. Neue Zugaenge bekommen 5 USD, die nicht\n"
+            "   verfallen - etwa hundert Bilder, deutlich besser als Gemini.\n"
+            "   [dim]Achtung: Die 150 Freitoken am Tag gelten fuer die Webseite,\n"
+            "   nicht fuer die Schnittstelle. Automatisch geht nur ueber einen\n"
+            "   Produktionsschluessel, und der rechnet ab.[/dim]",
             title="Wer malt die Bilder?",
         )
     )
 
-    wahl = typer.prompt("Welcher Weg? [1/2/3]", default="1").strip()[:1]
+    wahl = typer.prompt("Welcher Weg? [1/2/3/4]", default="1").strip()[:1]
 
     if wahl == "2":
         adresse = typer.prompt("Adresse des Bildprogramms", default="http://127.0.0.1:7860")
@@ -699,6 +705,30 @@ def bilder(
         set_env_value("BILD_TOKEN", token)
         set_env_value("BILD_MODELL", "black-forest-labs/flux-1.1-pro")
         preis = typer.prompt("Kosten pro Bild in USD (steht auf der Preisseite)", default="0.04")
+        try:
+            float(preis)
+        except ValueError:
+            console.print("[yellow]Keine Zahl - Voreinstellung bleibt.[/yellow]")
+        else:
+            set_env_value("BILD_KOSTEN", preis)
+        _bild_fertig()
+        return
+
+    if wahl == "4":
+        console.print(
+            "\n[dim]Den Schluessel bekommst du unter app.leonardo.ai ->\n"
+            "User Settings -> API Access -> Create New Key. Beim ersten Mal\n"
+            "musst du die Produktions-Schnittstelle freischalten; das\n"
+            "Startguthaben von 5 USD ist dann schon drauf.[/dim]\n"
+        )
+        token = _frag_schluessel("Schluessel von leonardo.ai")
+        set_env_value("BILD_ANBIETER", "leonardo")
+        set_env_value("BILD_TOKEN", token)
+        modell = typer.prompt(
+            "Modell-Kennung (UUID, leer lassen fuer Phoenix)", default=""
+        ).strip()
+        set_env_value("BILD_MODELL", modell)
+        preis = typer.prompt("Kosten pro Bild in USD (grob)", default="0.02")
         try:
             float(preis)
         except ValueError:
