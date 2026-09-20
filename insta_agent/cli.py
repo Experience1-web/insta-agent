@@ -568,6 +568,12 @@ def posten(config: Path = typer.Option(None)) -> None:
     Kostet kein Guthaben: Es wird nichts geschrieben und nichts gedacht,
     nur hochgeladen.
     """
+    from .web import version
+
+    # Ohne diese Zeile sieht man einem Fehlschlag nicht an, ob die neue
+    # Fassung ueberhaupt angekommen ist.
+    console.print(f"[dim]Stand {version()}[/dim]")
+
     settings = load_settings(config)
     if not settings.postet_wirklich:
         if not settings.can_publish:

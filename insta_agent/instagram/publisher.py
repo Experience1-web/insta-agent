@@ -124,8 +124,13 @@ class Publisher:
             media_id = self.client.publish_container(container)
         except GraphAPIError as exc:
             path = self._write_draft(draft, image_path, caption)
-            log.error("Veröffentlichen fehlgeschlagen: %s", exc)
-            return PublishResult(published=False, draft_path=path, reason=str(exc))
+            log.error("Veröffentlichen fehlgeschlagen: %s (Bild: %s)", exc, image_url)
+            # Die Adresse gehört in den Grund: Fast jede Absage von Instagram
+            # betrifft das Bild, und an der Adresse sieht man sofort, welche
+            # Fassung wirklich hinausging.
+            return PublishResult(
+                published=False, draft_path=path, reason=f"{exc}\n    Bild: {image_url}"
+            )
 
         log.info("Veröffentlicht als %s", media_id)
         return PublishResult(published=True, ig_media_id=media_id)
