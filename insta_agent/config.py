@@ -205,10 +205,21 @@ class Settings:
 
     @property
     def can_publish(self) -> bool:
-        """Veröffentlichen geht nur mit API-Zugang UND einem Weg zur Bild-Adresse."""
+        """Ob alles eingerichtet ist, was zum Veröffentlichen nötig wäre."""
         return self.instagram_ready and bool(
             self.public_media_base_url or self.ablage_token
         )
+
+    @property
+    def postet_wirklich(self) -> bool:
+        """Ob ein freigegebener Beitrag auch tatsächlich hinausgeht.
+
+        `posting.live` ist die Hauptsicherung: Solange sie aus ist, macht
+        der Verlag einen Trockenlauf und legt nur Entwürfe ab. Sie muss
+        einmal bewusst eingeschaltet werden, damit niemand versehentlich
+        unter seinem Namen veröffentlicht.
+        """
+        return self.can_publish and self.posting.live
 
 
 def _merge(section: Any, data: dict[str, Any] | None) -> None:
@@ -249,6 +260,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     settings.meta_app_id = os.getenv("META_APP_ID") or None
     settings.meta_app_secret = os.getenv("META_APP_SECRET") or None
     settings.public_media_base_url = (os.getenv("PUBLIC_MEDIA_BASE_URL") or "").rstrip("/") or None
+    if (scharf := os.getenv("POSTING_LIVE")) is not None:
+        settings.posting.live = scharf.strip().lower() in ("1", "true", "ja", "wahr", "an")
     settings.ablage_token = os.getenv("ABLAGE_TOKEN") or None
     if anbieter := os.getenv("ABLAGE_ANBIETER"):
         settings.ablage_anbieter = anbieter

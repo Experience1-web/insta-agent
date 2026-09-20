@@ -109,6 +109,20 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "13 - Wirklich veroeffentlichen.bat": f"""{KOPF}
+title Wirklich veroeffentlichen
+echo.
+echo   Legt den Hauptschalter um.
+echo.
+echo   Solange er aus ist, legt der Agent nur Entwuerfe ab - auch
+echo   wenn du sie freigibst. Danach geht jede Freigabe wirklich
+echo   auf Instagram.
+echo.
+echo   Eine Rueckfrage kommt. Tippe  j  und Enter.
+echo.
+%PY% -m insta_agent.cli scharf
+echo.
+pause""",
     "12 - Platz fuer die Bilder.bat": f"""{KOPF}
 title Platz fuer die Bilder
 echo.

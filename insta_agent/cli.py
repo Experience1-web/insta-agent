@@ -372,10 +372,15 @@ def check() -> None:
         "Instagram",
         "[green]verbunden[/green]" if settings.instagram_ready else "[dim]nicht nötig für Entwürfe[/dim]",
     )
-    table.add_row(
-        "Veröffentlichen",
-        "[green]möglich[/green]" if settings.can_publish else "[dim]nur Entwürfe[/dim]",
-    )
+    if settings.postet_wirklich:
+        table.add_row("Veröffentlichen", "[green]scharf - Freigabe geht raus[/green]")
+    elif settings.can_publish:
+        table.add_row(
+            "Veröffentlichen",
+            "[yellow]eingerichtet, aber Trockenlauf (insta-agent scharf)[/yellow]",
+        )
+    else:
+        table.add_row("Veröffentlichen", "[dim]nur Entwürfe[/dim]")
     console.print(table)
 
     if schluessel and schluessel.startswith("sk-ant-") and not kaputt:
@@ -553,6 +558,54 @@ def _bild_fertig() -> None:
     console.print(
         "\n[green]Eingetragen.[/green] Ab dem naechsten Zyklus malt er seine "
         "Bilder selbst.\n[dim]Pruefen: insta-agent check[/dim]"
+    )
+
+
+@app.command()
+def scharf(
+    config: Path = typer.Option(None),
+    aus: bool = typer.Option(False, "--aus", help="Wieder auf Trockenlauf stellen"),
+) -> None:
+    """Schaltet das wirkliche Veroeffentlichen ein oder aus.
+
+    Solange dieser Schalter aus ist, macht der Agent einen Trockenlauf:
+    Er legt Entwuerfe ab, statt sie hinauszuschicken. Das ist die
+    Hauptsicherung - sie muss einmal bewusst umgelegt werden.
+    """
+    from .config import set_env_value
+
+    if aus:
+        set_env_value("POSTING_LIVE", "false")
+        console.print(
+            "[green]Trockenlauf.[/green] Er legt jetzt wieder nur Entwuerfe ab."
+        )
+        return
+
+    settings = load_settings(config)
+    if not settings.can_publish:
+        console.print(
+            "[red]Noch nicht moeglich.[/red] Es fehlt der Instagram-Zugang oder "
+            "der Platz fuer die Bilder.\n"
+            "  insta-agent instagram\n"
+            "  insta-agent ablage"
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        Panel(
+            "Ab jetzt geht jeder Beitrag, den du freigibst, wirklich auf\n"
+            "Instagram - unter deinem Kontonamen, oeffentlich sichtbar.\n\n"
+            "[dim]Freigeben bleibt dein Knopf. Ohne dein Ja passiert nichts.[/dim]",
+            title="Wirklich veroeffentlichen",
+        )
+    )
+    if not _bestaetigt("Einschalten?"):
+        console.print("Abgebrochen. Es bleibt beim Trockenlauf.")
+        raise typer.Exit(0)
+
+    set_env_value("POSTING_LIVE", "true")
+    console.print(
+        "\n[green]Eingeschaltet.[/green] Freigeben heisst ab jetzt: es geht raus."
     )
 
 

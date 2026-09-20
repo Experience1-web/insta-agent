@@ -296,4 +296,4 @@ def test_die_freigabe_loest_das_veroeffentlichen_aus():
     quelle = (Path(__file__).resolve().parent.parent
               / "insta_agent" / "web.py").read_text("utf-8")
     assert "steuerung.jetzt_veroeffentlichen" in quelle
-    assert 'wahl == "freigeben" and steuerung.settings.can_publish' in quelle
+    assert 'wahl == "freigeben" and steuerung.settings.postet_wirklich' in quelle

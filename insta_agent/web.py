@@ -250,7 +250,8 @@ class Steuerung:
                 "schluessel_da": bool(self.settings.anthropic_api_key),
                 "instagram_da": self.settings.instagram_ready,
                 # Ob ein freigegebener Beitrag auch wirklich rausgehen kann.
-                "kann_posten": self.settings.can_publish,
+                "kann_posten": self.settings.postet_wirklich,
+                "eingerichtet": self.settings.can_publish,
                 "malt_selbst": self.settings.bild.aktiv,
                 "bildkosten": self.settings.bild.kosten_pro_bild_usd,
                 "freigabe_noetig": self.settings.posting.freigabe_noetig,
@@ -516,7 +517,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             # Das Ja des Betreibers ist der Auslöser, nicht der nächste
             # Zyklus. Veröffentlichen kostet kein Guthaben - darauf zu
             # warten wäre nur Wartezeit ohne Gegenwert.
-            if wahl == "freigeben" and steuerung.settings.can_publish:
+            if wahl == "freigeben" and steuerung.settings.postet_wirklich:
                 threading.Thread(target=steuerung.jetzt_veroeffentlichen, daemon=True).start()
                 self._json({"ok": True, "geht_raus": True})
                 return

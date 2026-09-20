@@ -564,8 +564,10 @@ function arbeitsweise(d) {
       ? "Du entscheidest über jeden Beitrag."
       : '<b class="warnung">Autopilot: er veröffentlicht ohne Rückfrage.</b>',
     d.kann_posten
-      ? "Freigegebenes geht beim nächsten Zyklus von selbst hinaus."
-      : "Veröffentlichen geht noch nicht – bis der Instagram-Zugang steht, lädst du von Hand hoch.",
+      ? "Was du freigibst, geht sofort hinaus."
+      : d.eingerichtet
+        ? '<b class="warnung">Trockenlauf: alles eingerichtet, aber noch nicht scharf geschaltet.</b>'
+        : "Veröffentlichen geht noch nicht – bis der Zugang steht, lädst du von Hand hoch.",
   ].join(" ");
 }
 

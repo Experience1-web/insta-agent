@@ -186,3 +186,42 @@ def test_veroeffentlichen_ist_erst_mit_einem_weg_zur_adresse_moeglich():
 
     s.ablage_token = "abc"
     assert s.can_publish
+
+
+# --- Der Hauptschalter ----------------------------------------------------
+
+
+def test_eingerichtet_heisst_noch_nicht_scharf():
+    """Die Sicherung muss einmal bewusst umgelegt werden."""
+    from insta_agent.config import Settings
+
+    s = Settings()
+    s.ig_user_id, s.ig_access_token, s.ablage_token = "1", "t", "a"
+
+    assert s.can_publish
+    assert not s.postet_wirklich  # posting.live ist aus
+
+    s.posting.live = True
+    assert s.postet_wirklich
+
+
+def test_scharf_allein_reicht_nicht():
+    """Ohne Zugang nuetzt der Schalter nichts."""
+    from insta_agent.config import Settings
+
+    s = Settings()
+    s.posting.live = True
+
+    assert not s.can_publish
+    assert not s.postet_wirklich
+
+
+@pytest.mark.parametrize("wert,erwartet", [
+    ("true", True), ("1", True), ("ja", True), ("an", True), ("WAHR", True),
+    ("false", False), ("0", False), ("nein", False), ("", False),
+])
+def test_der_schalter_versteht_deutsch_und_englisch(wert, erwartet, monkeypatch):
+    from insta_agent.config import load_settings
+
+    monkeypatch.setenv("POSTING_LIVE", wert)
+    assert load_settings().posting.live is erwartet
