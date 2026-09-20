@@ -204,6 +204,15 @@ class Brain:
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         response = None
 
+        # Ein Aufruf dauert Minuten. Ohne diese Zeile steht im Protokoll
+        # nichts, und es sieht aus, als waere der Agent stehengeblieben.
+        log.info(
+            "%s denkt nach (%s%s) ...",
+            label,
+            attempt_model.replace("claude-", ""),
+            ", mit Websuche" if tools else "",
+        )
+
         for _runde in range(max_rounds):
             kwargs: dict[str, Any] = {
                 "model": attempt_model,
@@ -266,6 +275,13 @@ class Brain:
         total_cost = 0.0
         sources: list[str] = []
         pieces: list[str] = []
+
+        log.info(
+            "%s denkt nach (%s%s) ...",
+            label,
+            model.replace("claude-", ""),
+            ", mit Websuche" if tools else "",
+        )
 
         for _ in range(max_rounds):
             kwargs: dict[str, Any] = {

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from .client import GRAPH_BASE, GraphAPIError
+from .client import GRAPH_BASE
 
 log = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ def _uebersetze(fehler: dict) -> str:
         return (
             f"Meta verweigert den Zugriff: {meldung}\n"
             "Meistens fehlt eine Berechtigung. Im Graph-API-Explorer müssen "
-            "instagram_basic, instagram_content_publish, pages_show_list und "
-            "pages_read_engagement angehakt sein."
+            "instagram_basic, instagram_content_publish, instagram_manage_insights, "
+            "pages_show_list und pages_read_engagement angehakt sein."
         )
     return f"Meta meldet: {meldung}"
 

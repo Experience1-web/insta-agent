@@ -914,9 +914,13 @@ def instagram(config: Path = typer.Option(None)) -> None:
             "  App auswaehlen, diese Berechtigungen anhaken:\n"
             "    instagram_basic\n"
             "    instagram_content_publish\n"
+            "    instagram_manage_insights\n"
             "    pages_show_list\n"
             "    pages_read_engagement\n"
             "  dann auf 'Generate Access Token' und den Text kopieren.\n\n"
+            "[dim]instagram_manage_insights ist die, ohne die es keine\n"
+            "Reichweite und keine Speicherungen gibt - dann lernt er nichts\n"
+            "aus seinen eigenen Beitraegen.[/dim]\n\n"
             "[yellow]Dieser Schluessel haelt nur ein bis zwei Stunden.[/yellow]\n"
             "Mach den Rest gleich danach - ich tausche ihn hier gegen einen\n"
             "dauerhaften.",

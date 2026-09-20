@@ -133,3 +133,13 @@ def test_die_knoepfe_auf_der_karte_oeffnen_nicht_das_popup():
 def test_bewegung_laesst_sich_abschalten():
     """Wer Animationen ausgeschaltet hat, meint das ernst."""
     assert "prefers-reduced-motion" in QUELLE
+
+
+def test_ein_laufender_zyklus_meldet_sich_zwischendurch():
+    """Minutenlange Stille sieht aus wie ein haengender Agent."""
+    import inspect
+
+    from insta_agent import llm
+
+    quelle = inspect.getsource(llm.Brain)
+    assert quelle.count("denkt nach") >= 2, "structured und text sollen beide melden"

@@ -132,3 +132,41 @@ def test_fehlende_berechtigung_nennt_die_haken():
 def test_ein_unbekannter_code_geht_nicht_verloren():
     text = _uebersetze({"code": 4711, "message": "Etwas ganz Neues"})
     assert "Etwas ganz Neues" in text
+
+
+# --- Kennzahlen ohne Berechtigung ------------------------------------------
+
+
+def test_fehlende_kennzahl_berechtigung_wird_erklaert():
+    """"(#10) Application does not have permission" sagt nicht, welche fehlt."""
+    from insta_agent.instagram.client import GraphAPIError, kennzahlgrund
+
+    grund = kennzahlgrund(
+        GraphAPIError("OAuthException 10: (#10) Application does not have permission for this action")
+    )
+
+    assert "instagram_manage_insights" in grund
+    assert "insta-agent instagram" in grund
+
+
+def test_ein_abgelaufenes_zugangswort_wird_als_solches_erkannt():
+    from insta_agent.instagram.client import GraphAPIError, kennzahlgrund
+
+    assert "abgelaufen" in kennzahlgrund(GraphAPIError("OAuthException 190: Session expired"))
+
+
+def test_ein_unbekannter_grund_geht_unveraendert_durch():
+    """Lieber eine englische Meldung als eine falsche deutsche."""
+    from insta_agent.instagram.client import GraphAPIError, kennzahlgrund
+
+    assert kennzahlgrund(GraphAPIError("Etwas ganz anderes")) == "Etwas ganz anderes"
+
+
+def test_die_einrichtung_nennt_die_berechtigung_von_anfang_an():
+    """Sonst richtet man sie ein und merkt erst Tage spaeter, dass sie fehlt."""
+    import inspect
+
+    from insta_agent import cli
+
+    quelle = inspect.getsource(cli.instagram)
+    assert "instagram_manage_insights" in quelle

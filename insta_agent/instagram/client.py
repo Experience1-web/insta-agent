@@ -36,6 +36,36 @@ class GraphAPIError(RuntimeError):
     """Die Graph API hat einen Fehler zurückgegeben."""
 
 
+# Die Berechtigung, die es für Kennzahlen braucht. Sie steckt nicht in den
+# vier, die man fürs Veröffentlichen anhakt - wer sie vergisst, bekommt
+# eine Fehlermeldung, die nichts darüber sagt, was fehlt.
+INSIGHTS_RECHT = "instagram_manage_insights"
+
+
+def kennzahlgrund(exc: Exception) -> str:
+    """Übersetzt Metas Absage bei den Kennzahlen in einen brauchbaren Satz.
+
+    "(#10) Application does not have permission for this action" sagt
+    nicht, welche Erlaubnis fehlt. Ohne Kennzahlen lernt der Agent nichts
+    aus seinen Beiträgen - das ist zu wichtig, um es als englische
+    Fehlermeldung durchlaufen zu lassen.
+    """
+    text = str(exc)
+    if "10:" in text or "(#10)" in text:
+        return (
+            "Die Berechtigung fehlt. Metas Zugang wurde ohne "
+            f"{INSIGHTS_RECHT} erteilt - ohne die gibt es keine Reichweite "
+            "und keine Speicherungen. Neu verbinden mit `insta-agent instagram` "
+            "und diese Berechtigung mit anhaken."
+        )
+    if "190:" in text:
+        return (
+            "Das Zugangswort ist abgelaufen. Neu verbinden mit "
+            "`insta-agent instagram`."
+        )
+    return text
+
+
 @dataclass(slots=True)
 class AccountSnapshot:
     followers: int
@@ -134,7 +164,7 @@ class InstagramClient:
             data = self._request("GET", f"{media_id}/insights", metric=",".join(MEDIA_METRICS))
         except GraphAPIError as exc:
             # Sehr frische oder sehr kleine Beiträge liefern manchmal nichts.
-            log.warning("Keine Beitragskennzahlen für %s: %s", media_id, exc)
+            log.warning("Keine Beitragskennzahlen für %s: %s", media_id, kennzahlgrund(exc))
             return {}
         return _flatten_insights(data)
 
@@ -148,7 +178,7 @@ class InstagramClient:
                 metric_type="total_value",
             )
         except GraphAPIError as exc:
-            log.warning("Keine Kontokennzahlen: %s", exc)
+            log.warning("Keine Kontokennzahlen: %s", kennzahlgrund(exc))
             return {}
         return _flatten_insights(data)
 
