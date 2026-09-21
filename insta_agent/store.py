@@ -457,6 +457,40 @@ class Store:
                 ),
             )
 
+    def kosten_je_modell(self) -> dict[str, dict[str, float]]:
+        """Was jedes Modell bisher wirklich gekostet hat.
+
+        Der Faktor in der Auswahl ist eine Schaetzung aus Preisen. Das
+        hier sind die eigenen Zahlen: Wie oft, wie teuer, und was ein
+        Aufruf im Schnitt kostet. Erst damit laesst sich beurteilen, ob
+        ein teureres Modell sein Geld wert war.
+
+        Aeltere Buchungen tragen das Modell noch nicht im Vermerk - die
+        fehlen hier, und das ist richtig so: lieber eine Luecke als eine
+        aus dem Notiztext geratene Zahl.
+        """
+        zeilen = self._conn.execute(
+            "SELECT meta, amount_usd FROM ledger "
+            "WHERE kind='cost' AND category='llm' AND meta IS NOT NULL"
+        ).fetchall()
+
+        je_modell: dict[str, dict[str, float]] = {}
+        for zeile in zeilen:
+            try:
+                meta = json.loads(zeile["meta"])
+            except (TypeError, ValueError):
+                continue
+            modell = (meta or {}).get("model")
+            if not modell:
+                continue
+            eintrag = je_modell.setdefault(modell, {"aufrufe": 0.0, "usd": 0.0})
+            eintrag["aufrufe"] += 1
+            eintrag["usd"] += abs(float(zeile["amount_usd"]))
+
+        for eintrag in je_modell.values():
+            eintrag["schnitt_usd"] = eintrag["usd"] / max(1, int(eintrag["aufrufe"]))
+        return je_modell
+
     def ledger_sum(self, kind: str | None = None) -> float:
         if kind:
             row = self._conn.execute(

@@ -137,6 +137,12 @@ class Brain:
             category="llm",
             note=f"{label} ({model})",
             meta={
+                # Das Modell gehoert in die Buchung, nicht nur in den
+                # Vermerk: Aus dem Vermerk laesst es sich nur durch Raten
+                # wieder herausholen, und dann weiss niemand, was eine
+                # Modellwahl tatsaechlich gekostet hat.
+                "model": model,
+                "rolle": label,
                 "input_tokens": getattr(response.usage, "input_tokens", 0),
                 "output_tokens": getattr(response.usage, "output_tokens", 0),
             },

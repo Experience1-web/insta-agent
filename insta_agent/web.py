@@ -31,18 +31,24 @@ from .runner import Agent
 log = logging.getLogger(__name__)
 
 
-def _waehlbare_modelle() -> list[str]:
-    """Welche Modelle sich einstellen lassen.
+def _waehlbare_modelle() -> list[dict]:
+    """Welche Modelle sich einstellen lassen - mit Preis und Steckbrief.
 
     Nur solche, für die ein Preis hinterlegt ist. Ein Modell ohne Preis
     wuerde zu teuer geschaetzt und die Kasse verzerren.
-    """
-    from .economy.pricing import PRICING
 
-    return sorted(PRICING)
+    Frueher war das eine Liste von Kennungen. Neun Namen ohne Zusatz sind
+    aber keine Entscheidungsgrundlage: Wer umstellt, will wissen, wofuer
+    ein Modell taugt und was es im Vergleich kostet.
+    """
+    from .economy.modelle import uebersicht
+
+    return uebersicht()
 
 
 WAEHLBARE_MODELLE = _waehlbare_modelle()
+# Die blossen Kennungen, zum Pruefen einer Eingabe.
+WAEHLBARE_IDS = {z["id"] for z in WAEHLBARE_MODELLE}
 
 # Die Server-Kennung, an der sich ein laufendes Dashboard erkennen lässt.
 KENNUNG = "insta-agent"
@@ -279,6 +285,9 @@ class Steuerung:
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
                 "mannschaft": aufstellung(identitaet, self.settings, modellwahl, mannschaft),
                 "modelle": WAEHLBARE_MODELLE,
+                # Die eigenen Zahlen neben die Schaetzung: Was hat dieses
+                # Modell hier tatsaechlich gekostet?
+                "modellkosten": agent.store.kosten_je_modell(),
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
@@ -650,7 +659,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             modell = str(rumpf.get("modell") or "").strip()
             # Leer heisst: zurueck auf die Voreinstellung.
-            if modell and modell not in WAEHLBARE_MODELLE:
+            if modell and modell not in WAEHLBARE_IDS:
                 self._json({"ok": False, "grund": "Dieses Modell kenne ich nicht."}, 400)
                 return
 
