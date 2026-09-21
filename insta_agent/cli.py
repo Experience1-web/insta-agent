@@ -656,6 +656,11 @@ def bilder(
         console.print("[green]Abgeschaltet.[/green] Es bleibt bei der Typografie.")
         return
 
+    # Was schon hinterlegt ist, zuerst. Sonst tippt man einen Schluessel
+    # noch einmal ein, den man laengst eingetragen hat - und weiss nach
+    # dem dritten Anbieterwechsel nicht mehr, welcher gerade gilt.
+    _zeige_bildstand(config)
+
     console.print(
         Panel(
             "Der Agent schreibt die Bildbeschreibung selbst. Malen lassen muss\n"
@@ -707,7 +712,9 @@ def bilder(
         return
 
     if wahl == "5":
-        token = _frag_schluessel("Schluessel von replicate.com")
+        token = _frag_schluessel(
+            "Schluessel von replicate.com", behalten=_alter_schluessel(config, "replicate")
+        )
         set_env_value("BILD_ANBIETER", "replicate")
         set_env_value("BILD_TOKEN", token)
         set_env_value("BILD_MODELL", "black-forest-labs/flux-1.1-pro")
@@ -728,7 +735,9 @@ def bilder(
             "musst du die Produktions-Schnittstelle freischalten; das\n"
             "Startguthaben von 5 USD ist dann schon drauf.[/dim]\n"
         )
-        token = _frag_schluessel("Schluessel von leonardo.ai")
+        token = _frag_schluessel(
+            "Schluessel von leonardo.ai", behalten=_alter_schluessel(config, "leonardo")
+        )
         set_env_value("BILD_ANBIETER", "leonardo")
         set_env_value("BILD_TOKEN", token)
         modell = typer.prompt(
@@ -764,7 +773,9 @@ def bilder(
         return
 
     if wahl == "3":
-        token = _frag_schluessel("Schluessel von aistudio.google.com")
+        token = _frag_schluessel(
+            "Schluessel von aistudio.google.com", behalten=_alter_schluessel(config, "gemini")
+        )
         set_env_value("BILD_ANBIETER", "gemini")
         set_env_value("BILD_TOKEN", token)
         set_env_value("BILD_MODELL", "gemini-2.5-flash-image")
@@ -790,7 +801,88 @@ def bilder(
     _bild_fertig()
 
 
-def _frag_schluessel(frage: str, *, noetig: bool = True) -> str:
+def _verkuerzt(token: str) -> str:
+    """Genug zum Wiedererkennen, zu wenig zum Missbrauchen."""
+    sauber = (token or "").strip()
+    if not sauber:
+        return ""
+    return f"...{sauber[-4:]}" if len(sauber) > 8 else "(kurz)"
+
+
+# Wie die Anbieter im Klartext heissen.
+ANBIETERNAMEN = {
+    "pollinations": "Pollinations",
+    "cloudflare": "Cloudflare",
+    "gemini": "Google Gemini",
+    "lokal": "Eigener Rechner",
+    "replicate": "Replicate",
+    "leonardo": "Leonardo.ai",
+}
+
+
+def _alter_schluessel(config: Path | None, anbieter: str) -> str:
+    """Der hinterlegte Schluessel - aber nur, wenn es derselbe Anbieter ist.
+
+    Ein Cloudflare-Schluessel taugt nicht fuer Gemini, und ihn dort als
+    "hinterlegt" anzubieten waere schlimmer als gar keine Hilfe.
+    """
+    try:
+        einst = load_settings(config)
+    except Exception:  # noqa: BLE001
+        return ""
+    if (einst.bild.anbieter or "").strip() != anbieter:
+        return ""
+    return (einst.bild.token or "").strip()
+
+
+def _zeige_bildstand(config: Path | None) -> None:
+    """Sagt, wer gerade malt und ob ein Schluessel hinterlegt ist."""
+    try:
+        einst = load_settings(config)
+    except Exception:  # noqa: BLE001 - ohne Einstellungen fangen wir bei null an
+        return
+
+    anbieter = (einst.bild.anbieter or "").strip()
+    if not anbieter:
+        console.print("[dim]Bisher ist kein Bilddienst eingerichtet.[/dim]\n")
+        return
+
+    name = ANBIETERNAMEN.get(anbieter, anbieter)
+    token = (einst.bild.token or "").strip()
+    zeilen = [f"Eingerichtet: [bold]{name}[/bold]"]
+    if anbieter == "lokal":
+        zeilen.append(f"Adresse:      {token or 'keine'}")
+    elif token:
+        zeilen.append(f"Schluessel:   hinterlegt ({_verkuerzt(token)})")
+    else:
+        zeilen.append("Schluessel:   keiner noetig")
+    if modell := (einst.bild.modell or "").strip():
+        zeilen.append(f"Modell:       {modell}")
+
+    console.print(Panel("\n".join(zeilen), title="Stand jetzt"))
+    console.print(
+        "[dim]Wenn du beim selben Anbieter bleibst, kannst du den Schluessel\n"
+        "leer lassen - der hinterlegte bleibt dann stehen.[/dim]\n"
+    )
+
+
+def _frag_schluessel(frage: str, *, noetig: bool = True, behalten: str = "") -> str:
+    """Fragt einen Schluessel ab und raeumt Einfuege-Unfaelle weg.
+
+    `behalten` ist ein schon hinterlegter Schluessel: Dann darf die
+    Eingabe leer bleiben und der alte gilt weiter. Niemand soll denselben
+    Schluessel zweimal eintippen muessen, nur weil er den Anbieter noch
+    einmal bestaetigt.
+    """
+    if behalten:
+        console.print(f"[dim]Hinterlegt: {_verkuerzt(behalten)} - Enter behaelt ihn.[/dim]")
+        roh = typer.prompt(frage, hide_input=True, default="")
+        token = "".join(roh.split()).strip("\"'")
+        return token or behalten
+    return _frag_schluessel_roh(frage, noetig=noetig)
+
+
+def _frag_schluessel_roh(frage: str, *, noetig: bool = True) -> str:
     """Fragt einen Schluessel ab und raeumt Einfuege-Unfaelle weg.
 
     `noetig=False` laesst eine leere Eingabe zu - fuer Schluessel, ohne die
