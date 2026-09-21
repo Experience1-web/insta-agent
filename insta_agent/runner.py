@@ -130,7 +130,10 @@ class Agent:
 
         # Ohne Schlüssel bleibt es bei der Typografie - kein Fehler, nur weniger.
         self.bildgenerator = baue_generator(
-            settings.bild.anbieter, settings.bild.token, settings.bild.modell
+            settings.bild.anbieter,
+            settings.bild.token,
+            settings.bild.modell,
+            art=settings.bild.art,
         )
 
     def close(self) -> None:

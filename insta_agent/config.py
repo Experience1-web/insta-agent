@@ -189,6 +189,11 @@ class BildConfig:
     # verdrahtet. Der Agent bucht diesen Betrag in seine Kasse, sonst
     # wüsste er nicht, was ein Beitrag ihn wirklich kostet.
     kosten_pro_bild_usd: float = 0.04
+    # Nur fuer den eigenen Rechner: "flux", "sdxl" oder "sd15". Leer heisst
+    # "am Namen erkennen". Die Erkennung liegt fast immer richtig, aber
+    # wenn nicht, malt das Modell auf falschen Massen - und das sieht man
+    # dem Bild sofort an. Deshalb ueberschreibbar.
+    art: str = ""
 
     @property
     def aktiv(self) -> bool:
@@ -303,6 +308,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     )
     if modell := os.getenv("BILD_MODELL"):
         settings.bild.modell = modell
+    if art := os.getenv("BILD_ART"):
+        settings.bild.art = art.strip().casefold()
     if preis := os.getenv("BILD_KOSTEN"):
         try:
             settings.bild.kosten_pro_bild_usd = float(preis)

@@ -382,7 +382,9 @@ def test_das_lokale_bild_ist_hochformat(tmp_path):
 
     _lokal(antworte).erzeuge("x", tmp_path / "b.png")
 
-    assert round(gesehen["height"] / gesehen["width"], 2) == round(16 / 9, 2)
+    # Hochformat in jedem Fall - auf das Endformat beschneidet erst das
+    # Beschriften, deshalb genuegt hier hoeher als breit.
+    assert gesehen["height"] > gesehen["width"]
     # Beide Maße muessen durch 8 teilbar sein, sonst lehnt das Modell ab.
     assert gesehen["width"] % 8 == 0 and gesehen["height"] % 8 == 0
     # Schrift im erzeugten Bild wuerde mit dem Hook kollidieren.

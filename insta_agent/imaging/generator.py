@@ -164,21 +164,65 @@ def _lesbarer_fehler(antwort: httpx.Response) -> str:
     return f"Der Bilddienst antwortete mit {antwort.status_code}: {str(detail)[:200]}"
 
 
-def ist_flux(modellname: str) -> bool:
-    """Ob dieser Modellname nach FLUX aussieht.
+# Woran man ein SDXL-Modell erkennt. Nicht schön, aber es gibt kein Feld
+# in der Schnittstelle, das die Bauart verrät - und die Dateinamen tragen
+# das "XL" praktisch ausnahmslos, weil die Modellbauer selbst zwischen
+# beiden Welten unterscheiden müssen.
+_XL_SPUREN = ("xl", "pony", "illustrious", "noobai")
 
-    Die Unterscheidung ist kein Feinschliff, sondern entscheidet über
-    Bild oder Matsch: FLUX ist auf Prompt-Treue trainiert und braucht
-    CFG 1, SDXL dagegen 4 bis 7. Wer FLUX mit CFG 5 fährt, bekommt
-    verbrannte, überzeichnete Bilder und sucht den Fehler beim Prompt.
+
+def modellart(modellname: str) -> str:
+    """"flux", "sdxl" oder "sd15" - die drei Welten mit eigenen Regeln.
+
+    Das ist kein Feinschliff, sondern entscheidet über Bild oder Matsch.
+    FLUX braucht CFG 1 und keine Negativführung, SDXL CFG 4 bis 7, SD 1.5
+    CFG 7 und vor allem eine viel kleinere Grundfläche. Wer ein
+    SD-1.5-Modell auf SDXL-Maße loslässt, bekommt doppelte Köpfe.
+
+    Im Zweifel SD 1.5: Das ist die vorsichtigere Annahme. Ein SDXL-Modell
+    auf SD-1.5-Maßen wird nur etwas flau, umgekehrt wird es unbrauchbar.
     """
-    return "flux" in (modellname or "").casefold()
+    klein = (modellname or "").casefold()
+    if "flux" in klein:
+        return "flux"
+    if any(spur in klein for spur in _XL_SPUREN):
+        return "sdxl"
+    return "sd15"
 
 
-def werte_fuer(modellname: str) -> dict[str, object]:
-    """Schritte, CFG und Sampler, die zu diesem Modell passen."""
-    negativ = "text, watermark, logo, signature, letters, caption"
-    if ist_flux(modellname):
+def ist_flux(modellname: str) -> bool:
+    """Ob dieser Modellname nach FLUX aussieht."""
+    return modellart(modellname) == "flux"
+
+
+# Wie groß das Modell malt, bevor hochskaliert wird. Nicht frei wählbar:
+# Jedes Modell ist auf eine Fläche trainiert, und deutlich darüber hinaus
+# entstehen doppelte Köpfe und verdrehte Körper. SD 1.5 kennt 512er
+# Kanten, deshalb 512x768 und danach das Hochrechnen - nicht umgekehrt.
+GRUNDMASSE: dict[str, tuple[int, int]] = {
+    "flux": (792, 1408),
+    "sdxl": (792, 1408),
+    "sd15": (512, 768),
+}
+
+# SD 1.5 braucht eine echte Negativführung, sonst sieht man ihm das Alter
+# an. Bei SDXL und FLUX reicht wenig bis nichts.
+_NEGATIV_SD15 = (
+    "text, watermark, logo, signature, letters, caption, "
+    "lowres, blurry, out of focus, jpeg artifacts, worst quality, "
+    "deformed, disfigured, bad anatomy, extra limbs, extra fingers, "
+    "mutated hands, cropped, out of frame"
+)
+
+
+def werte_fuer(modellname: str, *, art: str = "") -> dict[str, object]:
+    """Schritte, CFG und Sampler, die zu diesem Modell passen.
+
+    `art` übergeht die Erkennung am Namen - gedacht für den Fall, dass
+    der Betreiber es besser weiß als der Dateiname.
+    """
+    art = art if art in GRUNDMASSE else modellart(modellname)
+    if art == "flux":
         # FLUX kennt keine klassische Negativführung und arbeitet ohne
         # CFG. Das Negativfeld bleibt leer, statt wirkungslos mitzulaufen.
         return {
@@ -187,8 +231,25 @@ def werte_fuer(modellname: str) -> dict[str, object]:
             "cfg_scale": 1.0,
             "sampler_name": "Euler",
         }
+    if art == "sd15":
+        # 512x768 ist für Instagram zu klein, deshalb rechnet das
+        # Bildprogramm im zweiten Durchgang selbst auf 1024x1536 hoch.
+        # Das kostet etwa die Hälfte der Zeit noch einmal und ist trotzdem
+        # der einzige Weg, mit SD 1.5 auf brauchbare Kantenlängen zu
+        # kommen, ohne die Bildkomposition zu zerstören.
+        return {
+            "negative_prompt": _NEGATIV_SD15,
+            "steps": 30,
+            "cfg_scale": 7.0,
+            "sampler_name": "DPM++ 2M Karras",
+            "enable_hr": True,
+            "hr_scale": 2.0,
+            "hr_upscaler": "R-ESRGAN 4x+",
+            "hr_second_pass_steps": 12,
+            "denoising_strength": 0.4,
+        }
     return {
-        "negative_prompt": negativ,
+        "negative_prompt": "text, watermark, logo, signature, letters, caption",
         "steps": 28,
         "cfg_scale": 5.0,
         "sampler_name": "DPM++ 2M",
@@ -268,6 +329,48 @@ def frage_lokal_ab(
     return [m for m in modelle if m], geladen, auf_karte
 
 
+def _route_fehlt(antwort: httpx.Response) -> bool:
+    """Ob die 404 heisst "diesen Weg gibt es nicht" - und nicht etwas anderes.
+
+    Die Unterscheidung muss sein: Das Bildprogramm antwortet auch dann
+    mit 404, wenn der Sampler unbekannt ist. Wer das mit der fehlenden
+    Schnittstelle verwechselt, schickt den Betreiber zum Zahnrad, obwohl
+    dort alles richtig steht.
+    """
+    if antwort.status_code != 404:
+        return False
+    try:
+        detail = str(antwort.json().get("detail") or "")
+    except Exception:  # noqa: BLE001 - ohne JSON ist es kein API-Fehler
+        return True
+    return detail.strip().casefold() in ("", "not found")
+
+
+def _ohne_stolperstein(
+    koerper: dict[str, object], antwort: httpx.Response
+) -> dict[str, object] | None:
+    """Ein zweiter, bescheidenerer Versuch - oder None, wenn keiner hilft."""
+    text = f"{antwort.text}".casefold()
+    zweit = dict(koerper)
+
+    if "out of memory" in text or "outofmemory" in text:
+        if not zweit.get("enable_hr"):
+            return None
+        # Der zweite Durchgang sprengt den Speicher, der erste nicht.
+        for feld in ("enable_hr", "hr_scale", "hr_upscaler", "hr_second_pass_steps"):
+            zweit.pop(feld, None)
+        log.warning("Grafikspeicher reichte nicht zum Hochrechnen - Bild bleibt klein.")
+        return zweit
+
+    sampler = str(zweit.get("sampler_name") or "")
+    if "sampler" in text and "Karras" in sampler:
+        zweit["sampler_name"] = sampler.replace(" Karras", "").strip()
+        log.warning("Sampler %s unbekannt - weiter mit %s.", sampler, zweit["sampler_name"])
+        return zweit
+
+    return None
+
+
 class LokalerGenerator:
     """Ein Bildmodell, das auf dem eigenen Rechner läuft.
 
@@ -283,52 +386,98 @@ class LokalerGenerator:
 
     name = "lokal"
 
-    def __init__(self, adresse: str, modell: str = "", *, timeout: float = 300.0) -> None:
+    def __init__(
+        self,
+        adresse: str,
+        modell: str = "",
+        *,
+        art: str = "",
+        timeout: float = 300.0,
+    ) -> None:
         # Ein Bild auf einer Mittelklasse-Karte dauert 20 bis 60 Sekunden,
         # beim ersten Mal deutlich länger, weil das Modell geladen wird.
+        # Auf einer alten Karte mit SD 1.5 und Hochrechnen eher zwei bis
+        # vier Minuten - deshalb die grosszügige Frist.
         self.adresse = (adresse or "http://127.0.0.1:7860").rstrip("/")
         self.modell = modell
+        # Leer heisst: am Namen erkennen. Sonst gilt, was eingestellt ist.
+        self.art = art.strip().casefold() if art.strip().casefold() in GRUNDMASSE else ""
         self.client = httpx.Client(timeout=timeout)
+
+    @property
+    def bauart(self) -> str:
+        """Welche Regeln gelten - eingestellt schlägt erkannt."""
+        return self.art or modellart(self.modell)
 
     def close(self) -> None:
         self.client.close()
 
+    def _male(self, nutzlast: dict[str, object]) -> httpx.Response:
+        """Schickt den Auftrag ab - und faengt die zwei haeufigen Absagen ab.
+
+        Zwei Dinge gehen auf fremden Rechnern regelmaeszig schief, und
+        beide sind kein Grund, den ganzen Beitrag fallen zu lassen:
+
+        Der Sampler heiszt nicht ueberall gleich. Aeltere Fassungen kennen
+        "DPM++ 2M Karras", neuere haben die Karras-Variante abgetrennt.
+        Wird er abgelehnt, fragen wir ohne den Zusatz noch einmal.
+
+        Und der Speicher der Grafikkarte reicht nicht fuer den zweiten
+        Durchgang. Dann malen wir ohne Hochrechnen - ein kleineres Bild
+        ist besser als keines.
+        """
+        versuche: list[dict[str, object]] = [nutzlast]
+        for versuch, koerper in enumerate(versuche):
+            try:
+                antwort = self.client.post(
+                    f"{self.adresse}/sdapi/v1/txt2img", json=koerper
+                )
+            except httpx.ConnectError as exc:
+                raise Bildfehler(
+                    f"Unter {self.adresse} antwortet nichts. Läuft das Bildprogramm, "
+                    "und ist es mit --api gestartet?"
+                ) from exc
+            except httpx.ReadTimeout as exc:
+                raise Bildfehler(
+                    "Der eigene Rechner hat zu lange gebraucht. Ohne passende "
+                    "Grafikkarte dauert ein Bild viele Minuten."
+                ) from exc
+
+            if antwort.status_code < 400:
+                return antwort
+
+            if versuch == 0:
+                ausweg = _ohne_stolperstein(koerper, antwort)
+                if ausweg is not None:
+                    versuche.append(ausweg)
+                    continue
+            if _route_fehlt(antwort):
+                raise Bildfehler(
+                    "Das Bildprogramm kennt diese Schnittstelle nicht. Es braucht "
+                    "den Schalter --api: in Stability Matrix beim Zahnrad neben "
+                    "'Launch' unter 'Extra Launch Arguments', sonst in "
+                    "webui-user.bat."
+                )
+            raise Bildfehler(_lesbarer_fehler(antwort))
+
+        raise Bildfehler("Das Bildprogramm lieferte kein Bild zurück.")
+
     def erzeuge(self, prompt: str, ziel: Path) -> Path:
-        # Genau 9:16 und durch 8 teilbar, sonst lehnt das Modell ab. Rund
-        # 1,1 Millionen Bildpunkte - das ist der Bereich, in dem SDXL
-        # zuverlaessig arbeitet. Groesser wird langsam und instabil.
-        breite, hoehe = 792, 1408
+        # Die Grundflaeche richtet sich nach der Bauart des Modells, nicht
+        # nach dem Wunschformat: Wer SD 1.5 auf SDXL-Maszen malen laesst,
+        # bekommt doppelte Koepfe. Auf das Endformat beschnitten wird
+        # ohnehin erst beim Beschriften.
+        breite, hoehe = GRUNDMASSE[self.bauart]
         nutzlast: dict[str, object] = {
             "prompt": prompt,
             "width": breite,
             "height": hoehe,
-            **werte_fuer(self.modell),
+            **werte_fuer(self.modell, art=self.bauart),
         }
         if self.modell:
             nutzlast["override_settings"] = {"sd_model_checkpoint": self.modell}
 
-        try:
-            antwort = self.client.post(f"{self.adresse}/sdapi/v1/txt2img", json=nutzlast)
-        except httpx.ConnectError as exc:
-            raise Bildfehler(
-                f"Unter {self.adresse} antwortet nichts. Läuft das Bildprogramm, "
-                "und ist es mit --api gestartet?"
-            ) from exc
-        except httpx.ReadTimeout as exc:
-            raise Bildfehler(
-                "Der eigene Rechner hat zu lange gebraucht. Ohne passende "
-                "Grafikkarte dauert ein Bild viele Minuten."
-            ) from exc
-
-        if antwort.status_code == 404:
-            raise Bildfehler(
-                "Das Bildprogramm kennt diese Schnittstelle nicht. Es braucht "
-                "den Schalter --api: in Stability Matrix beim Zahnrad neben "
-                "'Launch' unter 'Extra Launch Arguments', sonst in "
-                "webui-user.bat."
-            )
-        if antwort.status_code >= 400:
-            raise Bildfehler(_lesbarer_fehler(antwort))
+        antwort = self._male(nutzlast)
 
         bilder = antwort.json().get("images") or []
         if not bilder:
@@ -726,7 +875,9 @@ ANBIETER: dict[str, type] = {
 OHNE_SCHLUESSEL = {"lokal", "pollinations"}
 
 
-def baue_generator(anbieter: str, token: str | None, modell: str) -> Bildgenerator | None:
+def baue_generator(
+    anbieter: str, token: str | None, modell: str, *, art: str = ""
+) -> Bildgenerator | None:
     """Baut den passenden Generator, oder None.
 
     None ist kein Fehler: Ohne eingerichteten Bilddienst bleibt es bei der
@@ -741,7 +892,7 @@ def baue_generator(anbieter: str, token: str | None, modell: str) -> Bildgenerat
         log.warning("Unbekannter Bildanbieter %r - es bleibt bei der Typografie", anbieter)
         return None
     if anbieter in OHNE_SCHLUESSEL:
-        return klasse(token or "http://127.0.0.1:7860", modell)
+        return klasse(token or "http://127.0.0.1:7860", modell, art=art)
     if not token:
         return None
     return klasse(token, modell)

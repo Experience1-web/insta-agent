@@ -700,8 +700,9 @@ def bilder(
             "\n[dim]Das Bildprogramm muss laufen und mit --api gestartet sein.\n\n"
             "In [bold]Stability Matrix[/bold]: auf das Zahnrad neben 'Launch',\n"
             "dann unten bei 'Extra Launch Arguments' eintragen:\n"
-            "  [bold]--api --medvram-sdxl[/bold]\n"
-            "(--medvram-sdxl gehoert dazu, wenn die Karte 8 GB hat.)\n\n"
+            "  [bold]--api --medvram --xformers[/bold]\n"
+            "(Hat die Karte 8 GB oder mehr und laeuft ein XL-Modell, statt\n"
+            "--medvram besser --medvram-sdxl.)\n\n"
             "Bei Forge oder AUTOMATIC1111 von Hand: in webui-user.bat in die\n"
             "Zeile COMMANDLINE_ARGS.[/dim]\n"
         )
@@ -712,7 +713,7 @@ def bilder(
         # Sofort nachsehen, ob dort wirklich etwas antwortet. Sonst faellt
         # es erst beim ersten Beitrag auf - und dann sieht es aus, als
         # laege es am Agenten.
-        from .imaging.generator import Bildfehler, frage_lokal_ab, ist_flux
+        from .imaging.generator import Bildfehler, frage_lokal_ab, modellart
 
         console.print("\n[dim]Probe: frage das Bildprogramm ...[/dim]")
         try:
@@ -768,12 +769,27 @@ def bilder(
         set_env_value("BILD_KOSTEN", "0")
         set_env_value("BILD_MODELL", modell)
 
-        if ist_flux(modell):
-            console.print(
-                "\n[dim]FLUX erkannt: Er rechnet damit ohne Negativfuehrung, mit\n"
-                "CFG 1 und 20 Schritten. Mit den SDXL-Werten wuerde FLUX\n"
-                "verbrannte Bilder liefern.[/dim]"
-            )
+        # Die Bauart entscheidet ueber Masze, CFG und Sampler. Erkannt wird
+        # sie am Namen, und das kann danebengehen - deshalb wird sie
+        # gezeigt und darf berichtigt werden, statt still zu gelten.
+        art = modellart(modell or geladen)
+        erklaerung = {
+            "flux": "FLUX: ohne Negativfuehrung, CFG 1, 20 Schritte.",
+            "sdxl": "SDXL: CFG 5, 28 Schritte, gemalt auf 792x1408.",
+            "sd15": (
+                "SD 1.5: CFG 7, 30 Schritte, gemalt auf 512x768 und danach\n"
+                "vom Bildprogramm selbst auf 1024x1536 hochgerechnet."
+            ),
+        }
+        console.print(f"\n[dim]Erkannt als [bold]{art}[/bold] - {erklaerung[art]}[/dim]")
+        if _bestaetigt("Ist das falsch? Dann von Hand festlegen"):
+            gewaehlt = typer.prompt(
+                "Bauart eintippen (flux / sdxl / sd15)", default=art
+            ).strip().casefold()
+            if gewaehlt in erklaerung:
+                art = gewaehlt
+                console.print(f"[dim]Gut: {erklaerung[art]}[/dim]")
+        set_env_value("BILD_ART", art)
         console.print(
             "\n[green]Eingetragen.[/green] Lass das Bildprogramm laufen, wenn der "
             "Agent arbeitet."

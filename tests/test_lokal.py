@@ -7,9 +7,10 @@ nicht behandelt:
 Erstens weiss niemand, ob das Bildprogramm wirklich läuft, bis der erste
 Beitrag ansteht. Dann sieht es aus, als läge es am Agenten.
 
-Zweitens brauchen FLUX und SDXL verschiedene Einstellungen. Wer FLUX mit
-den SDXL-Werten fährt - CFG 5 statt 1 - bekommt verbrannte, überzeichnete
-Bilder und sucht den Fehler im Prompt.
+Zweitens brauchen FLUX, SDXL und SD 1.5 verschiedene Einstellungen. Wer
+FLUX mit den SDXL-Werten fährt - CFG 5 statt 1 - bekommt verbrannte,
+überzeichnete Bilder und sucht den Fehler im Prompt. Und wer SD 1.5 auf
+SDXL-Maßen malen lässt, bekommt doppelte Köpfe.
 """
 
 from __future__ import annotations
@@ -18,10 +19,12 @@ import httpx
 import pytest
 
 from insta_agent.imaging.generator import (
+    GRUNDMASSE,
     Bildfehler,
     LokalerGenerator,
     frage_lokal_ab,
     ist_flux,
+    modellart,
     werte_fuer,
 )
 
@@ -62,9 +65,14 @@ def test_sdxl_behaelt_negativfuehrung_und_hoeheres_cfg():
     assert "watermark" in werte["negative_prompt"]
 
 
-def test_ohne_modellangabe_gelten_die_sdxl_werte():
-    """Die verbreitetere Sorte - und die gutmuetigere von beiden."""
-    assert werte_fuer("")["cfg_scale"] == 5.0
+def test_ohne_modellangabe_gilt_sd_15():
+    """Im Zweifel die vorsichtigere Annahme.
+
+    Ein SDXL-Modell auf SD-1.5-Massen wird etwas flau. Ein SD-1.5-Modell
+    auf SDXL-Massen bekommt doppelte Koepfe. Also raten wir nach unten.
+    """
+    assert werte_fuer("")["cfg_scale"] == 7.0
+    assert werte_fuer("")["enable_hr"] is True
 
 
 def test_die_werte_landen_wirklich_in_der_anfrage(tmp_path):
@@ -213,3 +221,118 @@ def test_aeltere_fassungen_kennen_die_auskunft_nicht():
         g.httpx.Client = echter
 
     assert auf_karte is None
+
+
+# --- SD 1.5: die kleine Welt -----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name, erwartet",
+    [
+        ("juggernautXL_ragnarok", "sdxl"),
+        ("sd_xl_base_1.0", "sdxl"),
+        ("Juggernaut-XL-v9", "sdxl"),
+        ("ponyDiffusionV6", "sdxl"),
+        ("realisticVisionV60B1_v51HyperVAE", "sd15"),
+        ("epicrealism_naturalSinRC1VAE", "sd15"),
+        ("v1-5-pruned-emaonly", "sd15"),
+        ("dreamshaper_8", "sd15"),
+        ("flux1-dev-Q4_K_S", "flux"),
+        ("", "sd15"),
+    ],
+)
+def test_die_bauart_wird_am_namen_erkannt(name, erwartet):
+    assert modellart(name) == erwartet
+
+
+def test_sd15_malt_klein_und_rechnet_danach_hoch():
+    """512x768 ist die Flaeche, auf die SD 1.5 trainiert wurde.
+
+    Gross genug fuer Instagram ist das nicht - deshalb rechnet das
+    Bildprogramm im zweiten Durchgang selbst hoch. Andersherum, gleich
+    gross malen zu lassen, zerstoert die Bildkomposition.
+    """
+    assert GRUNDMASSE["sd15"] == (512, 768)
+    werte = werte_fuer("realisticVisionV60B1")
+    assert werte["enable_hr"] is True
+    assert werte["hr_scale"] == 2.0
+    # Ohne echte Negativfuehrung sieht man SD 1.5 sein Alter an.
+    assert "bad anatomy" in werte["negative_prompt"]
+
+
+def test_die_eingestellte_bauart_schlaegt_den_namen():
+    """Die Erkennung am Namen kann danebenliegen - dann zaehlt die Angabe."""
+    gen = LokalerGenerator("http://x", "mein_lieblingsmodell", art="sdxl")
+    assert gen.bauart == "sdxl"
+    # Unsinn wird ignoriert, statt den Zyklus umzuwerfen.
+    assert LokalerGenerator("http://x", "flux1-dev", art="quatsch").bauart == "flux"
+
+
+def test_reicht_der_grafikspeicher_nicht_faellt_nur_das_hochrechnen_weg(tmp_path):
+    """Ein kleineres Bild ist besser als kein Bild.
+
+    Auf einer 4-GB-Karte sprengt der zweite Durchgang regelmaessig den
+    Speicher. Den ganzen Beitrag daran scheitern zu lassen, waere die
+    teuerste aller Reaktionen.
+    """
+    import base64
+    import json
+
+    anfragen: list[dict] = []
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n").decode()
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        koerper = json.loads(anfrage.content)
+        anfragen.append(koerper)
+        if koerper.get("enable_hr"):
+            return httpx.Response(500, json={"detail": "CUDA out of memory"})
+        return httpx.Response(200, json={"images": [png]})
+
+    gen = LokalerGenerator("http://lokal", "realisticVision", timeout=5.0)
+    gen.client = httpx.Client(transport=httpx.MockTransport(antworte), timeout=5.0)
+    gen.erzeuge("ein Fisch", tmp_path / "b.png")
+
+    assert len(anfragen) == 2
+    assert anfragen[0]["enable_hr"] is True
+    assert "enable_hr" not in anfragen[1]
+    assert (tmp_path / "b.png").exists()
+
+
+def test_ein_unbekannter_sampler_wird_einmal_ohne_karras_versucht(tmp_path):
+    """Aeltere und neuere Fassungen benennen den Sampler verschieden."""
+    import base64
+    import json
+
+    anfragen: list[dict] = []
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n").decode()
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        koerper = json.loads(anfrage.content)
+        anfragen.append(koerper)
+        if "Karras" in str(koerper.get("sampler_name")):
+            return httpx.Response(404, json={"detail": "Sampler not found"})
+        return httpx.Response(200, json={"images": [png]})
+
+    gen = LokalerGenerator("http://lokal", "realisticVision", timeout=5.0)
+    gen.client = httpx.Client(transport=httpx.MockTransport(antworte), timeout=5.0)
+    gen.erzeuge("ein Fisch", tmp_path / "b.png")
+
+    assert [a["sampler_name"] for a in anfragen] == ["DPM++ 2M Karras", "DPM++ 2M"]
+
+
+def test_ein_echter_fehler_wird_nicht_endlos_wiederholt(tmp_path):
+    """Nur die zwei bekannten Stolpersteine bekommen einen zweiten Versuch."""
+    import json
+
+    anfragen: list[dict] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        anfragen.append(json.loads(anfrage.content))
+        return httpx.Response(500, json={"detail": "irgendwas ganz anderes"})
+
+    gen = LokalerGenerator("http://lokal", "realisticVision", timeout=5.0)
+    gen.client = httpx.Client(transport=httpx.MockTransport(antworte), timeout=5.0)
+    with pytest.raises(Bildfehler):
+        gen.erzeuge("ein Fisch", tmp_path / "b.png")
+
+    assert len(anfragen) == 1
