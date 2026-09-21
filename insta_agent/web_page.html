@@ -1561,7 +1561,9 @@ function verdrahte_entscheidungen(bereich) {
         .filter(b => b.urteil !== "belegt").length;
       if (!confirm(
         `${wer_schreibt} schreibt den Beitrag neu, damit die ${offen} Beanstandung(en) ` +
-        "wegfallen, malt das Bild neu und lässt ihn noch einmal prüfen.\n\n" +
+        "wegfallen, und lässt ihn noch einmal prüfen.\n\n" +
+        "Das Bild bleibt, wie es ist – nur wenn sich der Text darauf ändert, " +
+        "wird er neu gesetzt. Ein anderes Motiv bekommst du mit „Bild neu\u201c.\n\n" +
         "Das kostet ungefähr zehn Cent und dauert ein bis zwei Minuten.\n\n" +
         "Weitermachen?")) return;
 
@@ -1572,7 +1574,8 @@ function verdrahte_entscheidungen(bereich) {
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (ergebnis.urteil === "freigabe") {
-        alert("Nachgebessert. Die Endprüfung hat diesmal nichts beanstandet.");
+        alert("Nachgebessert. Die Endprüfung hat diesmal nichts beanstandet.\n\n" +
+              `Bild: ${ergebnis.bild || "unverändert"}.`);
       } else if (ergebnis.urteil) {
         alert(`Nachgebessert, aber die Endprüfung findet weiter ${ergebnis.offen} ` +
               `Sache(n) (${ergebnis.urteil}). Sieh im Beitrag nach, was noch offen ist.`);

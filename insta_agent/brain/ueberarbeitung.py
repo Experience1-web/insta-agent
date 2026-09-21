@@ -111,8 +111,16 @@ Achte darauf:
   passen. Eine korrigierte Zahl in der Unterschrift nützt nichts, wenn im
   Bild die alte steht.
 
-Höchstens {max_hashtags} Hashtags. Den Bildprompt darfst du behalten,
-wenn er zum neuen Text noch passt - sonst schreib ihn mit.""",
+Höchstens {max_hashtags} Hashtags.
+
+Das Bild wird nicht neu gemalt. Das Motiv war nicht beanstandet, und ein
+zweiter Wurf wäre ein anderes Bild - das gehört nicht zu einer
+Faktenkorrektur. Dein Bildprompt wird deshalb nicht übernommen; schreib
+ihn einfach noch einmal so hin, wie er ist.
+
+Was du am Bild ändern kannst, ist die Schrift darauf: Steht dort eine
+falsche Zahl, korrigier sie im Text fürs Bild. Sie wird dann auf dasselbe
+Motiv neu gesetzt.""",
         ),
     )
 

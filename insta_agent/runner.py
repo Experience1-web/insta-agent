@@ -451,9 +451,11 @@ class Agent:
             # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
             # zu ändern - und ein zweites Bild kostet zweimal.
             gestaltung = self._gestalte(draft, identity, report)
-            if erzeugt := self._erzeuge_bild(draft, basis, identity, report):
+            erzeugt, rohbild = self._erzeuge_bild(draft, basis, identity, report)
+            if erzeugt:
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
+            self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
             if fund is not None:
                 self.store.set_fund(post_id, fund)
             if gestaltung is not None:
@@ -519,11 +521,12 @@ class Agent:
             self.settings.media_dir / f"{basis}.png",
             groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
         )
-        gemalt = self._erzeuge_bild(draft, basis, identity, lauf)
+        gemalt, rohbild = self._erzeuge_bild(draft, basis, identity, lauf)
         if gemalt:
             bild = gemalt
 
         self.store.setze_bild(post_id, draft, str(bild))
+        self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
         if gestaltung is not None:
             self.store.set_gestaltung(post_id, gestaltung)
         self.store.log("bild_neu", f"Entwurf {post_id}: Bild neu gemalt")
@@ -625,19 +628,15 @@ class Agent:
         if not neu.visual.footer.strip():
             neu.visual.footer = f"@{identity.handle}"
 
-        # Ein neues Bild, denn der Text darauf hat sich geändert. Der alte
-        # Dateiname bliebe sonst stehen und zeigte die falsche Zahl.
+        # Das Motiv war nicht beanstandet, also bleibt es. Ein zweites Mal
+        # zu malen hieße ein anderes Bild - und dann steht auf einmal ein
+        # anderer Fisch über einem Text, der von etwas anderem handelt.
+        # Wer das Motiv wechseln will, drückt "Bild neu".
+        neu.image_generation_prompt = alt.image_generation_prompt
+
         bericht_lauf = CycleReport(started_at=datetime.now(timezone.utc))
-        self._bilder_heute_aus = getattr(self, "_bilder_heute_aus", None)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        basis = f"{stamp}-nachgebessert-{post_id}"
-        bild = render_post_image(
-            neu.visual,
-            self.settings.media_dir / f"{basis}.png",
-            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
-        )
-        if erzeugt := self._erzeuge_bild(neu, basis, identity, bericht_lauf):
-            bild = erzeugt
+        bild, wie = self._schrift_erneuern(zeile, neu, identity, post_id)
+        bericht_lauf.steps.append(f"Bild: {wie}")
 
         self.store.ersetze_entwurf(post_id, neu, str(bild))
 
@@ -666,6 +665,7 @@ class Agent:
             "ok": True,
             "urteil": zweiter.urteil if zweiter else None,
             "offen": len(zweiter.beanstandet) if zweiter else None,
+            "bild": wie,
             "schritte": bericht_lauf.steps,
         }
 
@@ -718,6 +718,59 @@ class Agent:
             "offen": len(bericht.beanstandet),
             "schritte": lauf.steps,
         }
+
+    def _schrift_erneuern(self, zeile, neu: PostDraft, identity, post_id: int):
+        """Setzt die Schrift neu auf dasselbe Grundbild - ohne neu zu malen.
+
+        Drei Fälle, und keiner davon malt:
+
+        - Der Text auf dem Bild ist derselbe geblieben. Dann bleibt auch
+          das Bild, wie es war. Die falsche Zahl stand in der
+          Bildunterschrift, nicht auf dem Bild.
+        - Der Text hat sich geändert und es gibt ein Grundbild. Dann
+          bekommt dasselbe Motiv die neue Schrift.
+        - Es gibt kein Grundbild, weil es bei der Typografie blieb. Dann
+          wird die typografische Fassung neu gesetzt, und die kostet
+          nichts.
+
+        Gibt den Bildpfad zurück und in einem Wort, was passiert ist.
+        """
+        altes_bild = Path(zeile["image_path"]) if zeile["image_path"] else None
+        rohbild = Path(zeile["rohbild_path"]) if zeile["rohbild_path"] else None
+        if rohbild is None and altes_bild and altes_bild.name.endswith("-fertig.png"):
+            # Entwürfe von vor dieser Änderung kennen die Spalte noch nicht.
+            # Das Grundbild liegt aber seit jeher daneben, unter demselben
+            # Namen mit "-roh" statt "-fertig".
+            nachbar = altes_bild.with_name(altes_bild.name.replace("-fertig.png", "-roh.png"))
+            if nachbar.is_file():
+                rohbild = nachbar
+        alter_text = PostDraft.model_validate(json.loads(zeile["draft_json"])).bildtext
+
+        if altes_bild and altes_bild.is_file() and neu.bildtext.strip() == alter_text.strip():
+            return altes_bild, "unverändert"
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        basis = f"{stamp}-nachgebessert-{post_id}"
+
+        if rohbild and rohbild.is_file():
+            try:
+                neues = lege_hook_auf(
+                    rohbild,
+                    self.settings.media_dir / f"{basis}-fertig.png",
+                    text=neu.bildtext,
+                    spec=neu.visual,
+                    handle=f"@{identity.handle}",
+                )
+                return neues, "neu beschriftet"
+            except Exception as exc:  # noqa: BLE001 - dann eben die Typografie
+                log.warning("Schrift liess sich nicht neu auflegen: %s", exc)
+
+        typo = render_post_image(
+            neu.visual,
+            self.settings.media_dir / f"{basis}.png",
+            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+        )
+        return typo, "typografisch neu gesetzt"
 
     def bildsprache_erneuern(self):
         """Lässt den Agenten seine Bildsprache neu schreiben und übernimmt sie.
@@ -999,11 +1052,18 @@ class Agent:
         self.store.log("gestaltung", f"Niveau {urteil.niveau}/5 - {urteil.urteil}")
         return urteil
 
-    def _erzeuge_bild(self, draft, basis: str, identity, report: CycleReport) -> Path | None:
+    def _erzeuge_bild(
+        self, draft, basis: str, identity, report: CycleReport
+    ) -> tuple[Path | None, Path | None]:
         """Lässt das Bild malen und legt den Hook darüber.
 
-        Gibt None zurück, wenn es nicht geklappt hat - dann bleibt es bei
-        der Typografie. Ein fehlendes Bild darf nie den Zyklus kosten.
+        Gibt das fertige Bild und das Grundbild ohne Schrift zurück, beide
+        None, wenn es nicht geklappt hat - dann bleibt es bei der
+        Typografie. Ein fehlendes Bild darf nie den Zyklus kosten.
+
+        Das Grundbild wird aufgehoben, weil sich beim Nachbessern oft nur
+        die Schrift ändert. Ein zweites Mal zu malen hieße ein anderes
+        Motiv, und das war nicht beanstandet.
         """
         if self.bildgenerator is None:
             # Nur melden, wenn der Betreiber einen Dienst eingerichtet hat -
@@ -1011,11 +1071,11 @@ class Agent:
             if self.settings.bild.aktiv:
                 report.steps.append("Bilddienst eingerichtet, aber nicht aufgebaut")
                 self.store.log("image_error", "Der Bilddienst liess sich nicht aufbauen")
-            return None
+            return None, None
 
         if not draft.image_generation_prompt.strip():
             report.steps.append("Kein Bild-Prompt geschrieben - Typografie bleibt")
-            return None
+            return None, None
 
         roh = self.settings.media_dir / f"{basis}-roh.png"
         try:
@@ -1028,12 +1088,12 @@ class Agent:
             log.warning("Bilderzeugung fehlgeschlagen: %s", exc)
             report.steps.append(f"Bild nicht erzeugt ({exc}) - Typografie bleibt")
             self.store.log("image_error", str(exc))
-            return None
+            return None, None
         except Exception as exc:  # noqa: BLE001 - jeder Fehler ist hier verkraftbar
             log.warning("Bilderzeugung fehlgeschlagen: %s", exc)
             report.steps.append(f"Bild nicht erzeugt ({exc}) - Typografie bleibt")
             self.store.log("image_error", str(exc))
-            return None
+            return None, None
 
         # Erst buchen, wenn wirklich ein Bild da ist - und nur, wenn es
         # etwas gekostet hat. Auf dem eigenen Rechner ist der Preis null.
@@ -1056,10 +1116,10 @@ class Agent:
         except Exception as exc:  # noqa: BLE001 - lieber ohne Schrift als gar nicht
             log.warning("Hook konnte nicht aufgelegt werden: %s", exc)
             report.steps.append("Bild erzeugt, Hook-Text konnte nicht aufgelegt werden")
-            return roh
+            return roh, roh
 
         report.steps.append("Bild erzeugt und beschriftet")
-        return fertig
+        return fertig, roh
 
     def veroeffentliche_jetzt(self) -> CycleReport:
         """Schickt raus, was freigegeben ist - ohne einen Denkzyklus.

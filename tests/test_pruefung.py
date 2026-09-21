@@ -8,6 +8,8 @@ trotzdem durchwinkt, ist schlimmer als gar keine.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from insta_agent.brain.pruefung import (
@@ -405,7 +407,7 @@ def test_ein_sauberer_beitrag_wird_nicht_nachgebessert(agent_mit_doppel):
     assert not any("nachgebessert" in s for s in bericht.steps)
 
 
-def test_nachbessern_ersetzt_bild_und_befunde(agent_mit_doppel, monkeypatch):
+def test_nachbessern_ersetzt_die_befunde(agent_mit_doppel, monkeypatch):
     """Der alte Prüfbericht gilt für den alten Text - er darf nicht stehenbleiben."""
     agent = agent_mit_doppel
     agent.settings.posting.nachbesserungen = 0
@@ -413,7 +415,6 @@ def test_nachbessern_ersetzt_bild_und_befunde(agent_mit_doppel, monkeypatch):
     agent.run_cycle()
 
     entwurf = agent.store.pending_drafts()[0]
-    altes_bild = entwurf["image_path"]
 
     monkeypatch.setattr(
         "insta_agent.runner.pruefe_beitrag",
@@ -422,9 +423,116 @@ def test_nachbessern_ersetzt_bild_und_befunde(agent_mit_doppel, monkeypatch):
     ergebnis = agent.nachbessern(entwurf["id"])
 
     assert ergebnis["ok"] and ergebnis["urteil"] == "freigabe"
-    danach = agent.store.get_post(entwurf["id"])
-    assert danach["image_path"] != altes_bild
-    assert "Jetzt sauber" in danach["pruefung_json"]
+    assert "Jetzt sauber" in agent.store.get_post(entwurf["id"])["pruefung_json"]
+
+
+# --- Das Motiv bleibt ------------------------------------------------------
+#
+# Der Fall aus dem Betrieb: Eine Zahl in der Bildunterschrift war falsch.
+# Nachbessern hat daraufhin auch das Bild neu gemalt - und dann stand ein
+# ganz anderer Fisch über einem Text, der von etwas anderem handelte. Eine
+# Faktenkorrektur ist kein Grund, das Motiv zu wechseln. Dafür gibt es
+# "Bild neu".
+
+
+def test_nachbessern_malt_kein_neues_bild(agent_mit_doppel, monkeypatch):
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+
+    gemalt = []
+    monkeypatch.setattr(
+        agent, "_erzeuge_bild", lambda *a, **k: (gemalt.append(1), (None, None))[1]
+    )
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+
+    agent.nachbessern(entwurf["id"])
+
+    assert gemalt == [], "eine Faktenkorrektur darf kein neues Motiv erzeugen"
+
+
+def test_bleibt_der_text_auf_dem_bild_gleich_bleibt_das_bild(agent_mit_doppel, monkeypatch):
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+    ergebnis = agent.nachbessern(entwurf["id"])
+
+    assert ergebnis["bild"] == "unverändert"
+    assert agent.store.get_post(entwurf["id"])["image_path"] == entwurf["image_path"]
+
+
+def test_eine_falsche_zahl_auf_dem_bild_wird_neu_gesetzt(agent_mit_doppel, monkeypatch, tmp_path):
+    """Dasselbe Motiv, andere Schrift - dafür wird das Grundbild aufgehoben."""
+    from PIL import Image
+
+    from insta_agent.models import PostDraft
+
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+
+    # So, als hätte der Bilddienst gemalt: ein Grundbild ohne Schrift.
+    roh = tmp_path / "roh.png"
+    Image.new("RGB", (1080, 1920), (9, 30, 44)).save(roh)
+    agent.store.setze_rohbild(entwurf["id"], str(roh))
+
+    korrigiert = PostDraft.model_validate(_entwurf().model_dump())
+    korrigiert.hook_text_on_screen = "8.062 Meter. Und es wartet nicht."
+    korrigiert.visual.headline = korrigiert.hook_text_on_screen
+    monkeypatch.setattr("insta_agent.runner.ueberarbeite_beitrag", lambda *a, **k: korrigiert)
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+
+    ergebnis = agent.nachbessern(entwurf["id"])
+
+    assert ergebnis["bild"] == "neu beschriftet"
+    neues = Path(agent.store.get_post(entwurf["id"])["image_path"])
+    assert neues.is_file() and neues != Path(entwurf["image_path"])
+    # Das Grundbild hat den Tausch überlebt - es ist das Motiv.
+    assert agent.store.get_post(entwurf["id"])["rohbild_path"] == str(roh)
+
+
+def test_der_bildprompt_bleibt_wie_er_war(agent_mit_doppel, monkeypatch):
+    """Sonst wechselt das Motiv beim nächsten "Bild neu" doch noch."""
+    from insta_agent.models import PostDraft
+
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    alter_prompt = _entwurf().image_generation_prompt
+
+    anders = PostDraft.model_validate(_entwurf().model_dump())
+    anders.image_generation_prompt = "a completely different animal, studio light"
+    monkeypatch.setattr("insta_agent.runner.ueberarbeite_beitrag", lambda *a, **k: anders)
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+
+    agent.nachbessern(entwurf["id"])
+
+    import json
+
+    danach = json.loads(agent.store.get_post(entwurf["id"])["draft_json"])
+    assert danach["image_generation_prompt"] == alter_prompt
 
 
 def test_ein_freigegebener_beitrag_wird_nicht_mehr_angefasst(agent_mit_doppel, monkeypatch):
@@ -501,3 +609,37 @@ def test_ein_veroeffentlichter_beitrag_bekommt_kein_neues_bild(agent_mit_doppel)
     agent.store.freigeben(entwurf["id"])
 
     assert not agent.bild_neu(entwurf["id"])["ok"]
+
+
+def test_bei_alten_entwuerfen_wird_das_grundbild_wiedergefunden(
+    agent_mit_doppel, monkeypatch, tmp_path
+):
+    """Die Spalte kam später dazu - die Datei lag aber immer schon daneben."""
+    from PIL import Image
+
+    from insta_agent.models import PostDraft
+
+    agent = agent_mit_doppel
+    agent.settings.posting.nachbesserungen = 0
+    monkeypatch.setattr("insta_agent.runner.pruefe_beitrag", lambda *a, **k: _mit_befund())
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+
+    # So, wie es vor der Änderung aussah: zwei Dateien, keine Spalte.
+    roh = agent.settings.media_dir / "alt-roh.png"
+    fertig = agent.settings.media_dir / "alt-fertig.png"
+    roh.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (1080, 1920), (9, 30, 44)).save(roh)
+    Image.new("RGB", (1080, 1920), (9, 30, 44)).save(fertig)
+    agent.store.setze_bild(entwurf["id"], _entwurf(), str(fertig))
+    agent.store.setze_rohbild(entwurf["id"], None)
+
+    korrigiert = PostDraft.model_validate(_entwurf().model_dump())
+    korrigiert.hook_text_on_screen = "8.062 Meter tief."
+    monkeypatch.setattr("insta_agent.runner.ueberarbeite_beitrag", lambda *a, **k: korrigiert)
+    monkeypatch.setattr(
+        "insta_agent.runner.pruefe_beitrag",
+        lambda *a, **k: Pruefbericht(urteil="freigabe", zusammenfassung="Jetzt sauber."),
+    )
+
+    assert agent.nachbessern(entwurf["id"])["bild"] == "neu beschriftet"

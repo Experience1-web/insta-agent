@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS posts (
     status          TEXT NOT NULL DEFAULT 'draft',
     pruefung_json   TEXT,
     gestaltung_json TEXT,
-    fund_json       TEXT
+    fund_json       TEXT,
+    rohbild_path    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -96,6 +97,7 @@ class Store:
             "pruefung_json": "TEXT",
             "gestaltung_json": "TEXT",
             "fund_json": "TEXT",
+            "rohbild_path": "TEXT",
         }
     }
 
@@ -219,6 +221,19 @@ class Store:
         Beitrag überhaupt beruht.
         """
         self._haenge_an(post_id, "fund_json", fund)
+
+    def setze_rohbild(self, post_id: int, pfad: str | None) -> None:
+        """Merkt sich das gemalte Bild, bevor die Schrift daraufkam.
+
+        Ohne das gäbe es nach einer Nachbesserung nur zwei Möglichkeiten:
+        die alte Schrift mit der falschen Zahl stehenlassen, oder ein
+        ganz neues Bild malen - und damit ein anderes Motiv. Beides ist
+        falsch. Mit dem Grundbild wird nur die Schrift ausgetauscht.
+        """
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET rohbild_path=? WHERE id=?", (str(pfad) if pfad else None, post_id)
+            )
 
     def letzte_funde(self, limit: int = 12) -> list[str]:
         """Die Titel der zuletzt behandelten Funde.
