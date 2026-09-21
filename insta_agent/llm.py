@@ -42,10 +42,31 @@ def unterstuetzt_effort(model: str) -> bool:
     return model.startswith(EFFORT_MODELLE)
 
 
+# Welche Modelle die neuere Websuche mit eigener Filterung können. Die
+# älteren bekommen die einfache Fassung - dasselbe Werkzeug, weniger
+# Vorarbeit an den Ergebnissen.
+SUCHE_NEU = (
+    "claude-fable-5",
+    "claude-mythos-5",
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+)
+
+
 # Server-seitige Websuche. Läuft bei Anthropic, es gibt nichts selbst
 # auszuführen; die Ergebnisse kommen als Blöcke in derselben Antwort.
-def web_search_tool(max_uses: int) -> dict[str, Any]:
-    return {"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}
+#
+# Die Fassung hängt am Modell, und das ist kein Schönheitsfehler: Schickt
+# man die neuere an ein Modell, das sie nicht kennt, lehnt die Schnittstelle
+# die ganze Anfrage ab. Der Aufruf liefe dann ohne Werkzeuge durch - die
+# Prüfung hätte nichts nachgeschlagen und niemand wüsste, warum.
+def web_search_tool(max_uses: int, model: str = "") -> dict[str, Any]:
+    art = "web_search_20260209" if model.startswith(SUCHE_NEU) else "web_search_20250305"
+    return {"type": art, "name": "web_search", "max_uses": max_uses}
 
 
 class ModelRefused(RuntimeError):
@@ -151,7 +172,7 @@ class Brain:
         """
         self.treasury.check()
         model = self._model_for(task, modell)
-        tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
+        tools = [web_search_tool(self.config.max_web_searches, model)] if web_search else []
         self.letzte_quellen = []
 
         for attempt_model in (model, self.config.fallback_model):
@@ -269,7 +290,7 @@ class Brain:
         """Ein Textaufruf. Mit web_search recherchiert das Modell selbst."""
         self.treasury.check()
         model = self._model_for(task, modell)
-        tools = [web_search_tool(self.config.max_web_searches)] if web_search else []
+        tools = [web_search_tool(self.config.max_web_searches, model)] if web_search else []
 
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         total_cost = 0.0

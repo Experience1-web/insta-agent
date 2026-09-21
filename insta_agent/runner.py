@@ -460,7 +460,7 @@ class Agent:
                 self.store.set_fund(post_id, fund)
             if gestaltung is not None:
                 self.store.set_gestaltung(post_id, gestaltung)
-            bericht = self._pruefe(post_id, draft, identity, report)
+            bericht = self._pruefe(post_id, draft, identity, report, fund)
             bericht = self._bessere_nach(post_id, bericht, report)
             if zeile := self.store.get_post(post_id):
                 # Nach einer Nachbesserung steht dort ein anderes Bild.
@@ -648,7 +648,7 @@ class Agent:
         # nie jemand geprüft hat - und das ist die gefährlichste aller
         # Anzeigen. Also wenigstens ins Protokoll damit.
         try:
-            zweiter = self._pruefe(post_id, neu, identity, bericht_lauf)
+            zweiter = self._pruefe(post_id, neu, identity, bericht_lauf, fund)
         except (BudgetExhausted, CycleBudgetExceeded):
             self.store.log(
                 "nachbesserung",
@@ -694,6 +694,9 @@ class Agent:
             return {"ok": False, "grund": "Es gibt noch kein Profil."}
 
         draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        fund = (
+            Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
+        )
         lauf = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.check()
 
@@ -706,6 +709,7 @@ class Agent:
             mit_suche=self.treasury.state().mode is Mode.NORMAL,
             modell=self._modell("pruefung"),
             person=self._person("pruefung"),
+            fund=fund,
         )
         self.store.set_pruefung(post_id, bericht)
         self.store.log(
@@ -899,7 +903,7 @@ class Agent:
         self.store.log("mannschaft", f"{eigen['name']}: Porträt neu gemalt")
         return {"ok": True}
 
-    def _pruefe(self, post_id: int, draft, identity, report: CycleReport):
+    def _pruefe(self, post_id: int, draft, identity, report: CycleReport, fund=None):
         """Lässt die Endprüfung über den Entwurf gehen.
 
         Gibt den Bericht zurück, oder None, wenn nicht geprüft werden
@@ -919,6 +923,10 @@ class Agent:
                 mit_suche=self.treasury.state().mode is Mode.NORMAL,
                 modell=self._modell("pruefung"),
                 person=self._person("pruefung"),
+                # Der Fund gehört mit: Erfunden wird nicht im Text,
+                # sondern beim Suchen. Eine erfundene Art klingt genau
+                # wie eine echte.
+                fund=fund,
             )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise

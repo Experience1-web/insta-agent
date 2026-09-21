@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 
 from ..llm import Brain
-from ..models import PostDraft, Pruefbericht
+from ..models import Fund, PostDraft, Pruefbericht
 from .prompts import identity_block, persona_mit, with_context
+from .stoff import fund_block
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +110,35 @@ def _zu_pruefen(draft: PostDraft) -> str:
     return "\n\n".join(t for t in teile if t)
 
 
+_ECHTHEIT = """\
+# Die wichtigste Frage: Gibt es diesen Fund überhaupt?
+
+Der Fund oben kommt nicht aus der Welt, sondern von jemandem, der
+gesucht hat. Er kann sich geirrt haben, und er kann sich etwas
+ausgedacht haben - und nichts davon fällt beim Lesen auf. Eine erfundene
+Art klingt genau wie eine echte. Eine erfundene Expedition auch.
+
+Deshalb prüfst du zuerst den Fund selbst, bevor du den Text prüfst:
+
+- Gibt es die genannte Sache? Die Art, die Ruine, die Sonde, das
+  Verfahren - such danach, und zwar unter dem Namen, der dort steht.
+- Gibt es die genannten Fundstellen? Eine Veröffentlichung, die es
+  nicht gibt, ist der schwerste Befund, den du vergeben kannst.
+- Steht dort wirklich, was behauptet wird? Nicht ungefähr das. Nicht
+  etwas Ähnliches aus einem anderen Jahr.
+- Stimmen die Umstände: Jahr, Ort, Tiefe, wer es gefunden hat?
+- Und: Ist die Beleglage richtig angegeben? Wer "gesichert" schreibt,
+  aber nur eine Pressemeldung hat, hat zu hoch gegriffen. Das ist ein
+  Befund, auch wenn die Sache selbst stimmt.
+
+Findest du die Sache nirgends, lautet dein Urteil "ablehnen" - nicht
+"nachbessern". Ein Beitrag über etwas, das es nicht gibt, lässt sich
+nicht nachbessern.
+
+Leg für den Fund selbst einen eigenen Befund an, mit dem Titel als
+Behauptung. Er gehört als erster in die Liste."""
+
+
 def _wer(person: dict | None, standard: str) -> tuple[str, str]:
     """Name und Haltung dieser Person - oder die Voreinstellung."""
     person = person or {}
@@ -130,6 +160,7 @@ def pruefe_beitrag(
     mit_suche: bool = True,
     modell: str | None = None,
     person: dict | None = None,
+    fund=None,
 ) -> Pruefbericht:
     """Lässt den Beitrag von der Endprüfung durchgehen.
 
@@ -164,6 +195,8 @@ def pruefe_beitrag(
 # Der Beitrag, den du prüfst
 
 {_zu_pruefen(draft)}""",
+            fund_block(fund),
+            _ECHTHEIT if fund is not None else "",
             f"""\
 # Auftrag
 Geh den Beitrag Aussage für Aussage durch.
