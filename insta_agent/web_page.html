@@ -395,6 +395,33 @@
   }
   .modellinfo p { margin: 0 0 6px; }
   .modellinfo p:last-child { margin-bottom: 0; }
+  .wischreihe {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    scroll-snap-type: x mandatory;
+    margin-bottom: 4px;
+  }
+  .wischreihe figure { margin: 0; flex: 0 0 auto; scroll-snap-align: center; }
+  .wischreihe img {
+    display: block;
+    height: 340px;
+    width: auto;
+    border-radius: 10px;
+    background: #000;
+  }
+  .wischreihe figcaption {
+    margin-top: 5px;
+    font-size: 11px;
+    text-align: center;
+    opacity: .5;
+    letter-spacing: .04em;
+  }
+  @media (max-width: 720px) {
+    .wischreihe img { height: 260px; }
+  }
+
   .modellinfo .merkmal { opacity: .75; }
   .modellinfo .preis { font-size: 14px; opacity: .95; }
   /* Eigene Namen, weil .mehr und .klein im Rest der Seite schon etwas
@@ -1680,6 +1707,8 @@ function zeichne_beitraege(d) {
             ${pruef_marke(p.pruefung)}
             ${p.bildnachweis ? '<span class="marke gepruft">echtes Foto</span>' : ""}
             ${kosten_marke(p)}
+            ${(p.karussell || []).length
+              ? `<span class="marke">${(p.karussell.length + 1)} Bilder</span>` : ""}
           </div>
         </div>
         <div class="inhalt">
@@ -1708,11 +1737,37 @@ function zeichne_beitraege(d) {
   verdrahte_entscheidungen($("postbox"));
 }
 
+/** Die Bilder eines Beitrags - eines, oder ein Karussell zum Wischen.
+ *
+ * Bewusst waagerecht scrollbar statt mit Knoepfen: Genau so sieht der
+ * Leser es spaeter bei Instagram auch, und wer beurteilen soll, ob die
+ * Bilder zusammenpassen, muss sie nebeneinander sehen koennen.
+ */
+function bilderreihe(p) {
+  const alle = [p.bild, ...(p.karussell || [])].filter(Boolean);
+  if (!alle.length) return "";
+  if (alle.length === 1) {
+    return `<img class="grossbild"
+       src="/media?name=${encodeURIComponent(alle[0])}${anhang}" alt="">`;
+  }
+  return `
+    <div class="wischreihe">
+      ${alle.map((name, i) => `
+        <figure>
+          <img src="/media?name=${encodeURIComponent(name)}${anhang}" alt="" loading="lazy">
+          <figcaption>${i + 1} / ${alle.length}</figcaption>
+        </figure>`).join("")}
+    </div>
+    <p class="hinweis" style="margin:8px 0 16px">
+      ${alle.length} Bilder zum Durchwischen – seitlich scrollen.
+      So sieht es der Leser auch.
+    </p>`;
+}
+
 /** Der ganze Beitrag: Text, Bild-Prompt, Prüfbericht, Hintergedanken. */
 function zeige_beitrag(p) {
   oeffne_popup(anriss(p.bildtext || p.caption, 60), `
-    ${p.bild ? `<img class="grossbild"
-       src="/media?name=${encodeURIComponent(p.bild)}${anhang}" alt="">` : ""}
+    ${bilderreihe(p)}
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
       ${reiz_marke(p.fund, p.status)}

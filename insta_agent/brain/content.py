@@ -16,6 +16,52 @@ from ..models import Fund, PostDraft
 from .prompts import PERSONA, identity_block, strategy_block, with_context
 from .stoff import fund_block
 
+# Der Auftrag fuer das Karussell. Steht getrennt, weil er der laengste
+# einzelne Abschnitt ist - und weil er der ist, an dem sich entscheidet,
+# ob jemand wischt oder weiterzieht.
+KARUSSELL = """\
+Ein Beitrag darf mehrere Bilder haben, durch die man wischt. Jede Karte
+traegt eine eigene Tatsache. Der Grund ist nicht die Menge, sondern die
+Bewegung: Wer wischt, bleibt - und wer bleibt, zaehlt bei Instagram
+mehr als zehn, die vorbeiziehen.
+
+**Wie viele, entscheidest du am Ereignis.** Nicht an einer Regel:
+
+- Ein umfangreicher Fund mit vielen belegten Zahlen: bis zu vier
+  Karten zusaetzlich zum ersten Bild, also funf insgesamt.
+- Ein Fund mit zwei, drei harten Tatsachen: ein bis drei Karten.
+- Ein Fund, bei dem alles Wesentliche in einem Satz steht: gar keine.
+  Ein starkes Bild schlaegt funf, von denen drei nichts sagen.
+
+Der Fehler, den du nicht machen darfst: Karten erfinden, um auf eine
+Zahl zu kommen. Lieber eine Karte weniger als eine, auf der
+"faszinierend" steht. Jede Karte muss eine Tatsache tragen, die im Fund
+belegt ist - eine Entfernung, ein Jahr, ein Gewicht, eine Temperatur,
+einen Namen. "59,35 Lichtjahre entfernt" ist eine Karte. "Und es kommt
+noch besser" ist keine.
+
+Und keine darf wiederholen, was schon auf dem ersten Bild steht.
+
+**Die Karten muessen zusammen aussehen.** Das ist die zweite harte
+Bedingung: Wer wischt, soll merken, dass er noch im selben Beitrag ist.
+Also in jedem `bildwunsch` dieselbe Lichtstimmung, dieselbe Farbwelt,
+dasselbe Objektiv und dieselbe Anmutung wie im ersten Bild. Was sich
+aendert, ist das Motiv, nicht der Stil. Fuenf Bilder aus fuenf Welten
+sind ein Sammelsurium, kein Karussell.
+
+Schreib den `bildwunsch` genauso sorgfaeltig wie den ersten Prompt -
+dieselben sieben Punkte, dasselbe "no text, no logos, no watermark",
+dieselbe ruhige Flaeche fuer die Schrift.
+
+`bildsuche` gibst du an, wenn es von dieser Karte eine echte Aufnahme
+geben koennte: zwei bis vier Woerter auf Englisch. Eine echte Aufnahme
+schlaegt jedes gemalte Bild. Gibt es davon keines - von einem
+Exoplaneten hat niemand ein Foto -, laesst du es leer.
+
+`text` ist, was auf der Karte steht: hoechstens acht Woerter, ohne Punkt
+am Ende. `akzentwort` ist die Zahl darin."""
+
+
 MAX_CAPTION = 2200
 MAX_HOOK_WOERTER = 7
 
@@ -187,7 +233,10 @@ die Notfassung, falls kein Bild erzeugt wird.
 `akzentwort` ist das eine Wort aus dem Hook, das farbig gesetzt wird.
 Nimm das, woran die Sache hängt: die Zahl, die Tiefe, das Alter, den
 Namen. Ein Wort, höchstens zwei - wer alles hervorhebt, hebt nichts
-hervor. Es muss wörtlich so im Hook stehen, sonst findet es niemand.""",
+hervor. Es muss wörtlich so im Hook stehen, sonst findet es niemand.
+
+## karten - die Bilder zum Durchwischen
+{KARUSSELL}""",
         ),
     )
 

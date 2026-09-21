@@ -556,6 +556,23 @@ class Agent:
                 self.store.set_fund(post_id, fund)
             if gestaltung is not None:
                 self.store.set_gestaltung(post_id, gestaltung)
+            # Die weiteren Bilder zum Durchwischen. Erst jetzt, nach dem
+            # ersten Bild: Sie richten sich in Farbe und Stil danach.
+            weitere, karten_nachweise, ersatz = self._baue_karussell(
+                draft, basis, identity, report, erstes_roh=rohbild
+            )
+            if ersatz is not None:
+                # Ein zerschnittenes Panorama: Das Hauptbild ist jetzt das
+                # linke Stueck, nicht die ganze Aufnahme.
+                image_path = ersatz
+                self.store.setze_bildpfad(post_id, str(ersatz))
+            if weitere:
+                self.store.setze_karussell(post_id, [str(b) for b in weitere])
+                if karten_nachweise:
+                    schon = getattr(self, "_letzter_nachweis", "")
+                    alle = [t for t in [schon, *karten_nachweise] if t]
+                    self.store.setze_bildnachweis(post_id, " · ".join(dict.fromkeys(alle)))
+
             bericht = self._pruefe(post_id, draft, identity, report, fund)
             bericht = self._bessere_nach(post_id, bericht, report)
 
@@ -1245,6 +1262,201 @@ class Agent:
         self.store.log("bild_echt", f"{gefunden.seite} - {gefunden.lizenz}")
         return gefunden.pfad, gefunden.nachweis
 
+    def _panorama_karussell(self, draft, basis: str, identity, erstes_roh):
+        """Aus einer sehr breiten Aufnahme ein Karussell zum Durchwandern.
+
+        Gibt das beschriftete erste Stueck und die uebrigen zurueck, oder
+        zweimal nichts, wenn das Bild dafuer nicht taugt - dann bleibt es
+        beim gewoehnlichen Karussell aus Faktenkarten.
+
+        Das erste Stueck ersetzt das Hauptbild des Beitrags: Im Feed steht
+        dann der linke Rand der Aufnahme, und alles Weitere liegt rechts
+        davon.
+
+        Beschriftet wird nur das erste Stueck. Eine Zeile auf jedem Teil
+        zerhackt die Aufnahme und nimmt ihr genau das, wofuer man sie
+        genommen hat; die Fakten stehen dann in der Bildunterschrift.
+        """
+        if erstes_roh is None or not Path(erstes_roh).exists():
+            return None, []
+
+        from .imaging.panorama import ist_panorama, zerschneide
+
+        if not ist_panorama(Path(erstes_roh)):
+            return None, []
+
+        breite, hoehe = STORY if self.settings.posting.bildformat == "story" else FEED
+        stuecke = zerschneide(
+            Path(erstes_roh),
+            self.settings.media_dir / basis,
+            format_breite=breite,
+            format_hoehe=hoehe,
+        )
+        if len(stuecke) < 2:
+            return None, []
+
+        # Nur das erste Stueck bekommt den Hook - es ist das, was im Feed
+        # steht. Die uebrigen bleiben unberuehrt, damit die Aufnahme
+        # durchlaeuft.
+        erstes = self.settings.media_dir / f"{basis}-fertig.png"
+        try:
+            lege_hook_auf(
+                stuecke[0],
+                erstes,
+                text=draft.bildtext,
+                spec=draft.visual,
+                handle=f"@{identity.handle}",
+            )
+        except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
+            log.warning("Schrift auf Panoramastueck fehlgeschlagen: %s", exc)
+            erstes = stuecke[0]
+
+        return erstes, stuecke[1:]
+
+    def _karte_rohbild(self, karte, basis: str, nummer: int):
+        """Das nackte Bild einer Karte - echt oder gemalt, noch ohne Schrift.
+
+        Getrennt von der Beschriftung, und das ist der Punkt: Angeglichen
+        wird die ganze Reihe auf einmal, und das geht nur, solange noch
+        keine Schrift darauf liegt. Sonst wuerde die Helligkeitskorrektur
+        den Text mit verschieben.
+        """
+        stamm = f"{basis}-k{nummer}"
+
+        # Eine echte Aufnahme schlaegt jedes gemalte Bild.
+        if suchwort := (karte.bildsuche or "").strip():
+            from .imaging.echtbild import finde_und_hole
+
+            ziel = self.settings.media_dir / f"{stamm}-echt.jpg"
+            try:
+                gefunden = finde_und_hole(suchwort, ziel)
+            except Exception as exc:  # noqa: BLE001 - dann wird gemalt
+                log.info("Kartensuche fehlgeschlagen: %s", exc)
+                gefunden = None
+            if gefunden is not None and gefunden.pfad is not None:
+                return gefunden.pfad, gefunden.nachweis
+
+        # Sonst gemalt, mit dem Prompt dieser Karte.
+        wunsch = (karte.bildwunsch or "").strip()
+        if self.bildgenerator is not None and wunsch and not self._bilder_heute_aus:
+            ziel = self.settings.media_dir / f"{stamm}-roh.png"
+            try:
+                self.bildgenerator.erzeuge(wunsch, ziel)
+                return ziel, ""
+            except KontingentErschoepft as exc:
+                self._bilder_heute_aus = str(exc)
+                log.warning("Karte %s nicht gemalt: %s", nummer, exc)
+            except Exception as exc:  # noqa: BLE001 - dann typografisch
+                log.warning("Karte %s nicht gemalt: %s", nummer, exc)
+
+        return None, ""
+
+    def _beschrifte_karte(self, karte, roh, basis: str, nummer: int, draft, identity):
+        """Die Schrift auf eine Karte - oder die typografische Fassung.
+
+        Beide tragen dieselben Farben wie die erste Karte. Ein Karussell,
+        in dem eine Karte anders gesetzt ist, sieht aus wie ein Versehen.
+        """
+        spec = draft.visual.model_copy(
+            update={
+                "headline": karte.text,
+                "subline": "",
+                "body_lines": [],
+                "akzentwort": karte.akzentwort or "",
+            }
+        )
+        fertig = self.settings.media_dir / f"{basis}-k{nummer}.png"
+        groesse = STORY if self.settings.posting.bildformat == "story" else FEED
+
+        if roh is None:
+            return render_post_image(spec, fertig, groesse=groesse)
+        try:
+            lege_hook_auf(
+                roh, fertig, text=karte.text, spec=spec, handle=f"@{identity.handle}"
+            )
+        except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
+            log.warning("Schrift auf Karte %s fehlgeschlagen: %s", nummer, exc)
+            return roh
+        return fertig
+
+    def _baue_karussell(self, draft, basis: str, identity, report: CycleReport, erstes_roh=None):
+        """Die weiteren Bilder eines Beitrags. Leer heisst: ein Bild genuegt.
+
+        Der Agent entscheidet die Anzahl am Fund, nicht an einer Regel -
+        ein starkes Bild schlaegt fuenf, von denen drei nichts sagen.
+        Hier wird nur ausgefuehrt, was er beschlossen hat.
+
+        In drei Schritten, und die Reihenfolge ist der ganze Sinn: erst
+        alle nackten Bilder holen, dann die ganze Reihe aneinander
+        angleichen, dann beschriften. Wer jedes Bild einzeln angleicht,
+        bekommt fuenf Bilder, die jedes fuer sich stimmig sind und
+        nebeneinander auseinanderfallen.
+        """
+        from .imaging.angleichen import gleiche_reihe_an
+
+        # Vorher der Sonderfall, der jedes Faktenkarussell schlaegt: Liegt
+        # eine sehr breite Aufnahme vor, wird sie zerschnitten. Wer dann
+        # wischt, faehrt an einem Bild entlang statt durch Kacheln zu
+        # blaettern - und wischt bis zum Ende.
+        pano_erstes, pano_weitere = self._panorama_karussell(
+            draft, basis, identity, erstes_roh
+        )
+        if pano_weitere:
+            report.steps.append(
+                f"Panorama in {len(pano_weitere) + 1} Stuecke zerschnitten - "
+                "man wandert durch die Aufnahme"
+            )
+            return pano_weitere, [], pano_erstes
+
+        karten = list(getattr(draft, "karten", None) or [])
+        if not karten:
+            return [], [], None
+
+        # Instagram nimmt bis zu zehn, aber mehr als vier zusaetzliche
+        # liest ohnehin niemand zu Ende.
+        karten = karten[:4]
+
+        rohbilder: list[Path | None] = []
+        nachweise: list[str] = []
+        genommen: list = []
+        for nummer, karte in enumerate(karten, start=2):
+            try:
+                self.treasury.check()
+            except (BudgetExhausted, CycleBudgetExceeded) as exc:
+                report.steps.append(f"Karte {nummer} entfaellt: {exc}")
+                break
+            roh, nachweis = self._karte_rohbild(karte, basis, nummer)
+            rohbilder.append(roh)
+            genommen.append(karte)
+            if nachweis:
+                nachweise.append(nachweis)
+
+        if not genommen:
+            return [], [], None
+
+        # Die ganze Reihe auf einen Nenner. Das erste Bild gibt den Ton
+        # an und bleibt, wie es ist - es ist das, was im Feed erscheint.
+        reihe = [b for b in [erstes_roh, *rohbilder] if b is not None]
+        if len(reihe) > 1:
+            angeglichen = gleiche_reihe_an(
+                reihe,
+                hintergrund_hex=draft.visual.background_hex,
+                akzent_hex=draft.visual.accent_hex,
+            )
+            log.info("Karussell: %s von %s Bildern angeglichen", angeglichen, len(reihe))
+
+        bilder: list[Path] = []
+        for versatz, (karte, roh) in enumerate(zip(genommen, rohbilder)):
+            bilder.append(
+                self._beschrifte_karte(karte, roh, basis, versatz + 2, draft, identity)
+            )
+
+        report.steps.append(
+            f"Karussell: {len(bilder) + 1} Bilder"
+            + (f", davon {len(nachweise)} echte Aufnahmen" if nachweise else "")
+        )
+        return bilder, nachweise, None
+
     def _erzeuge_bild(
         self, draft, basis: str, identity, report: CycleReport, fund=None
     ) -> tuple[Path | None, Path | None]:
@@ -1367,9 +1579,20 @@ class Agent:
                 report.steps.append(f"Beitrag {zeile['id']}: Bild fehlt")
                 continue
 
+            # Die Bilder zum Durchwischen, falls es welche gibt. Fehlt
+            # eines auf der Festplatte, faellt nur dieses weg - der
+            # Beitrag geht mit den uebrigen hinaus.
+            weitere = [
+                pfad
+                for roh in json.loads(zeile["karussell_json"] or "[]")
+                if (pfad := Path(roh)).exists()
+            ]
+
             # Der Bildnachweis geht mit hinaus: Bei einem übernommenen
             # Foto ist er die Bedingung der Lizenz.
-            ergebnis = self.publisher.publish(draft, bild, zeile["bildnachweis"] or "")
+            ergebnis = self.publisher.publish(
+                draft, bild, zeile["bildnachweis"] or "", weitere=weitere
+            )
             if ergebnis.published and ergebnis.ig_media_id:
                 self.store.mark_published(zeile["id"], ergebnis.ig_media_id)
                 report.published_media_ids.append(ergebnis.ig_media_id)

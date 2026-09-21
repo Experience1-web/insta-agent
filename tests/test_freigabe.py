@@ -100,10 +100,15 @@ class MitschreibenderVerlag:
         # Womit der Beitrag hinausging - bei einem uebernommenen Foto die
         # Pflichtangabe, sonst leer.
         self.nachweise: list[str] = []
+        # Und wie viele Bilder mitgingen: eines oder ein Karussell.
+        self.bilderzahl: list[int] = []
 
-    def publish(self, draft, image_path, bildnachweis: str = "") -> PublishResult:
+    def publish(
+        self, draft, image_path, bildnachweis: str = "", weitere=None
+    ) -> PublishResult:
         self.veroeffentlicht.append(draft.caption)
         self.nachweise.append(bildnachweis)
+        self.bilderzahl.append(1 + len(weitere or []))
         return PublishResult(published=True, ig_media_id=f"ig-{len(self.veroeffentlicht)}")
 
 

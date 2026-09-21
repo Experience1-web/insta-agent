@@ -115,8 +115,18 @@ class Publisher:
         return relative.with_name(name)
 
     def publish(
-        self, draft: PostDraft, image_path: Path, bildnachweis: str = ""
+        self,
+        draft: PostDraft,
+        image_path: Path,
+        bildnachweis: str = "",
+        weitere: list[Path] | None = None,
     ) -> PublishResult:
+        """Veroeffentlicht einen Beitrag - ein Bild oder ein Karussell.
+
+        `weitere` sind die Bilder, durch die gewischt wird, in dieser
+        Reihenfolge. `image_path` bleibt das erste und das, was im Feed
+        erscheint.
+        """
         caption = self.full_caption(draft, bildnachweis)
 
         if not self.live:
@@ -128,6 +138,17 @@ class Publisher:
             return PublishResult(
                 published=False, draft_path=path, reason="Keine Instagram-Zugangsdaten hinterlegt"
             )
+
+        if weitere:
+            ergebnis = self._veroeffentliche_karussell(
+                draft, image_path, list(weitere), caption
+            )
+            if ergebnis is not None:
+                return ergebnis
+            # Ein Karussell, das nicht zustande kam, ist kein Grund, den
+            # Beitrag fallen zu lassen: Das erste Bild traegt ihn auch
+            # allein. Also weiter wie bisher.
+            log.warning("Karussell nicht moeglich - es geht mit einem Bild hinaus.")
 
         gruende: list[str] = []
         for image_url in self._adressen(image_path):
@@ -162,6 +183,48 @@ class Publisher:
                 ),
             )
         return PublishResult(published=False, draft_path=path, reason="\n  ".join(gruende))
+
+    def _veroeffentliche_karussell(
+        self, draft: PostDraft, erstes: Path, weitere: list[Path], caption: str
+    ) -> PublishResult | None:
+        """Alle Bilder einzeln hochladen, dann als Gruppe veroeffentlichen.
+
+        None heisst: Es hat nicht geklappt, und der Aufrufer soll es mit
+        einem einzelnen Bild versuchen. Ein Karussell, das scheitert,
+        darf den Beitrag nicht mitnehmen - das erste Bild traegt ihn
+        auch allein.
+
+        Anders als beim einzelnen Bild wird hier nicht ueber mehrere
+        Adressen hinweg probiert: Wenn die Ablage fuer ein Bild nicht
+        funktioniert, funktioniert sie fuer keines, und zehn Bilder
+        zehnmal woanders hochzuladen dauert laenger als der ganze
+        Beitrag wert ist.
+        """
+        alle = [erstes, *weitere][:10]
+        if len(alle) < 2:
+            return None
+
+        kinder: list[str] = []
+        try:
+            for pfad in alle:
+                adresse = self._public_url(pfad)
+                if not adresse:
+                    log.warning("Keine oeffentliche Adresse fuer %s", pfad.name)
+                    return None
+                kinder.append(self.client.create_carousel_item(adresse))
+
+            for kind in kinder:
+                self.client.wait_until_ready(kind)
+
+            eltern = self.client.create_carousel(kinder, caption)
+            self.client.wait_until_ready(eltern)
+            media_id = self.client.publish_container(eltern)
+        except GraphAPIError as exc:
+            log.error("Karussell fehlgeschlagen: %s", exc)
+            return None
+
+        log.info("Karussell mit %s Bildern veroeffentlicht als %s", len(alle), media_id)
+        return PublishResult(published=True, ig_media_id=media_id)
 
     @staticmethod
     def full_caption(draft: PostDraft, bildnachweis: str = "") -> str:

@@ -238,6 +238,51 @@ class VisualSpec(BaseModel):
     footer: str = Field(default="", description="Kleiner Fußtext, meist der Handle")
 
 
+class Karte(BaseModel):
+    """Eine Seite eines Karussells: ein Bild, eine Tatsache.
+
+    Der Grund, warum ein Beitrag mehrere Bilder bekommt, ist nicht die
+    Menge, sondern die Bewegung: Wer wischt, bleibt. Jede Karte muss
+    deshalb fuer sich stehen und trotzdem zur naechsten ziehen.
+
+    Und sie muss eine Tatsache tragen, keine Fortsetzung eines Satzes.
+    "59,35 Lichtjahre entfernt" ist eine Karte. "und ausserdem" ist
+    keine.
+    """
+
+    text: str = Field(
+        description=(
+            "Was auf diesem Bild steht. Eine einzelne Tatsache, hoechstens "
+            "acht Woerter, ohne Punkt am Ende. Konkret: eine Zahl, eine "
+            "Entfernung, ein Jahr, ein Name - nicht 'faszinierend'."
+        )
+    )
+    akzentwort: str = Field(
+        default="",
+        description=(
+            "Das eine Wort oder die eine Zahl aus dem Text, die farbig "
+            "gesetzt wird. Meist die Zahl."
+        ),
+    )
+    bildwunsch: str = Field(
+        default="",
+        description=(
+            "Englischer Prompt fuer das Bild dieser Karte, falls gemalt "
+            "werden muss. Muss zum Bild der ersten Karte passen: dieselbe "
+            "Lichtstimmung, dieselbe Farbwelt, derselbe Bildabstand. Eine "
+            "Reihe, kein Sammelsurium."
+        ),
+    )
+    bildsuche: str = Field(
+        default="",
+        description=(
+            "Zwei bis vier Woerter fuer die Suche nach einer echten "
+            "Aufnahme zu dieser Karte, auf Englisch. Leer lassen, wenn es "
+            "davon kein Foto geben kann."
+        ),
+    )
+
+
 class PostDraft(BaseModel):
     """Ein fertiger Post-Entwurf.
 
@@ -288,6 +333,19 @@ class PostDraft(BaseModel):
     )
 
     visual: VisualSpec
+
+    karten: list[Karte] = Field(
+        default_factory=list,
+        description=(
+            "Die weiteren Bilder zum Durchwischen, nach dem ersten. Zwei "
+            "bis vier, wenn der Fund genug belegte Tatsachen hergibt - "
+            "sonst weniger oder gar keine. Lieber ein starkes Bild als "
+            "fuenf, von denen drei nichts sagen. Jede Karte eine Tatsache, "
+            "keine Wiederholung dessen, was schon auf dem ersten Bild "
+            "steht, und nichts Erfundenes, nur um auf eine Zahl zu kommen."
+        ),
+    )
+
     best_time_hint: str = Field(description="Wann dieser Post laufen sollte und warum")
     expected_outcome: str = Field(description="Was der Agent sich davon verspricht")
 

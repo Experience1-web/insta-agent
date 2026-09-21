@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS posts (
     fund_json       TEXT,
     rohbild_path    TEXT,
     bildnachweis    TEXT,
-    kosten_usd      REAL
+    kosten_usd      REAL,
+    karussell_json  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -102,6 +103,7 @@ class Store:
             "rohbild_path": "TEXT",
             "bildnachweis": "TEXT",
             "kosten_usd": "REAL",
+            "karussell_json": "TEXT",
         }
     }
 
@@ -164,6 +166,19 @@ class Store:
             )
             return int(cur.lastrowid)
 
+    def setze_karussell(self, post_id: int, bilder: list[str]) -> None:
+        """Die weiteren Bilder eines Beitrags, in der Reihenfolge des Wischens.
+
+        Das erste Bild steht weiterhin in `image_path` - es ist das, was
+        im Feed erscheint, und alles ausserhalb dieser Tabelle rechnet
+        damit. Hier stehen nur die, die danach kommen.
+        """
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET karussell_json=? WHERE id=?",
+                (json.dumps(bilder, ensure_ascii=False) if bilder else None, post_id),
+            )
+
     def setze_kosten(self, post_id: int, usd: float) -> None:
         """Was dieser Beitrag gekostet hat, am Beitrag selbst.
 
@@ -225,6 +240,19 @@ class Store:
                 ),
             )
             return cur.rowcount > 0
+
+    def setze_bildpfad(self, post_id: int, pfad: str) -> None:
+        """Nur der Dateiname des Hauptbilds, sonst nichts.
+
+        Der Unterschied zu `setze_bild`: Dort wird auch der Entwurf neu
+        geschrieben und die Gestaltungsnotiz verworfen, weil dort ein
+        anderes Motiv entstanden ist. Hier ist es dasselbe Bild, nur eine
+        andere Datei - das linke Stueck eines zerschnittenen Panoramas an
+        der Stelle der ganzen Aufnahme. Daran hat sich nichts geaendert,
+        was jemand beurteilt haette.
+        """
+        with self._tx() as conn:
+            conn.execute("UPDATE posts SET image_path=? WHERE id=?", (pfad, post_id))
 
     def set_pruefung(self, post_id: int, bericht: Any) -> None:
         """Hängt den Bericht der Endprüfung an den Entwurf."""

@@ -259,6 +259,12 @@ class Steuerung:
                         # Text, Bild, Pruefung und jede Nachbesserung
                         # zusammen. None heisst: von vor dieser Zaehlung.
                         "kosten_usd": zeile["kosten_usd"],
+                        # Die weiteren Bilder zum Durchwischen, in der
+                        # Reihenfolge. Leer heisst: ein Bild genuegte.
+                        "karussell": [
+                            Path(pfad).name
+                            for pfad in json.loads(zeile["karussell_json"] or "[]")
+                        ],
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
                         # Was die Endprüfung gefunden hat. None heißt:
                         # nicht geprüft - das ist etwas anderes als sauber.

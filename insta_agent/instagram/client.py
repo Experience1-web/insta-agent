@@ -136,6 +136,46 @@ class InstagramClient:
             raise GraphAPIError(f"Kein Container zurückgegeben: {data}")
         return str(container_id)
 
+    def create_carousel_item(self, image_url: str) -> str:
+        """Ein einzelnes Bild eines Karussells - noch ohne Text.
+
+        Der Unterschied zu einem gewoehnlichen Container ist genau ein
+        Feld: `is_carousel_item`. Ohne das nimmt Instagram das Bild als
+        eigenstaendigen Beitrag an und lehnt es spaeter als Kind ab.
+
+        Die Bildunterschrift gehoert nicht hierher: Ein Karussell hat
+        eine, und die steht am Elternteil.
+        """
+        data = self._request(
+            "POST", f"{self.ig_user_id}/media", image_url=image_url, is_carousel_item="true"
+        )
+        container_id = data.get("id")
+        if not container_id:
+            raise GraphAPIError(f"Kein Karussellbild zurückgegeben: {data}")
+        return str(container_id)
+
+    def create_carousel(self, children: list[str], caption: str) -> str:
+        """Der Elternteil, der die Bilder zusammenhaelt.
+
+        `children` ist die Reihenfolge, in der gewischt wird - das erste
+        ist das, was im Feed erscheint. Instagram nimmt zwei bis zehn.
+        """
+        if not 2 <= len(children) <= 10:
+            raise GraphAPIError(
+                f"Ein Karussell braucht zwischen 2 und 10 Bildern, hier sind es {len(children)}."
+            )
+        data = self._request(
+            "POST",
+            f"{self.ig_user_id}/media",
+            media_type="CAROUSEL",
+            children=",".join(children),
+            caption=caption,
+        )
+        container_id = data.get("id")
+        if not container_id:
+            raise GraphAPIError(f"Kein Karussell zurückgegeben: {data}")
+        return str(container_id)
+
     def wait_until_ready(self, container_id: str, *, attempts: int = 12, delay: float = 5.0) -> None:
         """Schritt 2: warten, bis Instagram das Bild verarbeitet hat."""
         for attempt in range(attempts):
