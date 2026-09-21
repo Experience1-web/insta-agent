@@ -27,6 +27,17 @@ from .pricing import PRICING, ModelPrice
 ANTEIL_EINGABE = 0.8
 ANTEIL_AUSGABE = 0.2
 
+# Ein durchschnittlicher Aufruf, solange es keine eigenen Zahlen gibt.
+# Eine Rolle liest ihren Auftrag, ihren Steckbrief, die Vorgeschichte und
+# die Suchergebnisse und schreibt einen Entwurf - das ist die Grössenordnung.
+# Sobald der Betrieb eigene Buchungen hat, wird stattdessen damit gerechnet.
+BEISPIEL_EINGABE = 18_000
+BEISPIEL_AUSGABE = 900
+
+# So viele Modellaufrufe stecken ungefähr in einem fertigen Beitrag:
+# Stoffsuche, Text, Bildsprache, Prüfung - und meist eine Nachbesserung.
+AUFRUFE_JE_BEITRAG = 5
+
 
 @dataclass(frozen=True, slots=True)
 class Steckbrief:
@@ -131,7 +142,26 @@ def faktor(modell: str) -> float:
     return mischpreis(preis) / _guenstigster()
 
 
-def uebersicht() -> list[dict]:
+def kosten_eines_aufrufs(
+    modell: str, eingabe: int = BEISPIEL_EINGABE, ausgabe: int = BEISPIEL_AUSGABE
+) -> float:
+    """Was derselbe Auftrag auf diesem Modell kostet, in USD.
+
+    Das ist die Zahl, die man tatsächlich vergleichen will. Zwei Preise
+    je Million Token sind keine Antwort auf "was kostet mich das" - ein
+    Betrag für denselben Auftrag auf jedem Modell schon.
+    """
+    preis = PRICING.get(modell)
+    if preis is None:
+        return 0.0
+    return (
+        eingabe * preis.input_per_mtok + ausgabe * preis.output_per_mtok
+    ) / 1_000_000
+
+
+def uebersicht(
+    eingabe: int = BEISPIEL_EINGABE, ausgabe: int = BEISPIEL_AUSGABE
+) -> list[dict]:
     """Alle wählbaren Modelle mit Preis, Faktor und Steckbrief.
 
     Sortiert vom billigsten zum teuersten - so, wie man vergleicht, und
@@ -141,10 +171,16 @@ def uebersicht() -> list[dict]:
     zeilen = []
     for modell, preis in PRICING.items():
         brief = STECKBRIEFE.get(modell)
+        je_aufruf = kosten_eines_aufrufs(modell, eingabe, ausgabe)
         zeilen.append(
             {
                 "id": modell,
                 "anzeige": brief.anzeige if brief else modell,
+                # Die Zahl, um die es geht: derselbe Auftrag, dieses
+                # Modell, in Cent. Alles andere steht daneben, damit man
+                # es nachrechnen kann - nicht, damit man es muss.
+                "cent_je_aufruf": round(je_aufruf * 100, 2),
+                "cent_je_beitrag": round(je_aufruf * AUFRUFE_JE_BEITRAG * 100, 1),
                 "eingabe": preis.input_per_mtok,
                 "ausgabe": preis.output_per_mtok,
                 "faktor": round(faktor(modell), 1),
@@ -153,4 +189,4 @@ def uebersicht() -> list[dict]:
                 "websuche": brief.websuche if brief else True,
             }
         )
-    return sorted(zeilen, key=lambda z: z["faktor"])
+    return sorted(zeilen, key=lambda z: z["cent_je_aufruf"])

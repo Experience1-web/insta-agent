@@ -491,6 +491,29 @@ class Store:
             eintrag["schnitt_usd"] = eintrag["usd"] / max(1, int(eintrag["aufrufe"]))
         return je_modell
 
+    def durchschnittlicher_aufruf(self) -> tuple[int, int, int]:
+        """Wie gross ein Modellaufruf hier im Schnitt ist.
+
+        Gibt Eingabe-Token, Ausgabe-Token und die Zahl der Buchungen
+        zurueck, auf denen das beruht. Damit laesst sich ausrechnen, was
+        derselbe Auftrag auf einem anderen Modell kosten wuerde - und das
+        ist die einzige Zahl, die beim Vergleichen wirklich hilft.
+
+        Ohne eigene Buchungen dreimal Null. Dann rechnet der Aufrufer mit
+        seinem Beispielwert weiter, statt eine Zahl zu erfinden.
+        """
+        zeile = self._conn.execute(
+            "SELECT COUNT(*) AS n, "
+            "  COALESCE(AVG(json_extract(meta, '$.input_tokens')), 0)  AS ein, "
+            "  COALESCE(AVG(json_extract(meta, '$.output_tokens')), 0) AS aus "
+            "FROM ledger "
+            "WHERE kind='cost' AND category='llm' AND meta IS NOT NULL "
+            "  AND json_extract(meta, '$.input_tokens') > 0"
+        ).fetchone()
+        if not zeile or not zeile["n"]:
+            return 0, 0, 0
+        return int(zeile["ein"]), int(zeile["aus"]), int(zeile["n"])
+
     def ledger_sum(self, kind: str | None = None) -> float:
         if kind:
             row = self._conn.execute(

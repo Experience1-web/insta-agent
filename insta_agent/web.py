@@ -31,24 +31,34 @@ from .runner import Agent
 log = logging.getLogger(__name__)
 
 
-def _waehlbare_modelle() -> list[dict]:
-    """Welche Modelle sich einstellen lassen - mit Preis und Steckbrief.
+def _waehlbare_modelle(store=None) -> tuple[list[dict], dict]:
+    """Welche Modelle sich einstellen lassen - und was sie hier kosten.
 
     Nur solche, für die ein Preis hinterlegt ist. Ein Modell ohne Preis
     wuerde zu teuer geschaetzt und die Kasse verzerren.
 
     Frueher war das eine Liste von Kennungen. Neun Namen ohne Zusatz sind
-    aber keine Entscheidungsgrundlage: Wer umstellt, will wissen, wofuer
-    ein Modell taugt und was es im Vergleich kostet.
+    aber keine Entscheidungsgrundlage - und zwei Tokenpreise auch nicht.
+    Was jemand vor einer Umstellung wissen will, ist eine einzige Zahl:
+    derselbe Auftrag, dieses Modell, so viel. Deshalb wird mit dem
+    eigenen Durchschnittsaufruf gerechnet, sobald es Buchungen gibt.
     """
-    from .economy.modelle import uebersicht
+    from .economy.modelle import BEISPIEL_AUSGABE, BEISPIEL_EINGABE, uebersicht
 
-    return uebersicht()
+    eingabe, ausgabe, wieviele = (0, 0, 0)
+    if store is not None:
+        eingabe, ausgabe, wieviele = store.durchschnittlicher_aufruf()
+    if not eingabe:
+        eingabe, ausgabe, wieviele = BEISPIEL_EINGABE, BEISPIEL_AUSGABE, 0
+
+    grundlage = {"eingabe": eingabe, "ausgabe": ausgabe, "aufrufe": wieviele}
+    return uebersicht(eingabe, ausgabe), grundlage
 
 
-WAEHLBARE_MODELLE = _waehlbare_modelle()
-# Die blossen Kennungen, zum Pruefen einer Eingabe.
-WAEHLBARE_IDS = {z["id"] for z in WAEHLBARE_MODELLE}
+# Die blossen Kennungen, zum Pruefen einer Eingabe. Die Preise haengen am
+# Betrieb und werden bei jeder Anfrage frisch gerechnet; die Liste, was
+# es ueberhaupt gibt, aendert sich nicht.
+WAEHLBARE_IDS = {z["id"] for z in _waehlbare_modelle()[0]}
 
 # Die Server-Kennung, an der sich ein laufendes Dashboard erkennen lässt.
 KENNUNG = "insta-agent"
@@ -201,6 +211,7 @@ class Steuerung:
         try:
             kasse = agent.treasury.state()
             modellwahl = agent.modellwahl
+            modelle, grundlage = _waehlbare_modelle(agent.store)
             mannschaft = agent.mannschaft
             identitaet = agent.identity
             strategie = agent.strategy
@@ -284,9 +295,11 @@ class Steuerung:
                 },
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
                 "mannschaft": aufstellung(identitaet, self.settings, modellwahl, mannschaft),
-                "modelle": WAEHLBARE_MODELLE,
-                # Die eigenen Zahlen neben die Schaetzung: Was hat dieses
-                # Modell hier tatsaechlich gekostet?
+                "modelle": modelle,
+                # Worauf die Rechnung beruht: der eigene Durchschnitt,
+                # sonst ein Beispielaufruf. Das gehoert dazugesagt.
+                "modellgrundlage": grundlage,
+                # Und was jedes Modell hier tatsaechlich schon gekostet hat.
                 "modellkosten": agent.store.kosten_je_modell(),
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "plan": plan.model_dump(mode="json") if plan else None,

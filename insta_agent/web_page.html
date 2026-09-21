@@ -396,7 +396,14 @@
   .modellinfo p { margin: 0 0 6px; }
   .modellinfo p:last-child { margin-bottom: 0; }
   .modellinfo .merkmal { opacity: .75; }
-  .modellinfo .preis { opacity: .9; }
+  .modellinfo .preis { font-size: 14px; opacity: .95; }
+  /* Eigene Namen, weil .mehr und .klein im Rest der Seite schon etwas
+     anderes bedeuten - ein Knopf und eine Zeile mit Pfeil. */
+  .modellinfo .abstand { margin-top: 6px; }
+  .modellinfo .teurer { color: #f0a868; }
+  .modellinfo .guenstiger { color: #7fd19a; }
+  .modellinfo .unveraendert { opacity: .7; }
+  .modellinfo .fussnote { margin-top: 8px; font-size: 11px; opacity: .45; }
   .modellinfo .warnung { color: #f0a868; }
   .modellinfo .gemessen { margin-top: 8px; padding-top: 8px;
     border-top: 1px solid rgba(255,255,255,.07); }
@@ -948,36 +955,94 @@ function kurzmodell(modell) {
     .replace(/\b[a-z]/g, z => z.toUpperCase());
 }
 
-/** "2 $ / 10 $ je Mio Token" - kurz genug fuer eine Auswahlzeile. */
-function preisspanne(x) {
-  const g = n => (Number(n) % 1 === 0 ? String(n) : Number(n).toFixed(2));
-  return `${g(x.eingabe)}/${g(x.ausgabe)} $`;
+/** Ein Betrag, wie man ihn sagt: "4,5 Cent", "1,13 €".
+ *
+ * Ueber einem Euro wird aus Cent eine unhandliche Zahl - "113 Cent" muss
+ * man erst umrechnen, um sie einzuordnen. Also wird gewechselt.
+ */
+function cent(n) {
+  const z = Number(n) || 0;
+  if (z >= 100) return euro(z);
+  const stellen = z < 1 ? 2 : 1;
+  return z.toFixed(stellen).replace(".", ",") + " Cent";
 }
 
-/** Was unter der Auswahl steht: wofuer, was es ausmacht, was es kostet. */
-function modellsteckbrief(x, kosten) {
+function euro(c) {
+  const z = (Number(c) || 0) / 100;
+  return z.toFixed(2).replace(".", ",") + " €";
+}
+
+/** "2 $ / 10 $ je Mio Token" - zum Nachrechnen, klein gesetzt. */
+function preisspanne(x) {
+  const g = n => (Number(n) % 1 === 0 ? String(n) : Number(n).toFixed(2));
+  return `${g(x.eingabe)} $ / ${g(x.ausgabe)} $ je Mio Token`;
+}
+
+/** Was unter der Auswahl steht: wofuer, was es ausmacht, was es kostet.
+ *
+ * `jetzt` ist das Modell, das die Rolle gerade benutzt. Der Vergleich
+ * dazu ist die eigentliche Antwort auf "was kostet mich das": nicht ein
+ * Tokenpreis, sondern was derselbe Auftrag mehr oder weniger kostet.
+ */
+const AUFRUFE_JE_BEITRAG = 5;
+
+function modellsteckbrief(x, d, jetzt) {
   if (!x) return "";
-  const eigen = kosten && kosten[x.id];
+  const alle = d.modelle || [];
+  const kosten = d.modellkosten || {};
+  const g = d.modellgrundlage || {};
+
+  const bisher = alle.find(y => y.id === jetzt);
+  let vergleich = "";
+  if (bisher && bisher.id !== x.id) {
+    const diff = x.cent_je_aufruf - bisher.cent_je_aufruf;
+    // Aus derselben Differenz hochgerechnet, nicht aus zwei getrennt
+    // gerundeten Beitragspreisen - sonst weicht die Differenz um ein
+    // Zehntel von den beiden Zahlen darueber ab, und das sieht man.
+    const beitrag = diff * AUFRUFE_JE_BEITRAG;
+    if (Math.abs(diff) < 0.005) {
+      vergleich = `<p class="abstand unveraendert">Kostet genauso viel wie
+        ${esc(bisher.anzeige)} – die Umstellung ändert am Preis nichts.</p>`;
+    } else {
+      const teurer = diff > 0;
+      const monat = euro(Math.abs(beitrag) * 30);
+      vergleich = `<p class="abstand ${teurer ? "teurer" : "guenstiger"}">
+        ${teurer ? "Kostet" : "Spart"} <b>${cent(Math.abs(diff))}</b> je Auftrag
+        ${teurer ? "mehr als" : "gegenüber"} ${esc(bisher.anzeige)} –
+        <b>${cent(Math.abs(beitrag))}</b> je Beitrag.
+        Bei einem Beitrag am Tag ${teurer
+          ? `zahlst du <b>${monat}</b> mehr im Monat.`
+          : `sparst du <b>${monat}</b> im Monat.`}</p>`;
+    }
+  }
+
+  const eigen = kosten[x.id];
   const gemessen = eigen && eigen.aufrufe
-    ? `<p class="gemessen">Bei dir bisher: <b>${eigen.aufrufe}</b> Aufrufe,
-         <b>${Number(eigen.usd).toFixed(4)} USD</b> –
-         im Schnitt <b>${(Number(eigen.schnitt_usd) * 100).toFixed(2)} Cent</b> je Aufruf.</p>`
-    : `<p class="gemessen leer">Noch keine eigenen Zahlen zu diesem Modell.</p>`;
+    ? `<p class="gemessen">Tatsächlich angefallen: <b>${eigen.aufrufe}</b> Aufrufe,
+         zusammen <b>${euro(Number(eigen.usd) * 100)}</b> –
+         im Schnitt <b>${cent(Number(eigen.schnitt_usd) * 100)}</b> je Aufruf.</p>`
+    : `<p class="gemessen leer">Dieses Modell hat hier noch nicht gearbeitet.</p>`;
+
   const warnung = x.websuche ? "" :
     `<p class="warnung">Kann die neuere Websuche nicht. Für die Endprüfung
        ungeeignet – sie würde Quellen schlechter nachschlagen, ohne dass
        es jemand merkt.</p>`;
+
+  const herkunft = g.aufrufe
+    ? `gerechnet mit deinem Durchschnittsauftrag aus ${g.aufrufe} Aufrufen`
+    : `gerechnet mit einem üblichen Auftrag, solange eigene Zahlen fehlen`;
+
   return `
     <p class="wofuer"><b>Wofür:</b> ${esc(x.eignung)}</p>
     <p class="merkmal">${esc(x.merkmal)}</p>
-    <p class="preis">
-      ${x.faktor <= 1
-        ? "<b>Das billigste Modell der Liste</b>"
-        : `<b>${x.faktor}×</b> so teuer wie das billigste Modell`} ·
-      ${preisspanne(x)} je Mio Token (Eingabe/Ausgabe)
-    </p>
+    <p class="preis"><b>${cent(x.cent_je_aufruf)}</b> je Auftrag ·
+      rund <b>${cent(x.cent_je_aufruf * AUFRUFE_JE_BEITRAG)}</b> je fertigem Beitrag</p>
+    ${vergleich}
     ${warnung}
-    ${gemessen}`;
+    ${gemessen}
+    <p class="fussnote">${herkunft} (${(g.eingabe || 0).toLocaleString("de-DE")} Token
+      hinein, ${(g.ausgabe || 0).toLocaleString("de-DE")} hinaus) ·
+      Listenpreis ${preisspanne(x)}</p>`;
 }
 
 function zeige_person(m, d, bearbeiten = false) {
@@ -1026,7 +1091,7 @@ function zeige_person(m, d, bearbeiten = false) {
         <select id="modellwahl">
           ${(d.modelle || []).map(x => `
             <option value="${esc(x.id)}" ${x.id === m.modell ? "selected" : ""}>
-              ${esc(x.anzeige)} · ${x.faktor}× · ${preisspanne(x)}${x.id === m.standard ? " (Voreinstellung)" : ""}
+              ${esc(x.anzeige)} — ${cent(x.cent_je_aufruf)} je Auftrag${x.id === m.standard ? " (Voreinstellung)" : ""}
             </option>`).join("")}
         </select>
         <button class="klein" id="modellsetzen" data-wer="${esc(m.schluessel)}">Übernehmen</button>
@@ -1035,10 +1100,11 @@ function zeige_person(m, d, bearbeiten = false) {
       <div id="modellinfo" class="modellinfo"></div>
 
       <p class="hinweis" style="margin:10px 0 0">
-        Der Faktor vergleicht mit dem billigsten Modell der Liste: 5× heißt,
-        ein Aufruf kostet dich das Fünffache. Gilt ab dem nächsten Aufruf.
-        Im Sparbetrieb wird die Wahl übergangen – dann zählt die Bremse
-        mehr als der Wunsch.
+        Jede Zeile zeigt, was <em>derselbe</em> Auftrag auf diesem Modell kostet –
+        so siehst du beim Umstellen direkt, was du sparst oder mehr zahlst.
+        Ein fertiger Beitrag braucht etwa fünf solche Aufträge.
+        Gilt ab dem nächsten Aufruf. Im Sparbetrieb wird die Wahl übergangen –
+        dann zählt die Bremse mehr als der Wunsch.
       </p>
     </div>
 
@@ -1219,7 +1285,7 @@ function zeige_person(m, d, bearbeiten = false) {
   if (wahlfeld && infofeld) {
     const zeichne = () => {
       const x = (d.modelle || []).find(y => y.id === wahlfeld.value);
-      infofeld.innerHTML = modellsteckbrief(x, d.modellkosten);
+      infofeld.innerHTML = modellsteckbrief(x, d, m.modell);
     };
     wahlfeld.onchange = zeichne;
     zeichne();
