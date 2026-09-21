@@ -64,6 +64,20 @@ KEY_ASSESSMENT = "opportunity_assessment"
 KEY_LAST_PIVOT = "last_pivot_cycle"
 KEY_IDENTITY_HISTORY = "identity_history"
 
+# Was sich am Profil über das Dashboard ändern lässt. Handle und
+# Anzeigename gehören dazu, weil sie auf Instagram stehen; `agent_why`
+# und `why_this_works` sind Begründungen und ändern nichts am Betrieb.
+PROFILFELDER = (
+    "handle",
+    "display_name",
+    "niche",
+    "target_audience",
+    "tone_of_voice",
+    "visual_identity",
+    "bio",
+    "content_pillars",
+)
+
 # Recherche und Geschäftsplanung kosten Geld und ändern sich langsam -
 # deshalb nicht in jedem Zyklus.
 RESEARCH_EVERY = 7
@@ -252,9 +266,35 @@ class Agent:
         return geloescht
 
     def bootstrap(self, *, operator_hint: str | None = None, cycle: int = 0) -> Identity:
-        """Der Agent erfindet sich selbst. Passiert genau einmal."""
+        """Der Account wird eingerichtet. Passiert genau einmal.
+
+        Im Regelfall übernimmt er dabei das vorgegebene Profil. Zweimal
+        hat er sich vorher selbst eine Nische gesucht, und zweimal hat er
+        sich auf ein einziges Gebiet festgelegt - erst Alltagsannahmen,
+        dann Tiefsee. Wer eine Nische erfinden soll, wählt eine enge,
+        weil enge sich besser begründen lassen. Gewollt ist aber ein
+        Kriterium, kein Fach.
+
+        Mit `identitaet_frei` sucht er wieder selbst. Das kostet dann
+        eine Marktrecherche mehr und endet erfahrungsgemäß wieder in
+        einer Sparte.
+        """
         if existing := self.identity:
             return existing
+
+        if not self.settings.posting.identitaet_frei:
+            from .vorgabe import vorgegebene_identitaet
+
+            identity = vorgegebene_identitaet()
+            self.store.set_json(KEY_IDENTITY, identity)
+            self.store.log(
+                "identity",
+                f"Profil übernommen: @{identity.handle} - {identity.motto}",
+                cycle,
+                payload=identity.model_dump(mode="json"),
+            )
+            log.info("Vorgegebenes Profil übernommen: @%s", identity.handle)
+            return identity
 
         log.info("Kein Profil vorhanden - der Agent erfindet sich selbst")
 
@@ -855,7 +895,10 @@ class Agent:
             for f in FELDER
             if f in felder and felder[f] is not None
         }
-        if not sauber:
+        # Beim Chef zählen die Profilfelder mit: Wer nur die Nische
+        # umschreibt, hat sehr wohl etwas geändert.
+        profil = schluessel == "chef" and any(f in felder for f in PROFILFELDER)
+        if not sauber and not profil:
             return {"ok": False, "grund": "Es gab nichts zu ändern."}
 
         if schluessel == "chef":
@@ -866,6 +909,19 @@ class Agent:
                 identity.agent_name = name
             if motto := sauber.pop("aufgabe", ""):
                 identity.motto = motto
+            # Der Rest des Profils gehört ebenso dem Betreiber. Es steht
+            # jetzt fest im Quelltext, statt erfunden zu werden - dann
+            # muss es sich aber auch ohne Quelltext ändern lassen.
+            for feld in PROFILFELDER:
+                wert = felder.get(feld)
+                if feld == "content_pillars":
+                    if isinstance(wert, list) and (
+                        saeulen := [str(x).strip() for x in wert if str(x).strip()][:5]
+                    ):
+                        if len(saeulen) >= 3:
+                            identity.content_pillars = saeulen
+                elif isinstance(wert, str) and wert.strip():
+                    setattr(identity, feld, wert.strip())
             self.store.set_json(KEY_IDENTITY, identity)
 
         alle = self.mannschaft
@@ -964,6 +1020,7 @@ class Agent:
             return None
 
         bisherige = self.store.letzte_funde(limit=12)
+        gebiete = self.store.letzte_gebiete(limit=6)
         mit_suche = self.treasury.state().mode is Mode.NORMAL
         fund = None
         try:
@@ -972,6 +1029,7 @@ class Agent:
                 identity=self.identity,
                 strategy=self.strategy,
                 bisherige=bisherige,
+                gebiete=gebiete,
                 mit_suche=mit_suche,
                 modell=self._modell("stoff"),
                 person=self._person("stoff"),
@@ -985,6 +1043,7 @@ class Agent:
                     identity=self.identity,
                     strategy=self.strategy,
                     bisherige=bisherige,
+                    gebiete=gebiete,
                     mit_suche=mit_suche,
                     modell=self._modell("stoff"),
                     nachsetzen=fund,

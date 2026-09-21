@@ -88,7 +88,25 @@ mehr, sondern eine Nachricht von gestern.
 
 # Wie du bewertest
 
-`reiz` ist eine harte Zahl, kein Lob:
+Du gibst drei Teilnoten von 1 bis 5 und daraus ein Gesamturteil.
+
+`hookkraft` - Trägt die Sache einen Satz, der den Daumen anhält? Eine 5
+ist etwas, das man zweimal liest, weil man es nicht glaubt.
+
+`bildkraft` - Gibt es davon ein Bild, das im Feed brennt? Farbe,
+Kontrast, ungewöhnliche Form, Maßstabssprung. Ein leuchtender
+neonfarbener Tiefseefisch ist eine 5. Ein unscheinbarer grauer Wurm ist
+eine 1, auch wenn beide zum ersten Mal beschrieben wurden.
+
+Diese Note hat ein Vetorecht. Instagram ist ein Bildmedium: Was man nicht
+zeigen kann, geht unter, so neu es auch sein mag. Unter 3 bringst du den
+Fund gar nicht erst.
+
+`breite` - Versteht das auch jemand ohne Vorwissen in zwei Sekunden? Ein
+Goldfund in der Wüste ist eine 5. Eine Verbesserung im Messverfahren ist
+eine 2, so bedeutend sie fachlich sein mag.
+
+`reiz` ist das Gesamturteil, kein Mittelwert - du gewichtest:
 - 1: Alltag. Kommt nicht in Frage.
 - 2: ganz nett, aber so etwas sieht man dauernd
 - 3: interessant, aber niemand hält deswegen an
@@ -98,6 +116,16 @@ mehr, sondern eine Nachricht von gestern.
 Alles unter {SCHWELLE} ist kein Fund. Wenn du nichts Besseres hast, sag
 das mit einer ehrlichen Zahl, statt eine 4 zu vergeben, damit der Betrieb
 weiterläuft. Eine geschönte Zahl kostet hier einen ganzen Beitrag.
+
+# Das Bild dazu
+
+Sieh beim Suchen gleich nach, ob es eine echte Aufnahme gibt. Trag sie
+unter `echtes_bild` ein, wenn sie scharf, groß und sehenswert ist - ein
+echtes Foto des Fundes schlägt jede Erfindung.
+
+Trag nichts ein, wenn die vorhandenen Aufnahmen unscheinbar sind: ein
+graues Belegfoto aus einer Fachveröffentlichung ist schlechter als ein
+gutes erzeugtes Bild. Dann bleibt das Feld leer und es wird gemalt.
 
 Unter `verworfen` schreibst du, was du sonst noch gefunden und
 weggelegt hast, mit einem halben Satz warum. Das ist keine Fleißarbeit:
@@ -154,9 +182,44 @@ def stoff_persona(name: str = STOFF_NAME, haltung: str = "") -> str:
     )
 
 
+def _streuung(gebiete: list[str]) -> str:
+    """Was zuletzt dran war - und was deshalb diesmal nicht drankommt.
+
+    Die Regel ist bewusst hart: Zweimal dasselbe Gebiet hintereinander
+    ist Zufall, dreimal ist eine Sparte. Und eine Sparte war genau das,
+    was dieser Account nicht sein soll.
+    """
+    if not gebiete:
+        return ""
+    zuletzt = gebiete[0]
+    serie = 0
+    for g in gebiete:
+        if g.casefold() == zuletzt.casefold():
+            serie += 1
+        else:
+            break
+
+    sperre = (
+        f"\n\nDie letzten {serie} Beiträge kamen aus demselben Gebiet "
+        f'("{zuletzt}"). Such diesmal woanders - dieses Gebiet ist gesperrt.'
+        if serie >= 2
+        else ""
+    )
+    return f"""\
+# Woher die letzten Funde kamen
+{", ".join(gebiete)}
+
+Dieser Account ist keine Sparte. Wer wegen eines Grabes gefolgt ist,
+bleibt wegen eines Planeten - und umgekehrt. Streu bewusst: Arten,
+Ausgrabungen, Weltraum, Medizin und Zellen, Technik und Rechenmodelle,
+Rohstoff- und Schatzfunde. Nimm nicht dreimal hintereinander dasselbe
+Fach, nur weil dort gerade etwas leicht zu finden ist.{sperre}"""
+
+
 def _auftrag(
     *,
     bisher: list[str],
+    gebiete: list[str],
     hinweis_suche: str,
     nachsetzen: Fund | None,
 ) -> str:
@@ -184,6 +247,7 @@ besseren Note, sondern einen anderen."""
         f"""\
 # Schon behandelt, bring nichts davon noch einmal
 {gehabt}""",
+        _streuung(gebiete),
         zweiter_anlauf,
         f"""\
 # Auftrag
@@ -191,10 +255,13 @@ Bring den Fund für den nächsten Beitrag.
 
 {hinweis_suche}
 
-Prüf dich am Ende selbst an einer einzigen Frage: Würde jemand, der
-gerade durch den Feed wischt, wegen dieser Sache anhalten - oder wegen
-deiner Formulierung? Nur das Erste zählt. Der Fund muss tragen, bevor
-irgendein Satz darübergelegt wird.""",
+Prüf dich am Ende an zwei Fragen:
+
+Würde jemand, der gerade durch den Feed wischt, wegen dieser Sache
+anhalten - oder wegen deiner Formulierung? Nur das Erste zählt.
+
+Und: Was sieht er dabei? Wenn du darauf keine Antwort hast, die ohne
+Erklärung auskommt, ist es der falsche Fund, so neu er auch ist.""",
     )
 
 
@@ -204,6 +271,7 @@ def finde_stoff(
     identity,
     strategy=None,
     bisherige: list[str] | None = None,
+    gebiete: list[str] | None = None,
     mit_suche: bool = True,
     modell: str | None = None,
     nachsetzen: Fund | None = None,
@@ -241,6 +309,7 @@ def finde_stoff(
             strategy_block(strategy),
             _auftrag(
                 bisher=list(bisherige or []),
+                gebiete=list(gebiete or []),
                 hinweis_suche=hinweis_suche,
                 nachsetzen=nachsetzen,
             ),
@@ -272,7 +341,8 @@ Das Detail, das anhält: {fund.das_detail}
 Warum außergewöhnlich: {fund.warum_aussergewoehnlich}
 Warum kaum bekannt: {fund.warum_kaum_bekannt or "nicht vermerkt"}
 Beleglage: {fund.beleglage}
-Reiz: {fund.reiz} von 5
+Reiz: {fund.reiz} von 5 (Hook {fund.hookkraft}, Bild {fund.bildkraft}, verständlich {fund.breite})
 Bildidee: {fund.bildidee}
+Echte Aufnahme: {fund.echtes_bild or "keine gefunden"}
 Quellen:
 {quellen}"""

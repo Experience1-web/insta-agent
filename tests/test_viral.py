@@ -123,7 +123,7 @@ def test_nach_dem_neustart_erfindet_er_sich_wirklich_neu(tmp_path, monkeypatch):
     einstellungen = Settings(
         llm=LLMConfig(),
         economy=EconomyConfig(treasury_start_usd=5.0, max_cost_per_cycle_usd=3.0),
-        posting=PostingConfig(posts_per_day=1, live=False),
+        posting=PostingConfig(posts_per_day=1, live=False, identitaet_frei=True),
         db_path=tmp_path / "agent.db",
         media_dir=tmp_path / "media",
         draft_dir=tmp_path / "drafts",

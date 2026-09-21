@@ -247,3 +247,99 @@ def test_ohne_bilddienst_gibt_es_kein_neues_portrait(agent):
 
     assert ergebnis["ok"] is False
     assert "Bilddienst" in ergebnis["grund"]
+
+
+# --- Das vorgegebene Profil ------------------------------------------------
+#
+# Zweimal hat er sich selbst eine Nische gesucht, zweimal hat er sich auf
+# ein Gebiet festgelegt. Jetzt steht das Profil fest - und muss sich
+# trotzdem ohne Quelltext ändern lassen.
+
+
+def test_der_erste_lauf_uebernimmt_das_vorgegebene_profil(agent):
+    from insta_agent.vorgabe import vorgegebene_identitaet
+
+    agent.bootstrap()
+
+    assert agent.identity.handle == vorgegebene_identitaet().handle
+    # Und zwar ohne Marktrecherche - die ist damit gespart.
+    assert "Marktrecherche" not in agent.brain.aufrufe
+
+
+def test_die_nische_nennt_kein_einzelnes_fach():
+    """Das Kriterium ist die Nische, nicht das Gebiet."""
+    from insta_agent.vorgabe import vorgegebene_identitaet
+
+    i = vorgegebene_identitaet()
+
+    alles = (i.niche + " " + " ".join(i.content_pillars)).lower()
+    # Fünf Felder, kein einzelnes - sonst ist es wieder eine Sparte.
+    for gebiet in ("archäolog", "ki", "art", "weltall", "kurios"):
+        assert gebiet in alles, gebiet
+    assert len(i.content_pillars) == 5
+    assert "niemals" in i.niche.lower() or "nicht auf ein" in i.niche.lower()
+
+
+def test_wer_will_laesst_ihn_weiter_selbst_suchen(agent, monkeypatch):
+    from test_cycle import _identitaet
+
+    agent.settings.posting.identitaet_frei = True
+    monkeypatch.setattr("insta_agent.runner.invent_identity", lambda *a, **k: _identitaet())
+
+    agent.bootstrap()
+
+    assert agent.identity.handle == _identitaet().handle
+
+
+def test_die_nische_laesst_sich_im_dashboard_aendern(settings, monkeypatch):
+    """Sonst wäre ein festes Profil eine Sackgasse."""
+    from insta_agent.runner import Agent
+
+    monkeypatch.setattr("insta_agent.runner.Brain", FakeBrain)
+    a = Agent(settings)
+    try:
+        a.bootstrap()
+    finally:
+        a.close()
+
+    server, port = _server(settings)
+    try:
+        antwort = _post(
+            port,
+            "/api/person",
+            {
+                "wer": "chef",
+                "felder": {
+                    "niche": "Nur noch Weltraum",
+                    "content_pillars": ["Sonden", "Planeten", "Messwerte"],
+                    "bio": "Kurz und knapp.",
+                },
+            },
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert antwort["ok"] is True
+    a = Agent(settings)
+    try:
+        assert a.identity.niche == "Nur noch Weltraum"
+        assert a.identity.content_pillars == ["Sonden", "Planeten", "Messwerte"]
+        assert a.identity.bio == "Kurz und knapp."
+    finally:
+        a.close()
+
+
+def test_zu_wenige_saeulen_werden_nicht_uebernommen(settings, monkeypatch):
+    """Unter drei lässt das Schema nicht zu - das darf nicht durchschlagen."""
+    from insta_agent.runner import Agent
+
+    monkeypatch.setattr("insta_agent.runner.Brain", FakeBrain)
+    a = Agent(settings)
+    try:
+        a.bootstrap()
+        vorher = list(a.identity.content_pillars)
+        a.aendere_person("chef", {"content_pillars": ["Nur eine"]})
+        assert a.identity.content_pillars == vorher
+    finally:
+        a.close()

@@ -142,17 +142,31 @@ Die ersten rund 80 Zeichen der Bildunterschrift - mehr sieht niemand,
 bevor er auf "mehr" tippt.
 
 ## body_text
-Der Haupttext, in kurzen Absätzen, mit Emojis als Gliederung. Gib etwas
-Konkretes her: ein Gefühl, eine Anekdote, eine Beobachtung, die jemand
-aufheben will. Allgemeinplätze werden weder gespeichert noch geteilt.
+Der Haupttext. Er wird nicht gelesen, er wird überflogen - also bau ihn
+danach:
+
+- Kurze Absätze, zwei bis drei Zeilen. Nie ein Block.
+- Ein Emoji als Anker vor jedem Absatz, sparsam und passend. Kein
+  Konfetti.
+- Die tragenden Begriffe in GROSSBUCHSTABEN: die Zahl, der Name, das
+  Maß, das eine Wort, auf das es ankommt. Wer nur die Hälfte liest, soll
+  trotzdem wissen, worum es ging. Höchstens ein hervorgehobener Begriff
+  je Absatz - sonst hebt sich nichts mehr ab.
+- Ein Satz sagt, woher man es weiß: Veröffentlichung, Jahr, wer es
+  gefunden hat.
+
+Gib etwas Konkretes her. Allgemeinplätze werden weder gespeichert noch
+geteilt.
 
 ## caption
 Hook-Zeile und body_text zusammen, wie sie unter dem Beitrag stehen.
 Höchstens {MAX_CAPTION} Zeichen.
 
 ## call_to_action
-Dezent, aber bestimmt. Ein Satz mit einem Grund darin - nicht "folge mir",
-sondern warum es sich lohnt.
+Dezent, aber bestimmt, und immer auf eine bestimmte Handlung gerichtet:
+speichern, weiterschicken oder kommentieren. Ein Satz mit einem Grund
+darin - nicht "folge mir", sondern warum genau dieser Beitrag es wert
+ist, aufgehoben oder jemandem geschickt zu werden.
 
 ## hashtags
 Höchstens {max_hashtags}, ohne Raute. Misch bewusst: ein paar große für

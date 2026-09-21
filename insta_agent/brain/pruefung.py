@@ -124,6 +124,11 @@ Deshalb prüfst du zuerst den Fund selbst, bevor du den Text prüfst:
   Verfahren - such danach, und zwar unter dem Namen, der dort steht.
 - Gibt es die genannten Fundstellen? Eine Veröffentlichung, die es
   nicht gibt, ist der schwerste Befund, den du vergeben kannst.
+- Findest du mindestens zwei voneinander unabhängige Quellen? Eine
+  einzelne reicht nicht, und zwei Meldungen, die beide von derselben
+  Pressemitteilung abschreiben, sind eine. Findest du nur eine, ist das
+  ein Befund - der Beitrag kann trotzdem erscheinen, aber dann als
+  offene Frage formuliert und nicht als feststehende Tatsache.
 - Steht dort wirklich, was behauptet wird? Nicht ungefähr das. Nicht
   etwas Ähnliches aus einem anderen Jahr.
 - Stimmen die Umstände: Jahr, Ort, Tiefe, wer es gefunden hat?

@@ -267,11 +267,15 @@ def agent(settings, monkeypatch):
     a.close()
 
 
-def test_erster_zyklus_erfindet_das_profil_und_legt_einen_entwurf_ab(agent):
+def test_der_erste_zyklus_uebernimmt_das_profil_und_legt_einen_entwurf_ab(agent):
+    from insta_agent.vorgabe import vorgegebene_identitaet
+
     report = agent.run_cycle()
 
     assert report.halted_reason is None
-    assert agent.identity.motto == _identitaet().motto
+    # Nicht mehr erfunden, sondern vorgegeben - zweimal hat er sich sonst
+    # auf ein einziges Gebiet festgelegt.
+    assert agent.identity.handle == vorgegebene_identitaet().handle
     assert agent.strategy.current_goal.startswith("In sieben Tagen")
 
     # Ein Entwurf mit Bild, aber nichts veröffentlicht.
@@ -368,6 +372,7 @@ def test_eine_bezahlte_recherche_wird_beim_zweiten_versuch_wiederverwendet(agent
 
     aufrufe = {"n": 0}
     echte_recherche = None
+    agent.settings.posting.identitaet_frei = True
 
     def zaehlende_recherche(brain, **kwargs):
         aufrufe["n"] += 1

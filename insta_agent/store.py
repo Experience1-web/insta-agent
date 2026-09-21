@@ -235,6 +235,28 @@ class Store:
                 "UPDATE posts SET rohbild_path=? WHERE id=?", (str(pfad) if pfad else None, post_id)
             )
 
+    def letzte_gebiete(self, limit: int = 6) -> list[str]:
+        """Die Gebiete der letzten Funde, neueste zuerst.
+
+        Ohne das sucht die Stoffsuche dreimal hintereinander in der
+        Archäologie - nicht aus Faulheit, sondern weil dort gerade etwas
+        zu finden war. Der Account lebt aber von der Streuung: Wer wegen
+        eines Grabes gefolgt ist, bleibt wegen eines Planeten.
+        """
+        zeilen = self._conn.execute(
+            "SELECT fund_json FROM posts WHERE fund_json IS NOT NULL "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        gebiete = []
+        for zeile in zeilen:
+            try:
+                if gebiet := json.loads(zeile["fund_json"]).get("gebiet", "").strip():
+                    gebiete.append(gebiet)
+            except (ValueError, AttributeError, TypeError):
+                continue
+        return gebiete
+
     def letzte_funde(self, limit: int = 12) -> list[str]:
         """Die Titel der zuletzt behandelten Funde.
 

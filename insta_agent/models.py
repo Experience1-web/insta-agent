@@ -143,8 +143,45 @@ class Fund(BaseModel):
             "5: man schickt es sofort jemandem weiter."
         ),
     )
+    hookkraft: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description=(
+            "Trägt die Sache einen Satz, der den Daumen anhält? 5 heißt: "
+            "Man muss zweimal hinsehen, weil man es nicht glaubt."
+        ),
+    )
+    bildkraft: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description=(
+            "Gibt es davon ein Bild, das im Feed brennt? Farbe, Kontrast, "
+            "ungewöhnliche Form, Maßstab. Ein leuchtender Tiefseefisch ist "
+            "eine 5, ein grauer Wurm eine 1 - auch wenn beide neu sind."
+        ),
+    )
+    breite: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description=(
+            "Versteht das auch jemand ohne Vorwissen in zwei Sekunden? "
+            "Ein Goldfund ist eine 5, eine Verbesserung im Messverfahren "
+            "eine 2 - so spektakulär sie fachlich sein mag."
+        ),
+    )
     bildidee: str = Field(
         description="Was man von diesem Fund zeigen kann, sodass es ohne Text wirkt"
+    )
+    echtes_bild: str = Field(
+        default="",
+        description=(
+            "Wo es eine echte Aufnahme gibt, die aussieht wie beschrieben - "
+            "Adresse oder Quelle. Leer lassen, wenn du keine gefunden hast "
+            "oder die vorhandenen unscheinbar sind."
+        ),
     )
     verworfen: list[str] = Field(
         default_factory=list,
@@ -155,8 +192,12 @@ class Fund(BaseModel):
 
     @property
     def taugt(self) -> bool:
-        """Ab vier ist es ein Fund. Darunter ist es ein Thema."""
-        return self.reiz >= 4
+        """Ab vier ist es ein Fund. Darunter ist es ein Thema.
+
+        Die Bildkraft hat ein Veto: Instagram ist ein Bildmedium, und was
+        man nicht zeigen kann, geht hier unter - so neu es auch ist.
+        """
+        return self.reiz >= 4 and self.bildkraft >= 3
 
     @property
     def belegt(self) -> bool:

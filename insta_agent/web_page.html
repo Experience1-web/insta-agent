@@ -790,6 +790,16 @@ function fund_html(f) {
       ${f.wann ? `<span class="marke">${esc(f.wann)}</span>` : ""}
     </div>
     <p class="hinweis" style="margin:-4px 0 10px">${erklaerung}</p>
+    <div class="feldkopf" style="margin-top:12px"><span>Wie Nell das bewertet</span></div>
+    <dl class="fakten">
+      <dt>Hook</dt><dd>${f.hookkraft || "?"} von 5 – hält der Satz den Daumen an</dd>
+      <dt>Bild</dt><dd>${f.bildkraft || "?"} von 5 – brennt das Motiv im Feed</dd>
+      <dt>Verständlich</dt><dd>${f.breite || "?"} von 5 – auch ohne Vorwissen</dd>
+    </dl>
+    ${f.echtes_bild ? `<p><b>Echte Aufnahme:</b> ${
+      f.echtes_bild.startsWith("http")
+        ? `<a href="${esc(f.echtes_bild)}" target="_blank" rel="noopener noreferrer">${esc(f.echtes_bild)}</a>`
+        : esc(f.echtes_bild)}</p>` : ""}
     ${f.warum_aussergewoehnlich ? `<p><b>Warum das kein Alltag ist:</b>
       ${esc(f.warum_aussergewoehnlich)}</p>` : ""}
     ${f.warum_kaum_bekannt ? `<p><b>Warum es kaum jemand kennt:</b>
@@ -1013,6 +1023,54 @@ function zeige_person(m, d, bearbeiten = false) {
           anordnen – das bleibt gesperrt.</p>
       </div>
 
+      ${m.rang === "chef" && d.identitaet ? `
+      <div class="formzeile">
+        <label for="f_niche">Nische – worüber der Account geht</label>
+        <textarea id="f_niche" rows="4" maxlength="1200">${esc(d.identitaet.niche)}</textarea>
+        <p class="hinweis">Das steuert, wonach die Stoffsuche sucht. Je breiter du es
+          fasst, desto mehr Gebiete kommen dran.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_pillars">Themensäulen</label>
+        <textarea id="f_pillars" rows="5" maxlength="1000">${esc((d.identitaet.content_pillars || []).join("\n"))}</textarea>
+        <p class="hinweis">Eine pro Zeile, drei bis fünf.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_zielgruppe">Zielgruppe</label>
+        <textarea id="f_zielgruppe" rows="2" maxlength="600">${esc(d.identitaet.target_audience)}</textarea>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_ton">Tonfall</label>
+        <textarea id="f_ton" rows="3" maxlength="800">${esc(d.identitaet.tone_of_voice)}</textarea>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_bildsprache">Bildsprache</label>
+        <textarea id="f_bildsprache" rows="6" maxlength="2000">${esc(d.identitaet.visual_identity)}</textarea>
+        <p class="hinweis">Wie jedes Bild aussehen soll. Danach arbeiten Jo und der Bilddienst.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_handle">Handle auf Instagram</label>
+        <input id="f_handle" value="${esc(d.identitaet.handle)}" maxlength="30">
+        <p class="hinweis">Ohne @. Ändert hier nur die Anzeige – bei Instagram selbst
+          musst du ihn getrennt umstellen.</p>
+      </div>
+
+      <div class="formzeile">
+        <label for="f_anzeigename">Angezeigter Name</label>
+        <input id="f_anzeigename" value="${esc(d.identitaet.display_name)}" maxlength="60">
+      </div>
+
+      <div class="formzeile">
+        <label for="f_bio">Profiltext</label>
+        <textarea id="f_bio" rows="2" maxlength="150">${esc(d.identitaet.bio)}</textarea>
+        <p class="hinweis">Höchstens 150 Zeichen – so viel lässt Instagram zu.</p>
+      </div>` : ""}
+
       <div class="formzeile">
         <label for="f_bildwunsch">Aussehen für das Porträt</label>
         <textarea id="f_bildwunsch" rows="3" maxlength="1200"
@@ -1040,6 +1098,19 @@ function zeige_person(m, d, bearbeiten = false) {
       haltung: $("f_haltung").value,
       bildwunsch: $("f_bildwunsch").value,
     };
+    // Beim Chef hängt das ganze Profil mit dran.
+    if ($("f_niche")) {
+      Object.assign(felder, {
+        niche: $("f_niche").value,
+        target_audience: $("f_zielgruppe").value,
+        tone_of_voice: $("f_ton").value,
+        visual_identity: $("f_bildsprache").value,
+        handle: $("f_handle").value.replace(/^@/, "").trim(),
+        display_name: $("f_anzeigename").value,
+        bio: $("f_bio").value,
+        content_pillars: $("f_pillars").value.split("\n").map(x => x.trim()).filter(Boolean),
+      });
+    }
     speichern.disabled = true;
     speichern.textContent = "speichert …";
     try {

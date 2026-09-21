@@ -135,6 +135,12 @@ class PostingConfig:
     # nimmt im Feed nur Bilder zwischen 4:5 und 1.91:1 an - 9:16 liegt
     # ausserhalb und wuerde beschnitten.
     bildformat: str = "feed"
+    # Der Account steht fest und wird nicht mehr erfunden: Wer sich eine
+    # Nische selbst sucht, waehlt eine enge, weil enge Nischen sich besser
+    # begruenden lassen - und genau das war nicht gewollt. Auf True darf
+    # der Agent wieder selbst suchen; dann kostet der erste Lauf eine
+    # Marktrecherche mehr.
+    identitaet_frei: bool = False
     # Vor jedem Beitrag sucht die Stoffsuche den Fund, ueber den
     # geschrieben wird. Abschalten spart einen Aufruf - und der Agent
     # schreibt dann wieder ueber das, was ihm gerade einfaellt. Das ist
