@@ -209,7 +209,9 @@ def frage_lokal_ab(adresse: str, *, timeout: float = 10.0) -> tuple[list[str], s
             if antwort.status_code == 404:
                 raise Bildfehler(
                     "Dort läuft etwas, aber es kennt diese Schnittstelle nicht. "
-                    "Starte das Bildprogramm mit --api."
+                    "Das Bildprogramm braucht den Schalter --api: in Stability "
+                    "Matrix beim Zahnrad neben 'Launch' unter 'Extra Launch "
+                    "Arguments' eintragen, sonst in webui-user.bat."
                 )
             antwort.raise_for_status()
             modelle = [str(m.get("model_name") or m.get("title", "")) for m in antwort.json()]
@@ -290,8 +292,10 @@ class LokalerGenerator:
 
         if antwort.status_code == 404:
             raise Bildfehler(
-                "Das Bildprogramm kennt diese Schnittstelle nicht. Starte es "
-                "mit --api (AUTOMATIC1111, Forge oder SD.Next)."
+                "Das Bildprogramm kennt diese Schnittstelle nicht. Es braucht "
+                "den Schalter --api: in Stability Matrix beim Zahnrad neben "
+                "'Launch' unter 'Extra Launch Arguments', sonst in "
+                "webui-user.bat."
             )
         if antwort.status_code >= 400:
             raise Bildfehler(_lesbarer_fehler(antwort))

@@ -697,9 +697,13 @@ def bilder(
 
     if wahl == "4":
         console.print(
-            "\n[dim]Das Bildprogramm muss laufen und mit --api gestartet sein.\n"
-            "Bei Forge und AUTOMATIC1111 traegt man dazu  --api  in die Datei\n"
-            "webui-user.bat ein, in die Zeile COMMANDLINE_ARGS.[/dim]\n"
+            "\n[dim]Das Bildprogramm muss laufen und mit --api gestartet sein.\n\n"
+            "In [bold]Stability Matrix[/bold]: auf das Zahnrad neben 'Launch',\n"
+            "dann unten bei 'Extra Launch Arguments' eintragen:\n"
+            "  [bold]--api --medvram-sdxl[/bold]\n"
+            "(--medvram-sdxl gehoert dazu, wenn die Karte 8 GB hat.)\n\n"
+            "Bei Forge oder AUTOMATIC1111 von Hand: in webui-user.bat in die\n"
+            "Zeile COMMANDLINE_ARGS.[/dim]\n"
         )
         adresse = typer.prompt(
             "Adresse des Bildprogramms", default="http://127.0.0.1:7860"
