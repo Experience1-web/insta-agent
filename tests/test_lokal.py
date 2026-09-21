@@ -112,7 +112,7 @@ def test_die_probe_nennt_die_gefundenen_modelle():
     echter = httpx.Client
     g.httpx.Client = lambda *a, **k: echter(*a, **{**k, "transport": httpx.MockTransport(antworte)})
     try:
-        modelle, geladen = frage_lokal_ab("http://127.0.0.1:7860")
+        modelle, geladen, _ = frage_lokal_ab("http://127.0.0.1:7860")
     finally:
         g.httpx.Client = echter
 
@@ -151,3 +151,65 @@ def test_ohne_api_schalter_steht_das_auch_da():
         g.httpx.Client = echter
 
     assert "--api" in str(fehler.value)
+
+
+# --- Grafikkarte oder Prozessor --------------------------------------------
+#
+# Der teuerste stille Fehler beim eigenen Rechner: PyTorch in der
+# Prozessorfassung. Es laeuft alles - nur dauert ein Bild zwanzig Minuten
+# statt einer. Im Protokoll steht es als beilaeufige Warnung zwischen
+# hundert anderen Zeilen.
+
+
+def _mit_speicherauskunft(antwort_auf_memory):
+    import insta_agent.imaging.generator as g
+
+    def antworte(anfrage):
+        pfad = anfrage.url.path
+        if "sd-models" in pfad:
+            return httpx.Response(200, json=[{"model_name": "sdxl", "title": "sdxl"}])
+        if "memory" in pfad:
+            return antwort_auf_memory
+        return httpx.Response(200, json={"sd_model_checkpoint": "sdxl"})
+
+    echter = httpx.Client
+    g.httpx.Client = lambda *a, **k: echter(
+        *a, **{**k, "transport": httpx.MockTransport(antworte)}
+    )
+    return g, echter
+
+
+def test_eine_fehlende_grafikkarte_wird_erkannt():
+    """Genau der Fall, der im Betrieb auftrat."""
+    g, echter = _mit_speicherauskunft(
+        httpx.Response(200, json={"cuda": {"error": "torch.cuda is not available"}})
+    )
+    try:
+        _, _, auf_karte = frage_lokal_ab("http://127.0.0.1:7860")
+    finally:
+        g.httpx.Client = echter
+
+    assert auf_karte is False
+
+
+def test_eine_vorhandene_grafikkarte_auch():
+    g, echter = _mit_speicherauskunft(
+        httpx.Response(200, json={"cuda": {"system": {"free": 1, "total": 8}}})
+    )
+    try:
+        _, _, auf_karte = frage_lokal_ab("http://127.0.0.1:7860")
+    finally:
+        g.httpx.Client = echter
+
+    assert auf_karte is True
+
+
+def test_aeltere_fassungen_kennen_die_auskunft_nicht():
+    """Dann wird nichts behauptet - None heisst nicht feststellbar."""
+    g, echter = _mit_speicherauskunft(httpx.Response(404))
+    try:
+        _, _, auf_karte = frage_lokal_ab("http://127.0.0.1:7860")
+    finally:
+        g.httpx.Client = echter
+
+    assert auf_karte is None

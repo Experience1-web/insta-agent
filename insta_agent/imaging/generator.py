@@ -195,12 +195,41 @@ def werte_fuer(modellname: str) -> dict[str, object]:
     }
 
 
-def frage_lokal_ab(adresse: str, *, timeout: float = 10.0) -> tuple[list[str], str]:
-    """Welche Modelle das eigene Bildprogramm kennt - und was gerade läuft.
+def laeuft_auf_der_grafikkarte(adresse: str, client: httpx.Client) -> bool | None:
+    """Ob das Bildprogramm die Grafikkarte benutzt - oder nur den Prozessor.
+
+    Der teuerste stille Fehler beim eigenen Rechner: Wird PyTorch in der
+    Prozessorfassung installiert, läuft alles - nur eben auf der CPU. Ein
+    Bild dauert dann nicht eine Minute, sondern zwanzig. Im Protokoll
+    steht es als beiläufige Warnung zwischen hundert anderen Zeilen, und
+    wer das nicht kennt, sucht den Fehler wochenlang woanders.
+
+    None heisst: nicht feststellbar. Das ist kein Grund zur Sorge, nur
+    kein Beweis.
+    """
+    try:
+        daten = client.get(f"{adresse}/sdapi/v1/memory").json()
+    except Exception:  # noqa: BLE001 - aeltere Fassungen kennen das nicht
+        return None
+    cuda = daten.get("cuda")
+    if not isinstance(cuda, dict):
+        return None
+    if cuda.get("error"):
+        return False
+    return bool(cuda.get("system") or cuda.get("active"))
+
+
+def frage_lokal_ab(
+    adresse: str, *, timeout: float = 10.0
+) -> tuple[list[str], str, bool | None]:
+    """Welche Modelle das eigene Bildprogramm kennt, was läuft, und worauf.
 
     Gedacht für die Einrichtung: Wer eine Adresse eintippt, soll sofort
     erfahren, ob dort etwas antwortet, statt es beim ersten Beitrag zu
     merken. Wirft `Bildfehler` mit einem Satz, der sagt, was zu tun ist.
+
+    Der dritte Rückgabewert sagt, ob die Grafikkarte benutzt wird: False
+    heisst Prozessor, und das ändert alles.
     """
     adresse = (adresse or "").rstrip("/")
     try:
@@ -222,6 +251,7 @@ def frage_lokal_ab(adresse: str, *, timeout: float = 10.0) -> tuple[list[str], s
                 geladen = str(einst.get("sd_model_checkpoint") or "")
             except Exception:  # noqa: BLE001 - die Modellliste reicht schon
                 pass
+            auf_karte = laeuft_auf_der_grafikkarte(adresse, client)
     except httpx.ConnectError as exc:
         raise Bildfehler(
             f"Unter {adresse} antwortet nichts. Läuft das Bildprogramm, und "
@@ -235,7 +265,7 @@ def frage_lokal_ab(adresse: str, *, timeout: float = 10.0) -> tuple[list[str], s
             "Bildprogramm gerade noch?"
         ) from exc
 
-    return [m for m in modelle if m], geladen
+    return [m for m in modelle if m], geladen, auf_karte
 
 
 class LokalerGenerator:

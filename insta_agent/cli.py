@@ -716,20 +716,42 @@ def bilder(
 
         console.print("\n[dim]Probe: frage das Bildprogramm ...[/dim]")
         try:
-            modelle, geladen = frage_lokal_ab(adresse)
+            modelle, geladen, auf_karte = frage_lokal_ab(adresse)
         except Bildfehler as exc:
             console.print(f"\n[red]Das hat nicht geklappt.[/red]\n{exc}")
             if not _bestaetigt("Trotzdem so eintragen?"):
                 raise typer.Exit(1) from None
-            modelle, geladen = [], ""
+            modelle, geladen, auf_karte = [], "", None
         else:
+            rechner = {
+                True: "[green]Grafikkarte[/green]",
+                False: "[red]nur Prozessor[/red]",
+                None: "[dim]nicht feststellbar[/dim]",
+            }[auf_karte]
             console.print(
                 Panel(
                     f"Gefunden: {len(modelle)} Modell(e)\n"
-                    f"Geladen:  {geladen or 'keines'}",
+                    f"Geladen:  {geladen or 'keines'}\n"
+                    f"Rechnet:  {rechner}",
                     title="[green]Verbindung steht[/green]",
                 )
             )
+            if auf_karte is False:
+                console.print(
+                    Panel(
+                        "Das Bildprogramm benutzt deine Grafikkarte nicht, sondern\n"
+                        "den Prozessor. Ein Bild dauert damit nicht eine Minute,\n"
+                        "sondern zwanzig bis dreissig - fuer einen Account, der\n"
+                        "taeglich postet, ist das unbrauchbar.\n\n"
+                        "Ursache ist fast immer PyTorch in der Prozessorfassung\n"
+                        "(im Protokoll steht dann 'Torch not compiled with CUDA\n"
+                        "enabled' oder eine Fassung mit '+cpu').\n\n"
+                        "In Stability Matrix: beim Paket auf die drei Punkte, dann\n"
+                        "'Reinstall' - und bei der Frage nach der Hardware NVIDIA\n"
+                        "auswaehlen, nicht CPU.",
+                        title="[red]Achtung: laeuft ohne Grafikkarte[/red]",
+                    )
+                )
             for i, name in enumerate(modelle[:12], 1):
                 console.print(f"  {i:2}  {name}")
             if len(modelle) > 12:
