@@ -336,3 +336,20 @@ def test_ein_echter_fehler_wird_nicht_endlos_wiederholt(tmp_path):
         gen.erzeuge("ein Fisch", tmp_path / "b.png")
 
     assert len(anfragen) == 1
+
+
+def test_jeder_eingetragene_anbieter_laesst_sich_bauen():
+    """Der Test, der gefehlt hat.
+
+    Die Bauart wurde an alle schluessellosen Anbieter weitergereicht,
+    obwohl nur der eigene Rechner sie kennt - und Pollinations ist beim
+    Bauen abgestuerzt, bevor ueberhaupt ein Bild angefragt wurde. Kein
+    einziger Test hatte je einen anderen Anbieter als den lokalen gebaut.
+    """
+    from insta_agent.imaging.generator import ANBIETER, baue_generator
+
+    for name in ANBIETER:
+        gen = baue_generator(name, "irgendein-zugang", "", art="sd15")
+        assert gen is not None, name
+        if hasattr(gen, "close"):
+            gen.close()

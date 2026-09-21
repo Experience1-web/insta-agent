@@ -891,8 +891,14 @@ def baue_generator(
     if klasse is None:
         log.warning("Unbekannter Bildanbieter %r - es bleibt bei der Typografie", anbieter)
         return None
-    if anbieter in OHNE_SCHLUESSEL:
+    if anbieter == "lokal":
+        # Die Bauart kennt nur der eigene Rechner: Beim Anbieter entscheidet
+        # das Modell selbst, was es braucht. Sie blind weiterzureichen hat
+        # Pollinations umgeworfen - kein Anbieter nimmt ein Feld entgegen,
+        # das er nicht kennt.
         return klasse(token or "http://127.0.0.1:7860", modell, art=art)
+    if anbieter in OHNE_SCHLUESSEL:
+        return klasse(token or "", modell)
     if not token:
         return None
     return klasse(token, modell)
