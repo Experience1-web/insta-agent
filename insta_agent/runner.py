@@ -1174,17 +1174,13 @@ class Agent:
         die Schrift ändert. Ein zweites Mal zu malen hieße ein anderes
         Motiv, und das war nicht beanstandet.
         """
-        if self.bildgenerator is None:
-            # Nur melden, wenn der Betreiber einen Dienst eingerichtet hat -
-            # sonst ist die Typografie ja die bewusste Wahl.
-            if self.settings.bild.aktiv:
-                report.steps.append("Bilddienst eingerichtet, aber nicht aufgebaut")
-                self.store.log("image_error", "Der Bilddienst liess sich nicht aufbauen")
-            return None, None
-
-        # Erst nach einer echten Aufnahme sehen. Sie schlägt jedes
-        # gemalte Bild, weil sie die Sache zeigt und nicht eine
-        # Vorstellung davon.
+        # Erst nach einer echten Aufnahme sehen, und zwar bevor irgendetwas
+        # anderes geprüft wird. Sie schlägt jedes gemalte Bild, weil sie die
+        # Sache zeigt und nicht eine Vorstellung davon - und sie braucht
+        # keinen Bilddienst, kein Guthaben und kein Kontingent. Das stand
+        # hier lange hinter der Prüfung auf den Bildgenerator: Wer keinen
+        # eingerichtet hatte, bekam auch dann kein Foto, wenn eines frei
+        # verfügbar dalag.
         echt, nachweis = self._echtes_bild(fund, basis, report)
         if echt is not None:
             self._letzter_nachweis = nachweis
@@ -1204,6 +1200,14 @@ class Agent:
             return fertig, echt
 
         self._letzter_nachweis = ""
+        if self.bildgenerator is None:
+            # Nur melden, wenn der Betreiber einen Dienst eingerichtet hat -
+            # sonst ist die Typografie ja die bewusste Wahl.
+            if self.settings.bild.aktiv:
+                report.steps.append("Bilddienst eingerichtet, aber nicht aufgebaut")
+                self.store.log("image_error", "Der Bilddienst liess sich nicht aufbauen")
+            return None, None
+
         if not draft.image_generation_prompt.strip():
             report.steps.append("Kein Bild-Prompt geschrieben - Typografie bleibt")
             return None, None

@@ -218,3 +218,89 @@ def test_die_adresse_ueberlebt_den_weg_zum_download(tmp_path):
     assert bild is not None
     assert bild.url == "https://upload.example/a/b.jpg"
     assert bild.pfad is None
+
+
+# --- Die echte Aufnahme kommt vor allem anderen ----------------------------
+
+
+def test_die_echte_aufnahme_kommt_auch_ohne_eingerichteten_bilddienst(
+    tmp_path, monkeypatch
+):
+    """Ein frei verfuegbares Foto ging verloren, wenn kein Maler dastand.
+
+    Die Suche stand hinter der Pruefung auf den Bildgenerator. Wer keinen
+    eingerichtet hatte - oder wessen Dienst sich nicht aufbauen liess -
+    bekam die typografische Fassung, obwohl eine echte Aufnahme des Fundes
+    bereitlag. Genau die ist bei einer Entdeckung das Wertvollste: Wer
+    liest, dass etwas gefunden wurde, will es sehen. Und sie kostet
+    nichts, braucht keinen Schluessel und kein Kontingent.
+    """
+    from PIL import Image
+
+    import insta_agent.imaging.echtbild as echtbild_modul
+    import insta_agent.runner as runner_modul
+
+    quelle = tmp_path / "echt.jpg"
+    Image.new("RGB", (900, 1200), (60, 70, 80)).save(quelle)
+
+    class Gefunden:
+        pfad = quelle
+        lizenz = "CC BY 4.0"
+        seite = "https://commons.wikimedia.org/wiki/File:X.jpg"
+        nachweis = "Bild: jemand · CC BY 4.0 · via Wikimedia Commons"
+
+    gesucht: list[str] = []
+
+    def statt_der_suche(suchwort, ziel, **rest):
+        gesucht.append(suchwort)
+        return Gefunden()
+
+    monkeypatch.setattr(echtbild_modul, "finde_und_hole", statt_der_suche)
+
+    class Laden:
+        def __init__(self) -> None:
+            self.eintraege: list[tuple[str, str]] = []
+
+        def log(self, art: str, text: str) -> None:
+            self.eintraege.append((art, text))
+
+    class BildEinstellung:
+        aktiv = False
+
+    class Einstellungen:
+        bild = BildEinstellung()
+        media_dir = tmp_path
+
+    agent = object.__new__(runner_modul.Agent)
+    agent.bildgenerator = None  # genau der Fall, um den es geht
+    agent.store = Laden()
+    agent.settings = Einstellungen()
+    agent._letzter_nachweis = ""
+
+    class Bericht:
+        steps: list[str] = []
+
+    class Fund:
+        bildsuche = "Bronzemuenzen Hortfund"
+
+    class Spec:
+        pass
+
+    class Entwurf:
+        bildtext = "1.800 Jahre unberuehrt"
+        visual = None
+        image_generation_prompt = ""
+
+    class Ich:
+        handle = "erstfund"
+
+    bericht = Bericht()
+    bericht.steps = []
+
+    fertig, roh = agent._erzeuge_bild(Entwurf(), "test", Ich(), bericht, Fund())
+
+    assert gesucht == ["Bronzemuenzen Hortfund"]
+    assert fertig is not None, "Die echte Aufnahme wurde uebergangen"
+    assert roh == quelle
+    assert agent._letzter_nachweis == Gefunden.nachweis
+    assert ("bild_echt", f"{Gefunden.seite} - {Gefunden.lizenz}") in agent.store.eintraege
