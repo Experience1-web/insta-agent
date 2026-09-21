@@ -191,3 +191,30 @@ def richte_ein(kurzer_token: str, app_id: str, app_secret: str) -> Zugang:
         f"An keiner deiner Seiten ({namen}) hängt ein Instagram-Konto.\n"
         "Verknüpfe die Seite mit dem Konto: facebook.com/settings/?tab=linked_instagram"
     )
+
+
+def pruefe_rechte(token: str, app_id: str, app_secret: str) -> tuple[tuple[str, ...], str]:
+    """Sieht nach, was ein schon eingerichteter Zugang wirklich darf.
+
+    Ohne das bleibt dem Betreiber nur, die ganze Einrichtung noch einmal
+    zu durchlaufen, um zu erfahren, ob eine Berechtigung angekommen ist.
+    Meta beantwortet die Frage direkt: `debug_token` nennt die Rechte,
+    die an diesem Token hängen.
+
+    Gibt die erteilten Rechte zurück und, falls etwas schiefging, den
+    Grund - statt einer Ausnahme, denn hier wird nur nachgesehen.
+    """
+    with httpx.Client(timeout=30.0) as client:
+        try:
+            daten = _hole(
+                client,
+                "debug_token",
+                input_token=token,
+                access_token=f"{app_id}|{app_secret}",
+            ).get("data") or {}
+        except Einrichtungsfehler as exc:
+            return (), str(exc)
+
+    if not daten.get("is_valid", True):
+        return (), "Der hinterlegte Schlüssel ist nicht mehr gültig."
+    return tuple(str(r) for r in daten.get("scopes") or []), ""

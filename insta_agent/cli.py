@@ -964,6 +964,56 @@ def ablage(
 
 
 @app.command()
+def rechte(config: Path = typer.Option(None)) -> None:
+    """Zeigt, welche Instagram-Berechtigungen der hinterlegte Zugang hat.
+
+    Damit lässt sich nachsehen, ob eine nachgeholte Berechtigung
+    angekommen ist - ohne die ganze Einrichtung noch einmal zu
+    durchlaufen.
+    """
+    from .instagram.einrichten import GLEICHWERTIG, NOETIGE_RECHTE, pruefe_rechte
+
+    einst = load_settings(config)
+    if not (einst.ig_access_token and einst.meta_app_id and einst.meta_app_secret):
+        console.print(
+            "[yellow]Noch kein Instagram-Zugang hinterlegt.[/yellow]\n"
+            "Richte ihn zuerst ein: Doppelklick auf  11 - Instagram verbinden"
+        )
+        raise typer.Exit(1)
+
+    erteilt, grund = pruefe_rechte(
+        einst.ig_access_token, einst.meta_app_id, einst.meta_app_secret
+    )
+    if grund:
+        console.print(f"[red]{grund}[/red]")
+        raise typer.Exit(1)
+
+    zeilen = []
+    fehlt = []
+    for recht, wozu in NOETIGE_RECHTE.items():
+        da = recht in erteilt or set(erteilt) & set(GLEICHWERTIG.get(recht, ()))
+        zeilen.append(f"{'[green]ja [/green]' if da else '[red]NEIN[/red]'}  {recht}  -  {wozu}")
+        if not da:
+            fehlt.append(recht)
+
+    console.print(Panel("\n".join(zeilen), title="Was der Zugang darf"))
+    if fehlt:
+        console.print(
+            "\n[yellow]Es fehlt etwas.[/yellow] Wenn die Berechtigung im "
+            "Graph-API-Explorer\nbeim Tippen gar nicht vorgeschlagen wird, ist "
+            "sie fuer deine App\nnoch nicht freigeschaltet:\n\n"
+            "  developers.facebook.com -> deine App\n"
+            "  -> linkes Menue 'App-Ueberpruefung'\n"
+            "  -> 'Berechtigungen und Funktionen'\n"
+            "  -> oben ins Suchfeld den Namen eintippen\n"
+            "  -> rechts auf 'Standardzugriff anfordern' klicken\n\n"
+            "Danach taucht sie im Explorer auf."
+        )
+    else:
+        console.print("\n[green]Alles da. Er sieht seine Zahlen.[/green]")
+
+
+@app.command()
 def instagram(config: Path = typer.Option(None)) -> None:
     """Richtet den Instagram-Zugang ein, damit der Agent selbst posten kann.
 

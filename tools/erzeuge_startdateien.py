@@ -109,6 +109,18 @@ echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
 pause""",
+    "16 - Instagram-Rechte pruefen.bat": f"""{KOPF}
+title Instagram-Rechte pruefen
+echo.
+echo   Zeigt, welche Berechtigungen der hinterlegte Zugang hat.
+echo.
+echo   Vor allem geht es um  instagram_manage_insights  - ohne die
+echo   sieht er keine Reichweite und keine Speicherungen und lernt
+echo   nichts aus seinen eigenen Beitraegen.
+echo.
+%PY% -m insta_agent.cli rechte
+echo.
+pause""",
     "15 - Guthaben eintragen.bat": f"""{KOPF}
 title Guthaben eintragen
 echo.

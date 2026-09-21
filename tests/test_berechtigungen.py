@@ -194,3 +194,72 @@ def test_gemischte_namen_gehen_auch(meta):
     )
 
     assert richte_ein("kurz", "app", "geheim").fehlend == ()
+
+
+# --- Nachsehen, ohne alles neu einzurichten --------------------------------
+
+
+def test_der_hinterlegte_zugang_laesst_sich_nachpruefen(monkeypatch):
+    """Sonst muss man die ganze Einrichtung durchlaufen, um es zu erfahren."""
+    from insta_agent.instagram.einrichten import pruefe_rechte
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        assert "debug_token" in anfrage.url.path
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "is_valid": True,
+                    "scopes": ["instagram_basic", "pages_show_list"],
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(antworte)
+    echter = httpx.Client
+    monkeypatch.setattr(
+        "insta_agent.instagram.einrichten.httpx.Client",
+        lambda *a, **k: echter(*a, **{**k, "transport": transport}),
+    )
+
+    erteilt, grund = pruefe_rechte("token", "app", "geheim")
+
+    assert grund == ""
+    assert erteilt == ("instagram_basic", "pages_show_list")
+
+
+def test_ein_ungueltiger_schluessel_wird_benannt(monkeypatch):
+    from insta_agent.instagram.einrichten import pruefe_rechte
+
+    transport = httpx.MockTransport(
+        lambda a: httpx.Response(200, json={"data": {"is_valid": False}})
+    )
+    echter = httpx.Client
+    monkeypatch.setattr(
+        "insta_agent.instagram.einrichten.httpx.Client",
+        lambda *a, **k: echter(*a, **{**k, "transport": transport}),
+    )
+
+    erteilt, grund = pruefe_rechte("alt", "app", "geheim")
+
+    assert erteilt == ()
+    assert "nicht mehr gültig" in grund
+
+
+def test_beim_nachsehen_wird_nichts_geworfen(monkeypatch):
+    """Es wird nur nachgesehen - ein Fehler gehört in die Antwort."""
+    from insta_agent.instagram.einrichten import pruefe_rechte
+
+    transport = httpx.MockTransport(
+        lambda a: httpx.Response(400, json={"error": {"message": "kaputt", "code": 190}})
+    )
+    echter = httpx.Client
+    monkeypatch.setattr(
+        "insta_agent.instagram.einrichten.httpx.Client",
+        lambda *a, **k: echter(*a, **{**k, "transport": transport}),
+    )
+
+    erteilt, grund = pruefe_rechte("x", "app", "geheim")
+
+    assert erteilt == ()
+    assert grund
