@@ -632,3 +632,115 @@ def test_der_verweis_geht_nur_an_wikimedia():
     # Die Kennung geht ueberallhin - sie ist keine Behauptung, sondern
     # eine Auskunft.
     assert "insta-agent" in _kopfzeilen("https://irgendwo.example/a.jpg")["User-Agent"]
+
+
+# --- Welches Bild genommen wird --------------------------------------------
+
+
+def test_das_groesste_ist_nicht_das_beste():
+    """Der Fehler, den der erste gelungene Durchlauf gezeigt hat.
+
+    Bei "rare bird" gewann eine Tafel von 2400 x 5317 - kein Foto,
+    sondern ein hochkant gescanntes Blatt mit vielen Arten untereinander.
+    Sie war schlicht die groesste. Auf Beitragsformat beschnitten saehe
+    man davon einen Streifen.
+    """
+    from insta_agent.imaging.echtbild import guete
+
+    tafel = guete(2400, 5317)
+    foto = guete(2400, 3000)
+    assert foto > tafel, "Eine Tafel darf kein Foto schlagen"
+    # Obwohl die Tafel deutlich mehr Bildpunkte hat.
+    assert 2400 * 5317 > 2400 * 3000
+
+
+def test_ein_panorama_gewinnt_gegen_alles():
+    """Daraus wird ein Karussell, durch das man wandert - das schlaegt jedes
+    einzelne Bild."""
+    from insta_agent.imaging.echtbild import guete
+
+    pano = guete(4800, 1600)
+    assert pano > guete(2400, 3000)
+    assert pano > guete(3000, 2000)
+    assert pano > guete(2400, 2400)
+
+
+def test_die_groesse_zaehlt_nur_noch_schwach():
+    """Ab 2000 Pixel ist ein Bild gut genug fuer Instagram.
+
+    Doppelt so viele Pixel machen es nicht doppelt so brauchbar - sonst
+    gewinnt wieder jeder Riesenscan gegen jedes brauchbare Foto.
+    """
+    from insta_agent.imaging.echtbild import guete
+
+    klein = guete(2000, 2500)
+    riesig = guete(8000, 10000)
+    # Das Schaerfere gewinnt - sonst entscheidet bei zwei brauchbaren
+    # Bildern der Zufall.
+    assert riesig > klein
+    # Aber nur knapp. Vierfache Kantenlaenge darf die Form nicht schlagen.
+    assert riesig / klein < 1.15, "Groesse schlaegt hier wieder die Form"
+    assert guete(2400, 3000) > guete(9000, 20000), "Eine Riesentafel gewinnt"
+
+
+def test_ein_unsinniges_mass_ergibt_keine_guete():
+    from insta_agent.imaging.echtbild import guete
+
+    assert guete(0, 100) == 0.0
+    assert guete(100, 0) == 0.0
+
+
+def test_bei_gleichem_format_gewinnt_das_groessere():
+    from insta_agent.imaging.echtbild import guete
+
+    assert guete(3000, 3750) > guete(1500, 1875)
+
+
+def test_die_auswahl_nimmt_wirklich_das_geeignetste():
+    """Nicht nur die Funktion - auch der Weg dorthin."""
+    from insta_agent.imaging.echtbild import suche_bild
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        if "openverse" in str(anfrage.url):
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": {
+                        "1": {
+                            "title": "File:Tafel.jpg",
+                            "imageinfo": [
+                                {
+                                    "thumburl": "https://x.example/tafel.jpg",
+                                    "thumbwidth": 2400,
+                                    "thumbheight": 5317,
+                                    "extmetadata": {
+                                        "LicenseShortName": {"value": "CC0"}
+                                    },
+                                }
+                            ],
+                        },
+                        "2": {
+                            "title": "File:Foto.jpg",
+                            "imageinfo": [
+                                {
+                                    "thumburl": "https://x.example/foto.jpg",
+                                    "thumbwidth": 2000,
+                                    "thumbheight": 2500,
+                                    "extmetadata": {
+                                        "LicenseShortName": {"value": "CC0"}
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                }
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        gefunden = suche_bild("rare bird", client=client)
+
+    assert gefunden is not None
+    assert "foto" in gefunden.url, "Die Tafel hat gewonnen, obwohl sie unbrauchbar ist"

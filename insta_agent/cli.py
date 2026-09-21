@@ -1297,6 +1297,23 @@ def instagram(config: Path = typer.Option(None)) -> None:
     )
 
 
+def _eignung(verhaeltnis: float) -> str:
+    """Was die Form dieses Bildes fuer einen Beitrag bedeutet.
+
+    Die Zahl allein sagt niemandem etwas. "0,45" heisst: eine hochkant
+    gescannte Tafel, aus der ein Beitragsbild einen Streifen macht.
+    """
+    if verhaeltnis >= 2.2:
+        return "sehr gut - daraus wird ein Karussell zum Durchwandern"
+    if verhaeltnis >= 1.6:
+        return "gut - Querformat, wird beschnitten"
+    if verhaeltnis >= 0.6:
+        return "sehr gut - nahe am Beitragsformat"
+    if verhaeltnis >= 0.5:
+        return "brauchbar - hochkant wie eine Story"
+    return "schlecht - zu hoch, davon sieht man nur einen Streifen"
+
+
 @app.command()
 def bildsuche(
     suchwort: str = typer.Argument(..., help="Wonach gesucht wird, am besten englisch"),
@@ -1396,6 +1413,7 @@ def bildsuche(
                 if stuecke >= 2
                 else "Panorama: nein, gewoehnliches Format\n"
             )
+            + f"Eignung:  [bold]{_eignung(verhaeltnis)}[/bold]\n"
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n\n"
             f"[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
             title="[green]Gefunden[/green]",

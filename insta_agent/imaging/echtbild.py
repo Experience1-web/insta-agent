@@ -284,6 +284,51 @@ def suchworte_fuer(fund) -> list[str]:
     return worte
 
 
+def guete(breite: int, hoehe: int) -> float:
+    """Wie gut sich dieses Bild fuer einen Beitrag eignet, 0 bis ungefaehr 2.
+
+    "Das groesste nehmen" war das falsche Kriterium, und man sieht sofort
+    warum: Bei "rare bird" gewann eine Tafel von 2400 x 5317 - kein Foto,
+    sondern ein hochkant gescanntes Blatt mit vielen Arten untereinander.
+    Auf 4:5 beschnitten saehe man davon einen Streifen.
+
+    Es zaehlt also zuerst die Form, dann die Groesse:
+
+    - Ein sehr breites Bild ist das Beste, was passieren kann: Daraus
+      wird ein Karussell, durch das man wandert.
+    - Ein Bild nahe am Beitragsformat ist gut.
+    - Ein sehr hohes ist schlecht. Es laesst sich nicht sinnvoll
+      beschneiden und fast nie als Ganzes zeigen.
+
+    Die Groesse geht nur noch schwach ein. Ab etwa 2000 Pixel ist ein
+    Bild fuer Instagram gut genug, und doppelt so viele Pixel machen es
+    nicht doppelt so brauchbar.
+    """
+    if breite <= 0 or hoehe <= 0:
+        return 0.0
+    verhaeltnis = breite / hoehe
+
+    # Die Grenzen sind keine runden Zahlen, sondern Formate: 0,8 ist der
+    # Beitrag, 0,5625 ist 9:16, 2,2 ist die Schwelle zum Panorama.
+    if verhaeltnis >= 2.2:
+        form = 1.6          # Panorama - daraus wird ein Karussell
+    elif verhaeltnis >= 1.6:
+        form = 1.0          # gewoehnliches Querformat
+    elif verhaeltnis >= 0.6:
+        form = 1.3          # nahe am Beitragsformat
+    elif verhaeltnis >= 0.5:
+        form = 0.9          # hochkant wie eine Story, noch brauchbar
+    else:
+        form = 0.25         # eine Tafel, kein Foto
+
+    # Ab 2000 Pixel bringt mehr kaum noch etwas. Ganz zu deckeln waere
+    # aber auch falsch: Dann entscheidet bei zwei brauchbaren Bildern der
+    # Zufall, statt dass das schaerfere gewinnt. Also eine flache Kurve -
+    # doppelte Kantenlaenge bringt rund ein Zehntel mehr.
+    groesse = min(1.3, (max(breite, hoehe) / 2000) ** 0.15)
+    return form * (0.75 + 0.25 * groesse)
+
+
 def _taugt_der_titel(titel: str) -> bool:
     klein = titel.casefold()
     return not any(schrott in klein for schrott in UNBRAUCHBAR)
@@ -508,7 +553,7 @@ def suche_bild(
                 kandidaten = _frage_openverse(begriff, client, treffer)
             if not kandidaten:
                 continue
-            beste = max(kandidaten, key=lambda b: b.breite * b.hoehe)
+            beste = max(kandidaten, key=lambda b: guete(b.breite, b.hoehe))
             log.info(
                 "Bildsuche %r: %s Treffer, genommen %s (%sx%s)",
                 begriff,
@@ -638,4 +683,5 @@ __all__ = [
     "suchworte_fuer",
     "Bilanz",
     "kennung",
+    "guete",
 ]
