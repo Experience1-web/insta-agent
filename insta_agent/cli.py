@@ -1452,12 +1452,43 @@ def karussellprobe(
     try:
         if post_id:
             zeile = agent.store.get_post(post_id)
+            if zeile is None:
+                console.print("[red]Diesen Entwurf gibt es nicht.[/red]")
+                raise typer.Exit(1)
         else:
-            entwuerfe = agent.store.recent_posts(limit=1)
-            zeile = entwuerfe[0] if entwuerfe else None
-        if zeile is None:
-            console.print("[red]Diesen Entwurf gibt es nicht.[/red]")
-            raise typer.Exit(1)
+            # Den neuesten Entwurf zu nehmen, der Karten hat - nicht
+            # einfach den neuesten. Sonst sieht man bei jedem Aufruf
+            # "hat keine Karten", solange ein alter Entwurf obenauf
+            # liegt, und haelt die Probe fuer kaputt.
+            zeile = None
+            letzter = None
+            for kandidat in agent.store.recent_posts(limit=20):
+                letzter = letzter or kandidat
+                daten = _json.loads(kandidat["draft_json"])
+                if daten.get("karten"):
+                    zeile = kandidat
+                    break
+            if zeile is None:
+                if letzter is None:
+                    console.print(
+                        "[yellow]Es gibt noch gar keinen Entwurf.[/yellow] "
+                        "Lass erst einen Zyklus laufen."
+                    )
+                    raise typer.Exit(0)
+                console.print(
+                    Panel(
+                        "Keiner der letzten 20 Entwuerfe hat Karten.\n\n"
+                        "Das ist kein Fehler: Entwuerfe von vor dem Karussell\n"
+                        "haben keine, und ein Fund, der nicht genug hergibt,\n"
+                        "bekommt auch keine - ein starkes Bild schlaegt fuenf,\n"
+                        "von denen drei nichts sagen.\n\n"
+                        "[bold]Was jetzt hilft:[/bold] einen Zyklus laufen lassen.\n"
+                        "Danach zeigt diese Probe, ob seine Bilder zusammenpassen -\n"
+                        "und zwar so oft du willst, ohne dass es noch etwas kostet.",
+                        title="[yellow]Noch nichts zum Ausprobieren[/yellow]",
+                    )
+                )
+                raise typer.Exit(0)
 
         draft = PostDraft.model_validate(_json.loads(zeile["draft_json"]))
         identitaet = agent.identity
@@ -1477,10 +1508,13 @@ def karussellprobe(
             )
         )
         if not karten:
+            # Nur noch erreichbar, wenn jemand ausdruecklich eine Nummer
+            # genannt hat - sonst sucht die Auswahl oben schon einen mit.
             console.print(
                 "[yellow]Dieser Entwurf hat keine Karten.[/yellow] "
                 "Er stammt von vor dem Karussell, oder der Agent fand den "
-                "Fund nicht ergiebig genug."
+                "Fund nicht ergiebig genug. Ohne Nummer sucht die Probe "
+                "sich den neuesten mit Karten."
             )
             raise typer.Exit(0)
 

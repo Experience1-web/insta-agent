@@ -194,8 +194,15 @@ def test_die_karussellprobe_fragt_kein_modell(lauf, kein_modell, archiv, tmp_pat
     assert "Bilder gebaut" in ergebnis.output
 
 
-def test_ein_entwurf_ohne_karten_wird_erklaert(lauf, kein_modell, tmp_path, monkeypatch):
-    """Nicht jeder Fund traegt fuenf Karten - das ist kein Fehler."""
+def test_ohne_einen_einzigen_kartenentwurf_wird_es_erklaert(
+    lauf, kein_modell, tmp_path, monkeypatch
+):
+    """Nicht jeder Fund traegt fuenf Karten - das ist kein Fehler.
+
+    Solange ein alter Entwurf obenauf liegt, sucht die Probe weiter.
+    Findet sie in den letzten zwanzig keinen mit Karten, sagt sie, was
+    stattdessen hilft: einen Zyklus laufen lassen.
+    """
     from insta_agent.config import load_settings
     from insta_agent.models import PostDraft, VisualSpec
     from insta_agent.store import Store
@@ -227,7 +234,8 @@ def test_ein_entwurf_ohne_karten_wird_erklaert(lauf, kein_modell, tmp_path, monk
 
     ergebnis = lauf.invoke(app, ["karussellprobe"])
     assert ergebnis.exit_code == 0, ergebnis.output
-    assert "keine Karten" in ergebnis.output
+    assert "Noch nichts zum Ausprobieren" in ergebnis.output
+    assert "Zyklus laufen lassen" in ergebnis.output
 
 
 def test_die_proben_stehen_auch_zum_doppelklicken_bereit():
@@ -265,3 +273,50 @@ def test_kein_befehl_der_proben_veroeffentlicht_etwas():
 def test_json_bleibt_importiert_fuer_die_probe():
     """Kleiner Wachhund gegen ein verirrtes Aufraeumen der Importe."""
     assert json is not None
+
+
+def test_die_probe_ueberspringt_alte_entwuerfe_ohne_karten(
+    lauf, kein_modell, archiv, tmp_path, monkeypatch
+):
+    """Sonst sieht man bei jedem Aufruf "hat keine Karten".
+
+    Der neueste Entwurf ist nicht zwangslaeufig der interessante: Liegt
+    einer von vor dem Karussell obenauf, waere die Probe fuer immer
+    nutzlos - und der Betreiber haelt sie fuer kaputt.
+    """
+    from insta_agent.config import load_settings
+    from insta_agent.models import Karte, PostDraft, VisualSpec
+    from insta_agent.store import Store
+    from insta_agent.vorgabe import vorgegebene_identitaet
+
+    def entwurf(mit_karten: bool) -> PostDraft:
+        return PostDraft(
+            pillar="Ausgegraben",
+            hook="Ein Satz.",
+            caption="Ein Satz.",
+            call_to_action="Speicher das.",
+            hashtags=[],
+            visual=VisualSpec(headline="Ein Satz"),
+            karten=[Karte(text="1.800 Jahre unberuehrt", akzentwort="1.800")]
+            if mit_karten
+            else [],
+            best_time_hint="abends",
+            expected_outcome="Speicherungen",
+        )
+
+    db = tmp_path / "agent.db"
+    store = Store(db)
+    store.set_json("identity", vorgegebene_identitaet().model_dump(mode="json"))
+    store.add_draft(entwurf(True), "mit.png")    # aelter, hat Karten
+    store.add_draft(entwurf(False), "ohne.png")  # neuer, hat keine
+    store.close()
+
+    einstellungen = load_settings()
+    einstellungen.db_path = db
+    einstellungen.media_dir = tmp_path / "media"
+    einstellungen.media_dir.mkdir(exist_ok=True)
+    monkeypatch.setattr("insta_agent.cli.load_settings", lambda *_a, **_k: einstellungen)
+
+    ergebnis = lauf.invoke(app, ["karussellprobe"])
+    assert ergebnis.exit_code == 0, ergebnis.output
+    assert "Bilder gebaut" in ergebnis.output, "Der alte Entwurf wurde uebersprungen"
