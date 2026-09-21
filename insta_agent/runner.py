@@ -617,6 +617,68 @@ class Agent:
             self.store.setze_kosten(post_id, kosten)
         return kosten
 
+    def karte_neu(self, post_id: int, stelle: int) -> dict:
+        """Erneuert ein einzelnes Bild eines Karussells, nicht den ganzen Satz.
+
+        `stelle` ist die Position beim Wischen: 1 ist das erste Bild, dafuer
+        gilt weiterhin `bild_neu`. Ab 2 geht es um eine Karte.
+
+        Das ist der Unterschied, auf den es ankommt: Wenn von fuenf Bildern
+        eines misslungen ist, will man dieses eine tauschen und nicht vier
+        gelungene mit. Die uebrigen bleiben unberuehrt, auch in der Farbe -
+        ein einzelnes Bild wird dem ersten angeglichen, nicht die Reihe neu
+        aufeinander eingestellt.
+        """
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur bei einem Entwurf lässt sich das Bild tauschen."}
+        if stelle <= 1:
+            return self.bild_neu(post_id)
+
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+
+        bilder = json.loads(zeile["karussell_json"] or "[]")
+        versatz = stelle - 2
+        if not 0 <= versatz < len(bilder):
+            return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
+
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        karten = list(getattr(draft, "karten", None) or [])
+        if versatz >= len(karten):
+            return {"ok": False, "grund": "Zu diesem Bild gibt es keine Karte."}
+
+        self.treasury.check()
+        vorher = self.treasury.state().cycle_spent_usd
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        basis = f"{stamp}-neu-{post_id}"
+        karte = karten[versatz]
+        roh, _nachweis = self._karte_rohbild(karte, basis, stelle)
+
+        if roh is not None:
+            from .imaging.angleichen import gleiche_an
+
+            gleiche_an(
+                roh,
+                hintergrund_hex=draft.visual.background_hex,
+                akzent_hex=draft.visual.accent_hex,
+            )
+
+        neues = self._beschrifte_karte(karte, roh, basis, stelle, draft, identity)
+        bilder[versatz] = str(neues)
+        self.store.setze_karussell(post_id, bilder)
+
+        kosten = self._mitrechnen(post_id, vorher)
+        self.store.log(
+            "bild_neu",
+            f"Entwurf {post_id}: Bild {stelle} neu ({kosten:.4f} USD)",
+        )
+        return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": []}
+
     def bild_neu(self, post_id: int) -> dict:
         """Malt das Bild eines Entwurfs neu, ohne den Text anzufassen.
 
@@ -1240,20 +1302,32 @@ class Agent:
         gewerblich genutzt und bearbeitet werden darf; auf jedes Bild
         kommt schliesslich Schrift.
         """
-        if fund is None or not (suchwort := (fund.bildsuche or "").strip()):
+        from .imaging.echtbild import finde_und_hole, suchworte_fuer
+
+        worte = suchworte_fuer(fund)
+        if not worte:
             return None, ""
 
-        from .imaging.echtbild import finde_und_hole
-
+        # Mehrere Anlaeufe, vom Genauesten zum Allgemeinsten. Solange die
+        # Bilderzeugung liefert, was sie liefert, ist jede echte Aufnahme
+        # den zusaetzlichen Versuch wert - ein gemaltes Bild zeigt nur,
+        # wie etwas aussehen koennte.
         ziel = self.settings.media_dir / f"{basis}-echt.jpg"
-        try:
-            gefunden = finde_und_hole(suchwort, ziel)
-        except Exception as exc:  # noqa: BLE001 - ohne Foto wird gemalt
-            log.info("Bildsuche fehlgeschlagen: %s", exc)
-            return None, ""
+        gefunden = None
+        for suchwort in worte:
+            try:
+                gefunden = finde_und_hole(suchwort, ziel)
+            except Exception as exc:  # noqa: BLE001 - ohne Foto wird gemalt
+                log.info("Bildsuche fehlgeschlagen (%r): %s", suchwort, exc)
+                gefunden = None
+            if gefunden is not None:
+                break
 
         if gefunden is None:
-            report.steps.append(f"Keine freie Aufnahme zu '{suchwort}' - es wird gemalt")
+            report.steps.append(
+                f"Keine freie Aufnahme zu {', '.join(repr(w) for w in worte)} "
+                "- es wird gemalt"
+            )
             return None, ""
 
         report.steps.append(

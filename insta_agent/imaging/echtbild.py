@@ -33,6 +33,23 @@ log = logging.getLogger(__name__)
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 
+# Die zweite Quelle. Openverse gehoert zu WordPress und wird zusammen mit
+# Creative Commons betrieben; es durchsucht Flickr, Museen, Archive und
+# Wikimedia in einem - und filtert dabei selbst nach Lizenz.
+#
+# Warum ueberhaupt eine zweite: Commons ist gut bei allem, was in einer
+# Enzyklopaedie steht - Fundorte, Gegenstaende, Arten. Es ist duenn bei
+# allem, was ein Fotograf aufgenommen hat, ohne dass ein Artikel dazu
+# existiert. Genau das sind die Bilder, die einen Beitrag tragen.
+#
+# Kein Schluessel noetig. Ohne einen gelten engere Grenzen, aber ein
+# Beitrag am Tag liegt weit darunter.
+OPENVERSE_API = "https://api.openverse.org/v1/images/"
+
+# Was Openverse ausliefern darf, damit wir es nehmen duerfen. Dieselbe
+# Regel wie bei Commons: gewerblich erlaubt und bearbeitbar, sonst nicht.
+OPENVERSE_LIZENZEN = "cc0,pdm,by,by-sa"
+
 # Wie lange wir insgesamt warten. Eine Bildsuche darf den Zyklus nicht
 # aufhalten - lieber kein Foto als ein hängender Lauf.
 GEDULD = 20.0
@@ -169,6 +186,73 @@ def suchbegriffe(suchwort: str) -> list[str]:
     return versuche[:4]
 
 
+# Die Themenfelder des Accounts, uebersetzt in das, womit ein Bildarchiv
+# etwas anfangen kann. Die letzte Rettung, wenn alles Genauere nichts
+# bringt: Ein Bild aus dem richtigen Feld schlaegt ein gemaltes Bild,
+# weil es echt ist - und darum geht es hier.
+GEBIETSWORTE = {
+    "archäolog": "archaeological excavation site",
+    "archaeolog": "archaeological excavation site",
+    "ausgegraben": "archaeological excavation site",
+    "grabung": "archaeological excavation site",
+    "artenfund": "newly described species specimen",
+    "biolog": "wildlife photograph specimen",
+    "tiefsee": "deep sea underwater photograph",
+    "paläont": "fossil specimen museum",
+    "palaeont": "fossil specimen museum",
+    "medizin": "medical research laboratory",
+    "zell": "microscopy cell image",
+    "raumfahrt": "spacecraft nasa photograph",
+    "astronom": "astronomical observation telescope image",
+    "weltall": "astronomical observation telescope image",
+    "exoplanet": "exoplanet artist impression nasa",
+    "technik": "laboratory research equipment",
+    "material": "materials science laboratory",
+    "polar": "polar expedition photograph",
+}
+
+
+def suchworte_fuer(fund) -> list[str]:
+    """Womit nach einer echten Aufnahme dieses Fundes gesucht wird.
+
+    Bisher war das ein einziges Feld, und war es leer, wurde gar nicht
+    gesucht - dann entstand ein gemaltes Bild, obwohl womoeglich ein Foto
+    dalag. Bei einem Account ueber tatsaechlich Geschehenes ist das der
+    teuerste Verzicht ueberhaupt: Wer liest, dass etwas gefunden wurde,
+    will es sehen, und ein gemaltes Bild zeigt nur, wie es aussehen
+    koennte.
+
+    Also mehrere Anlaeufe, vom Genauesten zum Allgemeinsten, und der
+    letzte greift immer: das Themenfeld selbst.
+    """
+    if fund is None:
+        return []
+
+    worte: list[str] = []
+
+    def dazu(text: str) -> None:
+        sauber = (text or "").strip()
+        if sauber and sauber not in worte:
+            worte.append(sauber)
+
+    # 1. Was die Stoffsuche ausdruecklich dafuer vorgesehen hat.
+    dazu(getattr(fund, "bildsuche", ""))
+
+    # 2. Der Titel des Fundes. Deutsch bringt weniger Treffer als
+    #    Englisch, aber Eigennamen und Fundorte stehen in jeder Sprache
+    #    gleich da - und genau die findet ein Archiv.
+    dazu(getattr(fund, "titel", ""))
+
+    # 3. Das Themenfeld, uebersetzt. Die letzte Rettung.
+    gebiet = (getattr(fund, "gebiet", "") or "").casefold()
+    for schluessel, begriff in GEBIETSWORTE.items():
+        if schluessel in gebiet:
+            dazu(begriff)
+            break
+
+    return worte
+
+
 def _taugt_der_titel(titel: str) -> bool:
     klein = titel.casefold()
     return not any(schrott in klein for schrott in UNBRAUCHBAR)
@@ -232,6 +316,73 @@ def _frage_commons(
     return gefunden
 
 
+def _frage_openverse(
+    begriff: str, client: httpx.Client, treffer: int
+) -> list[Fundbild]:
+    """Dieselbe Suche bei Openverse. Leer heisst: nichts Brauchbares.
+
+    Die Lizenzpruefung passiert zweimal: Openverse filtert schon serverseitig,
+    und was zurueckkommt, laeuft trotzdem durch dieselbe Pruefung wie ein
+    Commons-Treffer. Ein Dienst, der sich irrt, soll uns nicht in ein
+    Urheberrechtsproblem ziehen.
+    """
+    try:
+        antwort = client.get(
+            OPENVERSE_API,
+            params={
+                "q": begriff,
+                "license": OPENVERSE_LIZENZEN,
+                "page_size": str(treffer),
+                # Nur was gross genug ist - kleiner taugt fuer Instagram nicht.
+                "size": "large",
+                "mature": "false",
+            },
+            headers={"User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)"},
+        )
+        antwort.raise_for_status()
+        daten = antwort.json()
+    except Exception as exc:  # noqa: BLE001 - dann bleibt es bei Commons
+        log.info("Openverse fehlgeschlagen (%r): %s", begriff, exc)
+        return []
+
+    gefunden: list[Fundbild] = []
+    for eintrag in daten.get("results") or []:
+        if not isinstance(eintrag, dict):
+            continue
+        lizenz = str(eintrag.get("license") or "")
+        version = str(eintrag.get("license_version") or "")
+        # "by" + "4.0" ergibt "CC BY 4.0" - so, wie die Pruefung es kennt.
+        lesbar = f"CC {lizenz.upper()} {version}".strip() if lizenz != "pdm" else "Public domain"
+        if not darf_genutzt_werden(lesbar):
+            continue
+
+        titel = str(eintrag.get("title") or "")
+        if not _taugt_der_titel(titel):
+            continue
+
+        breite = int(eintrag.get("width") or 0)
+        hoehe = int(eintrag.get("height") or 0)
+        if breite < MINDESTBREITE:
+            continue
+
+        url = str(eintrag.get("url") or "")
+        if not url.startswith("http"):
+            continue
+
+        gefunden.append(
+            Fundbild(
+                url=url,
+                pfad=None,
+                lizenz=lesbar,
+                urheber=_ohne_markup(str(eintrag.get("creator") or "")),
+                seite=str(eintrag.get("foreign_landing_url") or titel),
+                breite=breite,
+                hoehe=hoehe,
+            )
+        )
+    return gefunden
+
+
 def suche_bild(
     suchwort: str, *, client: httpx.Client | None = None, treffer: int = 12
 ) -> Fundbild | None:
@@ -253,7 +404,12 @@ def suche_bild(
     client = client or httpx.Client(timeout=GEDULD, follow_redirects=True)
     try:
         for begriff in suchbegriffe(suchwort):
+            # Commons zuerst: Dort steht oft genau die Aufnahme, die zu
+            # der Veroeffentlichung gehoert. Openverse danach, weil es
+            # breiter ist, aber seltener die Sache selbst zeigt.
             kandidaten = _frage_commons(begriff, client, treffer)
+            if not kandidaten:
+                kandidaten = _frage_openverse(begriff, client, treffer)
             if not kandidaten:
                 continue
             beste = max(kandidaten, key=lambda b: b.breite * b.hoehe)
@@ -319,4 +475,5 @@ __all__ = [
     "hole_bild",
     "suche_bild",
     "suchbegriffe",
+    "suchworte_fuer",
 ]

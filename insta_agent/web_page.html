@@ -418,6 +418,7 @@
     opacity: .5;
     letter-spacing: .04em;
   }
+  .wischreihe figure button { display: block; margin: 6px auto 0; }
   @media (max-width: 720px) {
     .wischreihe img { height: 260px; }
   }
@@ -1756,6 +1757,8 @@ function bilderreihe(p) {
         <figure>
           <img src="/media?name=${encodeURIComponent(name)}${anhang}" alt="" loading="lazy">
           <figcaption>${i + 1} / ${alle.length}</figcaption>
+          ${p.status === "draft" ? `<button class="winzig"
+             data-bildneu="${p.id}" data-stelle="${i + 1}">dieses neu</button>` : ""}
         </figure>`).join("")}
     </div>
     <p class="hinweis" style="margin:8px 0 16px">
@@ -1862,15 +1865,22 @@ function verdrahte_entscheidungen(bereich) {
   for (const knopf of bereich.querySelectorAll("[data-bildneu]")) {
     knopf.onclick = async e => {
       e.stopPropagation();
-      if (!confirm(
-        "Jo sieht sich den Bildeinfall neu an und malt das Bild noch einmal. " +
-        "Der Text bleibt, wie er ist – auch die Endprüfung gilt weiter.\n\n" +
-        "Das kostet ein paar Cent und dauert etwa eine Minute.\n\nWeitermachen?")) return;
+      // Welches Bild: ohne Angabe das erste. Steht eine Stelle dran,
+      // geht es genau um dieses eine - die uebrigen bleiben unberuehrt.
+      const stelle = Number(knopf.dataset.stelle || 1);
+      const frage = stelle > 1
+        ? `Nur Bild ${stelle} wird neu geholt. Die anderen bleiben, wie sie sind.\n\n` +
+          "Das kostet ein paar Cent.\n\nWeitermachen?"
+        : "Jo sieht sich den Bildeinfall neu an und malt das Bild noch einmal. " +
+          "Der Text bleibt, wie er ist – auch die Endprüfung gilt weiter.\n\n" +
+          "Das kostet ein paar Cent und dauert etwa eine Minute.\n\nWeitermachen?";
+      if (!confirm(frage)) return;
 
       knopf.disabled = true;
-      knopf.textContent = "malt …";
+      knopf.textContent = "holt …";
       schliesse_popup();
-      const ergebnis = await sende("/api/bildneu", { id: Number(knopf.dataset.bildneu) });
+      const ergebnis = await sende("/api/bildneu",
+        { id: Number(knopf.dataset.bildneu), stelle });
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (!ergebnis.gemalt) {

@@ -864,9 +864,20 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 self._json({"ok": False, "grund": "Kein gültiger Beitrag."}, 400)
                 return
 
+            # Welches Bild gemeint ist. Ohne Angabe das erste - so
+            # verhaelt sich der Knopf wie vorher, als es nur eines gab.
+            try:
+                stelle = int(rumpf.get("stelle") or 1)
+            except (TypeError, ValueError):
+                stelle = 1
+
             agent = Agent(steuerung.settings)
             try:
-                ergebnis = agent.bild_neu(post_id)
+                ergebnis = (
+                    agent.bild_neu(post_id)
+                    if stelle <= 1
+                    else agent.karte_neu(post_id, stelle)
+                )
             except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
                 log.warning("Bild nicht neu gemalt: %s", exc)
                 self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)

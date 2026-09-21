@@ -304,3 +304,137 @@ def test_die_echte_aufnahme_kommt_auch_ohne_eingerichteten_bilddienst(
     assert roh == quelle
     assert agent._letzter_nachweis == Gefunden.nachweis
     assert ("bild_echt", f"{Gefunden.seite} - {Gefunden.lizenz}") in agent.store.eintraege
+
+
+# --- Openverse: die zweite Quelle ------------------------------------------
+
+
+def _zwei_quellen(commons: dict, openverse: dict) -> httpx.Client:
+    """Ein Netz, in dem beide Archive antworten - jedes mit dem Seinen."""
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        if "openverse" in str(anfrage.url):
+            return httpx.Response(200, json=openverse)
+        return httpx.Response(200, json=commons)
+
+    return httpx.Client(transport=httpx.MockTransport(antworte))
+
+
+def _ov(**felder) -> dict:
+    grund = {
+        "title": "Ausgrabung in Norfolk",
+        "license": "by",
+        "license_version": "4.0",
+        "creator": "Jemand",
+        "width": 3000,
+        "height": 2000,
+        "url": "https://example.test/foto.jpg",
+        "foreign_landing_url": "https://example.test/seite",
+    }
+    grund.update(felder)
+    return {"results": [grund]}
+
+
+def test_openverse_springt_ein_wenn_commons_nichts_hat():
+    """Der Grund, warum es ueberhaupt eine zweite Quelle gibt.
+
+    Commons ist gut bei allem, was in einer Enzyklopaedie steht. Es ist
+    duenn bei allem, was ein Fotograf aufgenommen hat, ohne dass ein
+    Artikel dazu existiert - und das sind oft genau die Bilder, die einen
+    Beitrag tragen.
+    """
+    from insta_agent.imaging.echtbild import suche_bild
+
+    with _zwei_quellen({"query": {"pages": {}}}, _ov()) as client:
+        gefunden = suche_bild("Norfolk hoard", client=client)
+
+    assert gefunden is not None
+    assert gefunden.url == "https://example.test/foto.jpg"
+    assert "CC BY 4.0" in gefunden.lizenz
+
+
+def test_commons_hat_vorrang_vor_openverse():
+    """Dort steht oft genau die Aufnahme, die zur Veroeffentlichung gehoert."""
+    from insta_agent.imaging.echtbild import suche_bild
+
+    with _zwei_quellen(_antwort({"lizenz": "CC0"}), _ov()) as client:
+        gefunden = suche_bild("x", client=client)
+
+    assert gefunden is not None
+    assert "example.test/foto.jpg" not in gefunden.url
+
+
+def test_openverse_wird_trotz_eigener_filterung_nachgeprueft():
+    """Ein Dienst, der sich irrt, darf uns nicht mit hineinziehen.
+
+    Angefragt wird nur, was gewerblich erlaubt ist. Kommt trotzdem etwas
+    mit NC zurueck, faellt es hier durch - und nicht erst vor Gericht.
+    """
+    from insta_agent.imaging.echtbild import suche_bild
+
+    with _zwei_quellen({"query": {"pages": {}}}, _ov(license="by-nc")) as client:
+        assert suche_bild("x", client=client) is None
+
+    with _zwei_quellen({"query": {"pages": {}}}, _ov(license="by-nd")) as client:
+        assert suche_bild("x", client=client) is None
+
+
+def test_ein_zu_kleines_openverse_bild_faellt_durch():
+    from insta_agent.imaging.echtbild import suche_bild
+
+    with _zwei_quellen({"query": {"pages": {}}}, _ov(width=600, height=400)) as client:
+        assert suche_bild("x", client=client) is None
+
+
+def test_ein_ausfall_von_openverse_haelt_nichts_auf():
+    """Zwei Quellen sollen mehr Sicherheit bringen, nicht weniger."""
+    from insta_agent.imaging.echtbild import suche_bild
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        if "openverse" in str(anfrage.url):
+            raise httpx.ConnectError("Netz weg")
+        return httpx.Response(200, json=_antwort({"lizenz": "CC0"}))
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        assert suche_bild("x", client=client) is not None
+
+
+# --- Bis zum letzten Anlauf ------------------------------------------------
+
+
+def test_ohne_suchwort_wird_das_themenfeld_genommen():
+    """Frueher wurde dann gar nicht gesucht - der teuerste Verzicht.
+
+    Bei einem Account ueber tatsaechlich Geschehenes ist ein gemaltes Bild
+    die zweitbeste Loesung. Es gar nicht erst zu versuchen, weil ein Feld
+    leer blieb, ist die schlechteste.
+    """
+    from insta_agent.imaging.echtbild import suchworte_fuer
+
+    class Fund:
+        bildsuche = ""
+        titel = "Roemischer Muenzhort bei Norfolk"
+        gebiet = "Archaeologie"
+
+    worte = suchworte_fuer(Fund())
+    assert worte[0] == "Roemischer Muenzhort bei Norfolk"
+    assert "archaeological" in worte[-1]
+
+
+def test_das_ausdrueckliche_suchwort_kommt_zuerst():
+    from insta_agent.imaging.echtbild import suchworte_fuer
+
+    class Fund:
+        bildsuche = "WASP-121b exoplanet"
+        titel = "Eisenregen auf einem fernen Planeten"
+        gebiet = "Weltall"
+
+    worte = suchworte_fuer(Fund())
+    assert worte[0] == "WASP-121b exoplanet"
+    assert len(worte) == 3, "Titel und Themenfeld gehoeren als Rueckfallebene dazu"
+
+
+def test_ohne_fund_wird_nicht_gesucht():
+    from insta_agent.imaging.echtbild import suchworte_fuer
+
+    assert suchworte_fuer(None) == []
