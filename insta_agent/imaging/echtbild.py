@@ -83,10 +83,31 @@ GEDULD = 20.0
 # Beschneiden - der Beitrag ist hochkant, die meisten Aufnahmen sind quer.
 MINDESTBREITE = 1400
 
+# Und so hoch. Die Hoehe war bisher voellig ungeprueft, und genau daran
+# ist es gescheitert: Eine Aufnahme von 1804 x 1176 kam durch, weil sie
+# breit genug war. Im Beitragsformat bleiben davon 940 Pixel Breite -
+# die muessen auf 1080 hochgerechnet werden, und das sieht man.
+#
+# 1200 statt der noetigen 1350: Die letzten Prozent Hochrechnung sieht
+# niemand, und jedes Bild, das hier ausscheidet, ist eines weniger zur
+# Auswahl. Wirklich entschieden wird ohnehin ueber die Guete.
+MINDESTHOEHE = 1200
+
 # So gross fragen wir an. Wikimedia rechnet die Vorschau auf Wunsch
 # herunter, aber nie hoch: Was hier steht, ist die Obergrenze dessen, was
 # wir bekommen koennen.
-WUNSCHBREITE = 2400
+#
+# Lieber zu gross als zu knapp. Herunterrechnen kostet nichts und macht
+# ein Bild eher schaerfer; hochrechnen laesst sich nicht rueckgaengig
+# machen. Der Unterschied sind ein paar hundert Kilobyte einmal am Tag.
+WUNSCHBREITE = 3200
+
+# Worauf ein Bild am Ende landet: 1080 Pixel breit, im Verhaeltnis 4:5.
+# Alles, was danach noch hochgerechnet werden muss, wird unscharf - und
+# das ist der Grund, warum die Guete danach rechnet und nicht nach der
+# rohen Pixelzahl.
+ZIELBREITE = 1080
+BEITRAGSVERHAELTNIS = 1080 / 1350
 
 # Dateien, die zwar frei sind, aber keinen Beitrag tragen: Wappen,
 # Diagramme, Karten, Bildschirmfotos. Sie stehen bei fast jeder Suche
@@ -164,9 +185,54 @@ class Fundbild:
 
     @property
     def nachweis(self) -> str:
-        """Die Zeile, die unter dem Beitrag stehen muss."""
-        wer = self.urheber or "unbekannt"
-        return f"Bild: {wer} · {self.lizenz} · via Wikimedia Commons"
+        """Die Zeile, die unter dem Beitrag stehen muss.
+
+        Zwei Dinge, die vorher falsch waren und in jeder Bildunterschrift
+        standen:
+
+        "Bild: unbekannt" war unnoetig. Bei gemeinfrei und CC0 verlangt
+        niemand eine Namensnennung - sie ist der Grund, warum diese
+        Lizenzen ueberhaupt gewaehlt wurden. Wo kein Name steht, bleibt
+        die Zeile eben kuerzer.
+
+        Und "via Wikimedia Commons" stimmte nur bei der Haelfte. Ueber
+        Openverse kommen Bilder von Flickr, aus Museen und Archiven - die
+        dort als Wikimedia auszugeben, waere eine falsche Angabe an genau
+        der Stelle, an der es auf Richtigkeit ankommt.
+        """
+        teile = ["Bild:"]
+        wer = (self.urheber or "").strip()
+        if wer:
+            teile.append(f"{wer} ·")
+        teile.append(self.lizenz)
+        if quelle := self.quellenname:
+            teile.append(f"· via {quelle}")
+        return " ".join(teile)
+
+    @property
+    def quellenname(self) -> str:
+        """Woher das Bild stammt, lesbar - aus der Adresse der Fundstelle."""
+        seite = self.seite or ""
+        if "commons.wikimedia" in seite or seite.startswith("File:"):
+            return "Wikimedia Commons"
+        treffer = re.search(r"https?://(?:www\.)?([^/]+)", seite)
+        if not treffer:
+            return ""
+        rechner = treffer.group(1)
+        bekannt = {
+            "flickr.com": "Flickr",
+            "live.staticflickr.com": "Flickr",
+            "openverse.org": "Openverse",
+            "smithsonianmag.com": "Smithsonian",
+            "si.edu": "Smithsonian",
+            "nasa.gov": "NASA",
+            "esa.int": "ESA",
+            "noaa.gov": "NOAA",
+        }
+        for endung, name in bekannt.items():
+            if rechner.endswith(endung):
+                return name
+        return rechner
 
 
 def _ohne_markup(text: str) -> str:
@@ -284,7 +350,48 @@ def suchworte_fuer(fund) -> list[str]:
     return worte
 
 
-def guete(breite: int, hoehe: int) -> float:
+def nutzmasse(
+    breite: int, hoehe: int, verhaeltnis: float = BEITRAGSVERHAELTNIS
+) -> tuple[int, int]:
+    """Was von einem Bild uebrig bleibt, wenn es aufs Beitragsformat kommt.
+
+    Instagram nimmt keine beliebigen Seitenverhaeltnisse an, also wird
+    mittig beschnitten. Von einer breiten Aufnahme bleibt dabei ein
+    hochkanter Ausschnitt - und der ist erheblich schmaler als das
+    Original. Genau diese Zahl zaehlt, nicht die des Originals.
+
+    Beispiel, und es ist der Fall, an dem es aufgefallen ist: 2400 x 1565
+    klingt nach reichlich. Uebrig bleiben 1252 x 1565 - immer noch genug
+    fuer 1080, aber eben nicht mehr weit davon entfernt. Bei 1600 x 900
+    waeren es 720 x 900, und die muessten um die Haelfte hochgerechnet
+    werden.
+
+    Ein Panorama wird nicht beschnitten, sondern zerschnitten - dort gilt
+    dieselbe Rechnung, weil jedes Teilstueck die volle Hoehe und daraus
+    seine Breite bekommt.
+    """
+    if breite <= 0 or hoehe <= 0 or verhaeltnis <= 0:
+        return (0, 0)
+    nutz_b = min(breite, hoehe * verhaeltnis)
+    nutz_h = min(hoehe, breite / verhaeltnis)
+    return (int(nutz_b), int(nutz_h))
+
+
+def massfaktor(
+    breite: int, hoehe: int, verhaeltnis: float = BEITRAGSVERHAELTNIS
+) -> float:
+    """Wie oft die Zielbreite im nutzbaren Ausschnitt steckt.
+
+    Ueber 1 heisst: wird verkleinert, das Bild bleibt scharf. Unter 1
+    heisst: muss hochgerechnet werden, und das sieht man.
+    """
+    nutz_b, _ = nutzmasse(breite, hoehe, verhaeltnis)
+    return nutz_b / ZIELBREITE if nutz_b else 0.0
+
+
+def guete(
+    breite: int, hoehe: int, *, zielverhaeltnis: float = BEITRAGSVERHAELTNIS
+) -> float:
     """Wie gut sich dieses Bild fuer einen Beitrag eignet, 0 bis ungefaehr 2.
 
     "Das groesste nehmen" war das falsche Kriterium, und man sieht sofort
@@ -321,12 +428,20 @@ def guete(breite: int, hoehe: int) -> float:
     else:
         form = 0.25         # eine Tafel, kein Foto
 
-    # Ab 2000 Pixel bringt mehr kaum noch etwas. Ganz zu deckeln waere
-    # aber auch falsch: Dann entscheidet bei zwei brauchbaren Bildern der
-    # Zufall, statt dass das schaerfere gewinnt. Also eine flache Kurve -
-    # doppelte Kantenlaenge bringt rund ein Zehntel mehr.
-    groesse = min(1.3, (max(breite, hoehe) / 2000) ** 0.15)
-    return form * (0.75 + 0.25 * groesse)
+    # Die Groesse zaehlt nicht mehr nach der langen Kante - das war
+    # falsch, denn die lange Kante ist genau die, die der Zuschnitt
+    # wegnimmt. Gezaehlt wird, was danach uebrig bleibt.
+    mass = massfaktor(breite, hoehe, zielverhaeltnis)
+    if mass < 1.0:
+        # Muss hochgerechnet werden. Quadratisch, damit es wirklich
+        # wehtut: Bei 0,8 bleiben 64 Prozent, bei der Haelfte ein
+        # Viertel. Ein solches Bild soll nur gewinnen, wenn nichts
+        # Besseres da ist.
+        return form * mass * mass
+    # Darueber bringt mehr kaum noch etwas - ein Bild, das sowieso
+    # verkleinert wird, ist scharf. Die flache Kurve entscheidet nur
+    # noch zwischen zwei ohnehin brauchbaren Funden.
+    return form * (0.75 + 0.25 * min(1.3, mass ** 0.25))
 
 
 def rangfaktor(platz: int) -> float:
@@ -372,7 +487,7 @@ def _bewerte(info: dict, seite: dict, bilanz: "Bilanz | None" = None) -> Fundbil
         return None
     breite = int(info.get("thumbwidth") or info.get("width") or 0)
     hoehe = int(info.get("thumbheight") or info.get("height") or 0)
-    if breite < MINDESTBREITE:
+    if breite < MINDESTBREITE or hoehe < MINDESTHOEHE:
         if bilanz:
             bilanz.zu_klein += 1
         return None
@@ -510,7 +625,7 @@ def _frage_openverse(
 
         breite = int(eintrag.get("width") or 0)
         hoehe = int(eintrag.get("height") or 0)
-        if breite < MINDESTBREITE:
+        if breite < MINDESTBREITE or hoehe < MINDESTHOEHE:
             bilanz.zu_klein += 1
             continue
 
@@ -547,7 +662,11 @@ def _frage_openverse(
 
 
 def suche_bild(
-    suchwort: str, *, client: httpx.Client | None = None, treffer: int = 12
+    suchwort: str,
+    *,
+    client: httpx.Client | None = None,
+    treffer: int = 12,
+    zielverhaeltnis: float = BEITRAGSVERHAELTNIS,
 ) -> Fundbild | None:
     """Sucht bei Wikimedia Commons die beste brauchbare freie Aufnahme.
 
@@ -580,7 +699,10 @@ def suche_bild(
             # geht daneben.
             geordnet = sorted(
                 enumerate(kandidaten),
-                key=lambda p: guete(p[1].breite, p[1].hoehe) * rangfaktor(p[0]),
+                key=lambda p: guete(
+                    p[1].breite, p[1].hoehe, zielverhaeltnis=zielverhaeltnis
+                )
+                * rangfaktor(p[0]),
                 reverse=True,
             )
             beste = geordnet[0][1]
@@ -601,7 +723,11 @@ def suche_bild(
 
 
 def suche_bilder(
-    suchwort: str, *, client: httpx.Client | None = None, treffer: int = 12
+    suchwort: str,
+    *,
+    client: httpx.Client | None = None,
+    treffer: int = 12,
+    zielverhaeltnis: float = BEITRAGSVERHAELTNIS,
 ) -> list[Fundbild]:
     """Alle brauchbaren Treffer, das beste zuerst.
 
@@ -623,7 +749,10 @@ def suche_bilder(
                 bild
                 for _platz, bild in sorted(
                     enumerate(kandidaten),
-                    key=lambda p: guete(p[1].breite, p[1].hoehe) * rangfaktor(p[0]),
+                    key=lambda p: guete(
+                    p[1].breite, p[1].hoehe, zielverhaeltnis=zielverhaeltnis
+                )
+                * rangfaktor(p[0]),
                     reverse=True,
                 )
             ]
@@ -667,6 +796,41 @@ def _ist_wirklich_ein_bild(inhalt: bytes) -> bool:
         b"RIFF",              # WEBP
     )
     return inhalt.startswith(anfaenge)
+
+
+def _uebernimm_echte_masse(bild: Fundbild, ziel: Path) -> None:
+    """Die Masse der geladenen Datei eintragen statt der gemeldeten.
+
+    Das ist kein Feinschliff, sondern eine Luecke, durch die genau das
+    gefallen ist, was hinterher unscharf aussah: Gemeldet waren 2400 x
+    2248, auf der Platte lagen 1804 x 1176. Geladen wurde naemlich nicht
+    die Adresse, nach deren Massen ausgewaehlt wurde, sondern eine
+    Ersatzadresse - und die haelt oft eine kleinere Fassung vor.
+
+    Aus 1176 Pixeln Hoehe werden im Beitragsformat 940 Pixel Breite, und
+    die muessen auf 1080 hochgerechnet werden. Bewertet worden war das
+    Bild aber, als haette es 2248. Ab jetzt zaehlt, was wirklich da ist.
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(ziel) as offen:
+            breite, hoehe = offen.size
+    except Exception as exc:  # noqa: BLE001 - dann bleiben die gemeldeten
+        log.info("Masse nicht nachgemessen (%s): %s", ziel.name, exc)
+        return
+    if breite <= 0 or hoehe <= 0:
+        return
+    if (breite, hoehe) != (bild.breite, bild.hoehe):
+        log.info(
+            "Gemeldet %sx%s, geladen %sx%s (%s)",
+            bild.breite,
+            bild.hoehe,
+            breite,
+            hoehe,
+            bild.seite,
+        )
+    bild.breite, bild.hoehe = breite, hoehe
 
 
 def hole_bild(
@@ -716,6 +880,7 @@ def hole_bild(
             ziel.write_bytes(inhalt)
             bild.pfad = ziel
             bild.grund = ""
+            _uebernimm_echte_masse(bild, ziel)
             return bild
     finally:
         if eigener:
@@ -733,6 +898,7 @@ def finde_und_hole(
     client: httpx.Client | None = None,
     versuche: int = 4,
     beobachter=None,
+    groesse: tuple[int, int] = (1080, 1350),
 ):
     """Suchen, laden und nachsehen, ob es wirklich eine Fotografie ist.
 
@@ -744,13 +910,27 @@ def finde_und_hole(
 
     None heisst: Von den ersten paar Treffern war keiner brauchbar.
 
+    Geprueft wird auch die Schaerfe, und zwar an dem Bild, das im
+    Beitrag ankommt - `groesse` ist dessen Format. Eine weiche Aufnahme
+    wird aber nicht weggeworfen, sondern zurueckgestellt: Findet sich
+    nichts Schaerferes, ist sie immer noch besser als ein gemaltes Bild.
+
     `beobachter` wird fuer jeden Versuch aufgerufen, mit dem Bild, ob es
     taugte und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
     die Suche tut, will auch sehen, was sie verworfen hat.
     """
-    from .fotoprobe import wirkt_wie_foto
+    import shutil
 
-    kandidaten = suche_bilder(suchwort, client=client)
+    from .fotoprobe import wirkt_wie_foto
+    from .schaerfe import ist_scharf, schaerfewert
+
+    zielverhaeltnis = groesse[0] / groesse[1] if groesse[1] else BEITRAGSVERHAELTNIS
+    kandidaten = suche_bilder(suchwort, client=client, zielverhaeltnis=zielverhaeltnis)
+
+    # Das beste weiche Bild, falls kein scharfes kommt. Als eigene Datei,
+    # weil `ziel` beim naechsten Versuch ueberschrieben wird.
+    rueckhalt: tuple[float, Fundbild, Path] | None = None
+
     for bild in kandidaten[: max(1, versuche)]:
         geladen = hole_bild(bild, ziel, client=client)
         if geladen is None:
@@ -764,10 +944,54 @@ def finde_und_hole(
             if beobachter:
                 beobachter(bild, False, grund)
             continue
-        log.info("Echtes Bild gefunden: %s (%s)", geladen.seite, geladen.lizenz)
+        mass = massfaktor(bild.breite, bild.hoehe, zielverhaeltnis)
+        scharf, schaerfegrund = ist_scharf(ziel, groesse=groesse)
+        if scharf and mass < 1.0:
+            # Reicht nach dem Zuschnitt nicht fuer 1080 Pixel. Die
+            # Messung sagt "scharf", weil sie das Bild so sieht, wie es
+            # ist - hochgerechnet ist es das nicht mehr.
+            scharf = False
+            schaerfegrund = (
+                f"zu klein fuers Format ({bild.breite}x{bild.hoehe}, "
+                f"muesste um das {1 / mass:.2f}-fache hochgerechnet werden)"
+            )
+        if not scharf:
+            log.info("Zurueckgestellt (%s): %s", bild.seite, schaerfegrund)
+            bild.grund = schaerfegrund
+            # Beides zaehlt: Wie scharf die Datei ist und ob genug
+            # Pixel da sind. Ein weiches, grosses Bild ist besser als
+            # ein scharfes, das um das Doppelte hochgerechnet wird.
+            wert = schaerfewert(ziel, groesse=groesse) * min(1.0, mass)
+            if rueckhalt is None or wert > rueckhalt[0]:
+                kopie = ziel.with_name(f"{ziel.stem}-rueckhalt{ziel.suffix}")
+                try:
+                    shutil.copyfile(ziel, kopie)
+                    rueckhalt = (wert, geladen, kopie)
+                except OSError as exc:
+                    log.info("Rueckhalt nicht gesichert: %s", exc)
+            if beobachter:
+                beobachter(bild, False, schaerfegrund)
+            continue
+        log.info(
+            "Echtes Bild gefunden: %s (%s, %s)", geladen.seite, geladen.lizenz, schaerfegrund
+        )
         if beobachter:
             beobachter(bild, True, "")
         return geladen
+
+    if rueckhalt is not None:
+        # Nichts Scharfes dabei. Lieber die beste weiche Aufnahme als ein
+        # gemaltes Bild - die zeigt wenigstens die Sache selbst.
+        _, bild, kopie = rueckhalt
+        try:
+            shutil.copyfile(kopie, ziel)
+            kopie.unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning("Rueckhalt nicht zurueckgeholt: %s", exc)
+            return None
+        bild.pfad = ziel
+        log.info("Kein scharfer Treffer, genommen wird der beste weiche: %s", bild.seite)
+        return bild
     return None
 
 
@@ -783,5 +1007,7 @@ __all__ = [
     "Bilanz",
     "kennung",
     "guete",
+    "massfaktor",
+    "nutzmasse",
     "rangfaktor",
 ]

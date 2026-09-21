@@ -70,21 +70,54 @@ def _lege_schleier(bild: Image.Image, oben: int, unten: int, staerke: int = 190)
     bild.paste(dunkel, (0, oben), schleier)
 
 
-def _auf_hochformat(bild: Image.Image) -> Image.Image:
-    """Bringt jedes Bild auf 9:16 - durch Beschneiden, nie durch Zerren.
+def _nachschaerfen(bild: Image.Image, faktor: float) -> Image.Image:
+    """Die Schaerfe zurueckholen, die das Skalieren gekostet hat.
 
-    Die Anbieter liefern unterschiedliche Seitenverhältnisse; manche
-    können 9:16 gar nicht. Einfach auf die Zielgröße zu strecken würde
-    Gesichter und Geraden verziehen, und das sieht man sofort. Deshalb
-    wird auf Überdeckung skaliert und mittig beschnitten.
+    Jede Umrechnung mittelt benachbarte Bildpunkte, und Mitteln ist
+    genau das, was Unschaerfe ist. Beim Verkleinern faellt das kaum auf,
+    beim Vergroessern sehr. Ein Nachschaerfen hebt die Kanten wieder an -
+    derselbe Handgriff, den jedes Bildbearbeitungsprogramm nach dem
+    Aendern der Groesse vorschlaegt.
+
+    Die Schwelle ist wichtig: Ohne sie wuerde auch das Rauschen in
+    dunklen Flaechen mit angehoben, und dann sieht ein Nachthimmel
+    griesselig aus.
     """
-    if bild.size == STORY:
+    if abs(faktor - 1.0) < 0.02:
+        return bild
+    if faktor < 1.0:
+        # Verkleinert - da reicht wenig, sonst sieht man Raender an Kanten.
+        return bild.filter(ImageFilter.UnsharpMask(radius=1.0, percent=65, threshold=3))
+    # Vergroessert - hier ist wirklich Schaerfe verlorengegangen.
+    return bild.filter(ImageFilter.UnsharpMask(radius=1.6, percent=90, threshold=2))
+
+
+def _auf_format(bild: Image.Image, groesse: tuple[int, int] = STORY) -> Image.Image:
+    """Bringt ein Bild auf das Beitragsformat - durch Beschneiden, nie durch Zerren.
+
+    `groesse` ist FEED (1080x1350) oder STORY (1080x1920), und dass das
+    ueberhaupt ein Parameter ist, war der Fehler: Vorher landete jedes
+    Bild auf 9:16, auch wenn der Beitrag als Feed-Beitrag eingestellt war.
+
+    Das kostete zweierlei auf einmal. Instagram zeigt im Feed hoechstens
+    4:5, also wurde von einem 9:16-Bild oben und unten etwas abgeschnitten -
+    unter anderem vom Hook. Und schlimmer: Eine Querformataufnahme von
+    2400 x 1565 muss fuer 1920 Pixel Hoehe um das 1,23-fache hochgerechnet
+    werden, fuer 1350 dagegen auf das 0,86-fache herunter. Ein
+    hochgerechnetes Bild ist unscharf, und man sieht es sofort.
+
+    Die Anbieter liefern unterschiedliche Seitenverhaeltnisse. Einfach auf
+    die Zielgroesse zu strecken wuerde Gesichter und Geraden verziehen,
+    deshalb wird auf Ueberdeckung skaliert und mittig beschnitten.
+    """
+    if bild.size == groesse:
         return bild
 
-    ziel_b, ziel_h = STORY
+    ziel_b, ziel_h = groesse
     faktor = max(ziel_b / bild.width, ziel_h / bild.height)
     neu_b, neu_h = round(bild.width * faktor), round(bild.height * faktor)
     bild = bild.resize((neu_b, neu_h), Image.LANCZOS)
+    bild = _nachschaerfen(bild, faktor)
 
     links = (neu_b - ziel_b) // 2
     # Etwas oberhalb der Mitte beschneiden: Im Hochformat liegt das Motiv
@@ -100,9 +133,15 @@ def lege_hook_auf(
     text: str,
     spec: VisualSpec,
     handle: str = "",
+    groesse: tuple[int, int] = STORY,
 ) -> Path:
-    """Schreibt den Hook auf das erzeugte Bild und speichert das Ergebnis."""
-    bild = _auf_hochformat(Image.open(quelle).convert("RGB"))
+    """Schreibt den Hook auf das erzeugte Bild und speichert das Ergebnis.
+
+    `groesse` muss dasselbe Format sein, in dem der Beitrag erscheint -
+    sonst wird das Bild auf ein Format gebracht, das Instagram danach
+    noch einmal beschneidet.
+    """
+    bild = _auf_format(Image.open(quelle).convert("RGB"), groesse)
 
     breite, hoehe = bild.size
     zeichnung = ImageDraw.Draw(bild)
@@ -158,4 +197,4 @@ def lege_hook_auf(
     return ziel
 
 
-__all__ = ["lege_hook_auf", "_akzentkerne", "_wrap_to_width"]
+__all__ = ["lege_hook_auf", "_auf_format", "_akzentkerne", "_wrap_to_width"]

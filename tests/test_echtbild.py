@@ -37,7 +37,7 @@ def _antwort(*bilder) -> dict:
                         {
                             "thumburl": b.get("url", "https://upload.example/bild.jpg"),
                             "thumbwidth": b.get("breite", 1440),
-                            "thumbheight": b.get("hoehe", 1080),
+                            "thumbheight": b.get("hoehe", 1800),
                             "extmetadata": {
                                 "LicenseShortName": {"value": b["lizenz"]},
                                 "Artist": {
@@ -189,9 +189,15 @@ def test_der_nachweis_nennt_urheber_und_lizenz(tmp_path):
 
 
 def test_ohne_urheber_steht_wenigstens_die_lizenz_da(tmp_path):
-    bild = Fundbild("https://u.example/x.jpg", tmp_path / "x.jpg", "CC0", "", "File:X.jpg", 1440, 1080)
+    """Ohne Namen bleibt die Lizenz - aber kein Platzhalter.
 
-    assert "unbekannt" in bild.nachweis
+    Frueher stand dort "Bild: unbekannt". Das ist keine Angabe, sondern
+    sieht aus wie ein Fehler, und bei gemeinfreien Aufnahmen ist
+    tatsaechlich niemand zu nennen.
+    """
+    bild = Fundbild("https://u.example/x.jpg", tmp_path / "x.jpg", "CC0", "", "File:X.jpg", 1440, 1800)
+
+    assert "unbekannt" not in bild.nachweis
     assert "CC0" in bild.nachweis
 
 
@@ -950,3 +956,133 @@ def test_sind_alle_treffer_zeichnungen_wird_gemalt(tmp_path):
 
     # Vier Versuche, nicht einer und nicht alle fuenf.
     assert len(geholt) == 4, geholt
+
+
+# --- Die Pflichtangabe unter dem Beitrag ----------------------------------
+
+
+def _fund(**abweichend):
+    from insta_agent.imaging.echtbild import Fundbild
+
+    grund = dict(
+        url="https://upload.wikimedia.org/x.jpg",
+        pfad=None,
+        lizenz="CC BY 4.0",
+        urheber="Ein Fotograf",
+        seite="File:X.jpg",
+        breite=2400,
+        hoehe=1600,
+    )
+    grund.update(abweichend)
+    return Fundbild(**grund)
+
+
+def test_gemeinfrei_ohne_urheber_sagt_nicht_unbekannt():
+    """"Bild: unbekannt" ist keine Angabe, sondern ein Eingestaendnis.
+
+    Bei gemeinfreien Aufnahmen ist niemand zu nennen - das ist der Sinn
+    von gemeinfrei. Dort etwas hinzuschreiben, was nach einer Luecke
+    aussieht, macht die Zeile schlechter, nicht besser.
+    """
+    zeile = _fund(lizenz="Public domain", urheber="").nachweis
+    assert "unbekannt" not in zeile
+    assert zeile == "Bild: Public domain · via Wikimedia Commons"
+
+
+def test_der_urheber_steht_vor_der_lizenz():
+    zeile = _fund(lizenz="CC0", urheber="Skkdav").nachweis
+    assert zeile == "Bild: Skkdav · CC0 · via Wikimedia Commons"
+
+
+def test_ein_bild_von_flickr_wird_nicht_wikimedia_genannt():
+    """Openverse durchsucht Flickr, Museen und Archive mit.
+
+    Die dort als Wikimedia auszugeben waere eine falsche Angabe an genau
+    der Stelle, an der es auf Richtigkeit ankommt - die Namensnennung
+    ist die Bedingung, unter der wir das Bild ueberhaupt nehmen duerfen.
+    """
+    zeile = _fund(seite="https://www.flickr.com/photos/jemand/123").nachweis
+    assert zeile.endswith("via Flickr")
+
+
+def test_eine_unbekannte_quelle_wird_beim_namen_genannt():
+    """Lieber der Rechnername als eine erfundene Zuordnung."""
+    zeile = _fund(seite="https://sammlung.museum-xy.de/objekt/7").nachweis
+    assert zeile.endswith("via sammlung.museum-xy.de")
+
+
+# --- Was geladen wurde, zaehlt - nicht, was gemeldet war ------------------
+
+
+def test_die_masse_der_geladenen_datei_werden_uebernommen(tmp_path):
+    """Gemeldet 2400x2248, auf der Platte 1804x1176 - genau so passiert.
+
+    Geladen wird oft nicht die Adresse, nach deren Massen ausgewaehlt
+    wurde, sondern eine Ersatzadresse mit einer kleineren Fassung. Wer
+    dann weiter mit den gemeldeten Zahlen rechnet, haelt ein Bild fuer
+    gross genug, das es nicht ist - und wundert sich hinterher, warum
+    der Beitrag unscharf ist.
+    """
+    from PIL import Image
+
+    from insta_agent.imaging.echtbild import _uebernimm_echte_masse
+
+    datei = tmp_path / "geladen.png"
+    Image.new("RGB", (1804, 1176), (20, 20, 20)).save(datei)
+
+    bild = _fund(breite=2400, hoehe=2248)
+    _uebernimm_echte_masse(bild, datei)
+
+    assert (bild.breite, bild.hoehe) == (1804, 1176)
+
+
+def test_zu_kleine_hoehe_faellt_aus_der_suche(tmp_path):
+    """1176 Pixel Hoehe ergeben im Beitragsformat 940 Pixel Breite.
+
+    Die muessten auf 1080 hochgerechnet werden. Geprueft wurde bisher
+    nur die Breite, und die war mit 1804 reichlich - deshalb kam das
+    Bild durch.
+    """
+    from insta_agent.imaging.echtbild import MINDESTHOEHE, _bewerte
+
+    seite = {"title": "File:Gut.jpg"}
+    info = {
+        "extmetadata": {"LicenseShortName": {"value": "CC0"}},
+        "thumbwidth": 1804,
+        "thumbheight": 1176,
+        "thumburl": "https://example.org/x.jpg",
+    }
+    assert _bewerte(info, seite) is None
+
+    info["thumbheight"] = MINDESTHOEHE + 100
+    assert _bewerte(info, seite) is not None
+
+
+def test_die_guete_rechnet_mit_dem_zuschnitt():
+    """Die lange Kante ist genau die, die der Zuschnitt wegnimmt.
+
+    1600 x 900 klingt nach reichlich und ist es nicht: Uebrig bleiben
+    720 Pixel Breite. 1400 x 1750 klingt kleiner und ist besser, weil
+    davon alles nutzbar ist.
+    """
+    from insta_agent.imaging.echtbild import guete
+
+    assert guete(1400, 1750) > guete(1600, 900)
+
+
+def test_ein_flaches_panorama_gewinnt_nicht_mehr_allein_wegen_der_form():
+    """Aus 2400 x 480 werden Stuecke von 480 Pixeln Hoehe.
+
+    Die muessten fast verdreifacht werden. Die Form allein - "Panorama,
+    das Beste, was passieren kann" - hat das frueher nicht gesehen.
+    """
+    from insta_agent.imaging.echtbild import guete
+
+    assert guete(2400, 480) < guete(2400, 1600)
+
+
+def test_massfaktor_sagt_ob_hochgerechnet_werden_muss():
+    from insta_agent.imaging.echtbild import massfaktor
+
+    assert massfaktor(2400, 1565) > 1.0
+    assert massfaktor(1804, 1176) < 1.0

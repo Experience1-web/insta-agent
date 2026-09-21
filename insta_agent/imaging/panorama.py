@@ -29,6 +29,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from .overlay import _nachschaerfen
+
 log = logging.getLogger(__name__)
 
 # Ab diesem Seitenverhältnis lohnt es sich. Darunter ist es ein normales
@@ -137,8 +139,15 @@ def zerschneide(
             for i in range(zahl):
                 links = versatz + i * stueck
                 ausschnitt = bild.crop((links, oben, links + stueck, oben + nutzhoehe))
+                vorher = ausschnitt.width
                 ausschnitt = ausschnitt.resize(
                     (format_breite, format_hoehe), Image.LANCZOS
+                )
+                # Dasselbe Nachschaerfen wie beim gewoehnlichen Bild -
+                # sonst ist ausgerechnet das Karussell, das am laengsten
+                # angesehen wird, das weichste.
+                ausschnitt = _nachschaerfen(
+                    ausschnitt, format_breite / vorher if vorher else 1.0
                 )
                 pfad = ziel_stamm.with_name(f"{ziel_stamm.stem}-p{i + 1}.png")
                 ausschnitt.save(pfad)

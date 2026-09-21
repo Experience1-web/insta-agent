@@ -1403,6 +1403,32 @@ def bildsuche(
     pano = ist_panorama(ziel)
     stuecke = stueckzahl(breite, hoehe, 864 / 1080) if pano else 0
 
+    # Wie das Bild im Beitrag ankommt - und das ist etwas anderes als
+    # seine Groesse. Instagram nimmt nur bestimmte Seitenverhaeltnisse,
+    # also wird mittig beschnitten, und was dabei uebrig bleibt, muss
+    # 1080 Pixel breit werden. Reicht es nicht, wird hochgerechnet.
+    from .imaging.echtbild import massfaktor, nutzmasse
+    from .imaging.schaerfe import schaerfewert
+
+    nutz_b, nutz_h = nutzmasse(breite, hoehe)
+    mass = massfaktor(breite, hoehe)
+    schaerfe = schaerfewert(ziel)
+    if mass >= 1.0:
+        zuschnitt = (
+            f"[green]{nutz_b} x {nutz_h}[/green] - wird verkleinert, bleibt scharf"
+        )
+    else:
+        zuschnitt = (
+            f"[yellow]{nutz_b} x {nutz_h}[/yellow] - muss um das "
+            f"{1 / mass:.2f}-fache hochgerechnet werden"
+        )
+    if schaerfe <= 0:
+        schaerfezeile = "nicht messbar"
+    elif schaerfe >= 0.62:
+        schaerfezeile = f"[green]scharf[/green] ({schaerfe:.2f})"
+    else:
+        schaerfezeile = f"[yellow]weich[/yellow] ({schaerfe:.2f})"
+
     console.print(
         Panel(
             f"Quelle:   {gefunden.seite}\n"
@@ -1416,6 +1442,8 @@ def bildsuche(
                 else "Panorama: nein, gewoehnliches Format\n"
             )
             + f"Eignung:  [bold]{_eignung(verhaeltnis)}[/bold]\n"
+            + f"Zuschnitt: {zuschnitt}\n"
+            + f"Schaerfe: {schaerfezeile}\n"
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n\n"
             f"[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
             title="[green]Gefunden[/green]",

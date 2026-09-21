@@ -540,7 +540,7 @@ class Agent:
             image_path = render_post_image(
                 draft.visual,
                 self.settings.media_dir / f"{basis}.png",
-                groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+                groesse=self._bildformat,
             )
             # Erst die Bildsprache, dann malen: Was zählt, ist der Prompt.
             # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
@@ -712,7 +712,7 @@ class Agent:
         bild = render_post_image(
             draft.visual,
             self.settings.media_dir / f"{basis}.png",
-            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+            groesse=self._bildformat,
         )
         fund = (
             Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
@@ -975,6 +975,7 @@ class Agent:
                     text=neu.bildtext,
                     spec=neu.visual,
                     handle=f"@{identity.handle}",
+                    groesse=self._bildformat,
                 )
                 return neues, "neu beschriftet"
             except Exception as exc:  # noqa: BLE001 - dann eben die Typografie
@@ -983,7 +984,7 @@ class Agent:
         typo = render_post_image(
             neu.visual,
             self.settings.media_dir / f"{basis}.png",
-            groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
+            groesse=self._bildformat,
         )
         return typo, "typografisch neu gesetzt"
 
@@ -1359,7 +1360,7 @@ class Agent:
         if not ist_panorama(Path(erstes_roh)):
             return None, []
 
-        breite, hoehe = STORY if self.settings.posting.bildformat == "story" else FEED
+        breite, hoehe = self._bildformat
         stuecke = zerschneide(
             Path(erstes_roh),
             self.settings.media_dir / basis,
@@ -1380,12 +1381,25 @@ class Agent:
                 text=draft.bildtext,
                 spec=draft.visual,
                 handle=f"@{identity.handle}",
+                groesse=self._bildformat,
             )
         except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
             log.warning("Schrift auf Panoramastueck fehlgeschlagen: %s", exc)
             erstes = stuecke[0]
 
         return erstes, stuecke[1:]
+
+    @property
+    def _bildformat(self) -> tuple[int, int]:
+        """Das Format, in dem dieser Beitrag erscheint - FEED oder STORY.
+
+        Es an einer Stelle zu holen ist kein Aufraeumen, sondern der Kern
+        eines Fehlers: Das Format stand zwar in den Einstellungen, wurde
+        beim Beschriften der Bilder aber nie gelesen. Jedes Bild landete
+        auf 9:16, auch bei einem Feed-Beitrag - und wurde dafuer
+        hochgerechnet, statt herunter. Genau daher kam die Unschaerfe.
+        """
+        return STORY if self.settings.posting.bildformat == "story" else FEED
 
     def _karte_rohbild(self, karte, basis: str, nummer: int):
         """Das nackte Bild einer Karte - echt oder gemalt, noch ohne Schrift.
@@ -1440,13 +1454,18 @@ class Agent:
             }
         )
         fertig = self.settings.media_dir / f"{basis}-k{nummer}.png"
-        groesse = STORY if self.settings.posting.bildformat == "story" else FEED
+        groesse = self._bildformat
 
         if roh is None:
             return render_post_image(spec, fertig, groesse=groesse)
         try:
             lege_hook_auf(
-                roh, fertig, text=karte.text, spec=spec, handle=f"@{identity.handle}"
+                roh,
+                fertig,
+                text=karte.text,
+                spec=spec,
+                handle=f"@{identity.handle}",
+                groesse=groesse,
             )
         except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
             log.warning("Schrift auf Karte %s fehlgeschlagen: %s", nummer, exc)
@@ -1562,6 +1581,7 @@ class Agent:
                     text=draft.bildtext,
                     spec=draft.visual,
                     handle=f"@{identity.handle}",
+                    groesse=self._bildformat,
                 )
             except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
                 log.warning("Hook auf echtem Bild fehlgeschlagen: %s", exc)
@@ -1617,6 +1637,7 @@ class Agent:
                 text=draft.bildtext,
                 spec=draft.visual,
                 handle=f"@{identity.handle}",
+                groesse=self._bildformat,
             )
         except Exception as exc:  # noqa: BLE001 - lieber ohne Schrift als gar nicht
             log.warning("Hook konnte nicht aufgelegt werden: %s", exc)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from insta_agent.config import BildConfig, EconomyConfig, LLMConfig, PostingConfig, Settings
 from insta_agent.imaging.generator import (
@@ -540,24 +540,24 @@ def test_der_formatwunsch_wird_zuerst_gestellt(tmp_path):
 @pytest.mark.parametrize("masse", [(1024, 1024), (1920, 1080), (792, 1408), (1080, 1920)])
 def test_jedes_seitenverhaeltnis_wird_beschnitten_statt_gezerrt(tmp_path, masse):
     """Nicht jeder Anbieter kann 9:16. Zerren sieht man sofort."""
-    from insta_agent.imaging.overlay import _auf_hochformat
+    from insta_agent.imaging.overlay import _auf_format
 
     quelle = tmp_path / "roh.png"
     Image.new("RGB", masse, (40, 40, 40)).save(quelle)
 
-    assert _auf_hochformat(Image.open(quelle)).size == (1080, 1920)
+    assert _auf_format(Image.open(quelle), (1080, 1920)).size == (1080, 1920)
 
 
 def test_beim_beschneiden_bleibt_der_bildausschnitt_unverzerrt(tmp_path):
     """Ein Kreis muss ein Kreis bleiben."""
-    from insta_agent.imaging.overlay import _auf_hochformat
+    from insta_agent.imaging.overlay import _auf_format
 
     quadrat = Image.new("RGB", (1024, 1024), (0, 0, 0))
     from PIL import ImageDraw
 
     ImageDraw.Draw(quadrat).ellipse([(312, 312), (712, 712)], fill=(255, 255, 255))
 
-    zugeschnitten = _auf_hochformat(quadrat)
+    zugeschnitten = _auf_format(quadrat, (1080, 1920))
     # Der Kreis wird um denselben Faktor skaliert - Breite und Hoehe der
     # weissen Flaeche muessen im selben Verhaeltnis zueinander stehen.
     weiss = zugeschnitten.convert("L").point(lambda w: 255 if w > 128 else 0)
@@ -985,3 +985,69 @@ def test_die_schrift_bekommt_eine_kontur(tmp_path):
     streifen = bild.crop((0, oben, bild.width, oben + int(bild.height * 0.05)))
     # Ohne Kontur gäbe es hier gar keine dunklen Pixel.
     assert sum(1 for p in streifen.getdata() if sum(p) < 200) > 500
+
+
+# --- Das Format, in dem der Beitrag wirklich erscheint ---------------------
+
+
+def test_der_hook_landet_im_eingestellten_format(tmp_path):
+    """Der Fehler, der die Beitraege unscharf gemacht hat.
+
+    `bildformat` stand auf "feed", jedes Bild landete trotzdem auf 9:16.
+    Zweierlei ging dabei schief: Instagram zeigt im Feed hoechstens 4:5
+    und schneidet den Rest ab - unter anderem den Hook. Und eine
+    Querformataufnahme muss fuer 1920 Pixel Hoehe hochgerechnet werden,
+    fuer 1350 dagegen herunter. Hochgerechnet ist unscharf.
+    """
+    from insta_agent.imaging import FEED, lege_hook_auf
+    from insta_agent.models import VisualSpec
+
+    quelle = tmp_path / "roh.png"
+    Image.new("RGB", (2400, 1565), (60, 60, 60)).save(quelle)
+
+    spec = VisualSpec(
+        headline="Tief unten",
+        subline="",
+        body_lines=[],
+        background_hex="#111318",
+        text_hex="#F7F5EF",
+        accent_hex="#E4572E",
+        footer="@x",
+    )
+    ziel = lege_hook_auf(
+        quelle, tmp_path / "fertig.png", text="Tief unten", spec=spec, groesse=FEED
+    )
+    assert Image.open(ziel).size == FEED
+
+
+def test_ein_verkleinertes_bild_wird_nachgeschaerft(tmp_path):
+    """Jede Umrechnung mittelt Bildpunkte, und Mitteln ist Unschaerfe.
+
+    Nachschaerfen ist der Handgriff, den jedes Bildbearbeitungsprogramm
+    nach dem Aendern der Groesse vorschlaegt - und der Grund, warum ein
+    Beitragsbild nach dem Zuschnitt noch aussieht wie die Aufnahme.
+    """
+    import random
+
+    from insta_agent.imaging.overlay import _nachschaerfen
+    from insta_agent.imaging.schaerfe import schaerfewert
+
+    random.seed(5)
+    gross = Image.new("L", (400, 500))
+    gross.putdata([random.randint(0, 255) for _ in range(400 * 500)])
+    gross = gross.convert("RGB").filter(ImageFilter.GaussianBlur(1.2))
+
+    ohne = tmp_path / "ohne.png"
+    mit = tmp_path / "mit.png"
+    gross.save(ohne)
+    _nachschaerfen(gross, 0.8).save(mit)
+
+    assert schaerfewert(mit, groesse=(400, 500)) > schaerfewert(ohne, groesse=(400, 500))
+
+
+def test_ohne_groessenaenderung_wird_nicht_nachgeschaerft():
+    """Ein Bild, das nicht skaliert wurde, hat nichts verloren."""
+    from insta_agent.imaging.overlay import _nachschaerfen
+
+    bild = Image.new("RGB", (100, 100), (30, 30, 30))
+    assert _nachschaerfen(bild, 1.0) is bild
