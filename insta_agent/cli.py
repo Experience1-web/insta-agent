@@ -981,13 +981,19 @@ def instagram(config: Path = typer.Option(None)) -> None:
             "  developers.facebook.com -> deine App -> Einstellungen -> Allgemein\n\n"
             "[bold]Zugriffsschluessel[/bold]\n"
             "  developers.facebook.com/tools/explorer\n"
-            "  App auswaehlen, diese Berechtigungen anhaken:\n"
-            "    instagram_basic\n"
-            "    instagram_content_publish\n"
-            "    instagram_manage_insights\n"
-            "    pages_show_list\n"
-            "    pages_read_engagement\n"
-            "  dann auf 'Generate Access Token' und den Text kopieren.\n\n"
+            "  1. Oben rechts bei 'Meta App' deine App waehlen\n"
+            "  2. Darunter bei 'User or Page': [bold]User Token[/bold]\n"
+            "  3. Darunter die Liste [bold]Permissions[/bold]: ins Suchfeld\n"
+            "     tippen und je einen Haken setzen bei\n"
+            "       instagram_basic\n"
+            "       instagram_content_publish\n"
+            "       instagram_manage_insights\n"
+            "       pages_show_list\n"
+            "       pages_read_engagement\n"
+            "  4. 'Generate Access Token' druecken\n"
+            "  5. Im Fenster von Facebook [bold]alles erlauben[/bold] und die\n"
+            "     Seite mit dem Instagram-Konto ankreuzen\n"
+            "  6. Den langen Text oben kopieren\n\n"
             "[dim]instagram_manage_insights ist die, ohne die es keine\n"
             "Reichweite und keine Speicherungen gibt - dann lernt er nichts\n"
             "aus seinen eigenen Beitraegen.[/dim]\n\n"
@@ -1023,6 +1029,27 @@ def instagram(config: Path = typer.Option(None)) -> None:
             title="[green]Verbunden[/green]",
         )
     )
+    if fehlend := zugang.fehlend:
+        from .instagram.einrichten import NOETIGE_RECHTE
+
+        console.print(
+            Panel(
+                "Diese Berechtigungen hat der Schluessel [bold]nicht[/bold]:\n\n"
+                + "\n".join(f"  {r}  -  {NOETIGE_RECHTE[r]}" for r in fehlend)
+                + "\n\nMeta beschwert sich darueber nicht - es liefert die Felder\n"
+                "einfach nicht. Du merkst es sonst erst an leeren Kennzahlen.\n\n"
+                "So holst du sie nach:\n"
+                "  developers.facebook.com/tools/explorer\n"
+                "  App waehlen, bei 'Permissions' den fehlenden Namen ins\n"
+                "  Suchfeld tippen, Haken setzen, 'Generate Access Token',\n"
+                "  im Facebook-Fenster alles erlauben - und diesen Befehl\n"
+                "  noch einmal laufen lassen.",
+                title="[yellow]Achtung: es fehlt etwas[/yellow]",
+            )
+        )
+    else:
+        console.print("\n[green]Alle noetigen Berechtigungen sind da.[/green]")
+
     console.print(
         "\n[dim]Es fehlt noch ein oeffentlicher Platz fuer die Bilder -\n"
         "Instagram holt sie sich von einer Adresse im Netz.[/dim]"

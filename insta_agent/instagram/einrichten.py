@@ -30,6 +30,18 @@ from .client import GRAPH_BASE
 log = logging.getLogger(__name__)
 
 
+# Was der Agent braucht - und wozu. Die Reihenfolge ist die der
+# Wichtigkeit: Ohne die ersten beiden kann er nichts, ohne die dritte
+# lernt er nichts.
+NOETIGE_RECHTE = {
+    "instagram_basic": "das Konto überhaupt sehen",
+    "instagram_content_publish": "Beiträge veröffentlichen",
+    "instagram_manage_insights": "Reichweite und Speicherungen lesen",
+    "pages_show_list": "die verknüpfte Facebook-Seite finden",
+    "pages_read_engagement": "die Seite auslesen",
+}
+
+
 @dataclass(slots=True)
 class Zugang:
     """Alles, was der Agent zum Veröffentlichen braucht."""
@@ -39,6 +51,18 @@ class Zugang:
     seiten_name: str
     handle: str
     follower: int
+    erteilt: tuple[str, ...] = ()
+    """Welche Berechtigungen der Token wirklich hat."""
+
+    @property
+    def fehlend(self) -> tuple[str, ...]:
+        """Was fehlt. Leer heißt: alles da.
+
+        Wichtig, weil Meta fehlende Rechte nicht meldet, sondern die
+        betroffenen Felder einfach weglässt. Ohne diese Gegenprobe merkt
+        man es erst Wochen später an leeren Kennzahlen.
+        """
+        return tuple(r for r in NOETIGE_RECHTE if r not in self.erteilt)
 
 
 class Einrichtungsfehler(RuntimeError):
@@ -97,6 +121,15 @@ def richte_ein(kurzer_token: str, app_id: str, app_secret: str) -> Zugang:
             )
         log.info("Langlebiger Nutzer-Token erhalten")
 
+        # 1b. Nachsehen, was dieser Token überhaupt darf. Meta beschwert
+        # sich nicht über fehlende Rechte - es liefert die Felder dann
+        # einfach nicht.
+        erteilt = tuple(
+            str(e["permission"])
+            for e in (_hole(client, "me/permissions", access_token=lang).get("data") or [])
+            if e.get("status") == "granted"
+        )
+
         # 2. Welche Seiten verwaltet dieser Mensch?
         seiten = _hole(client, "me/accounts", access_token=lang).get("data") or []
         if not seiten:
@@ -134,6 +167,7 @@ def richte_ein(kurzer_token: str, app_id: str, app_secret: str) -> Zugang:
                 seiten_name=str(seite.get("name", "")),
                 handle=str(konto.get("username", "")),
                 follower=int(konto.get("followers_count", 0)),
+                erteilt=erteilt,
             )
 
     namen = ", ".join(str(s.get("name", "?")) for s in seiten)
