@@ -19,8 +19,23 @@ from insta_agent.instagram.einrichten import (
 SEITE = {"id": "111", "name": "Zahl gegen Bauchgefühl", "access_token": "seiten-token"}
 
 
+# Die Berechtigungen werden bei jedem Lauf abgefragt. Wo ein Test nichts
+# anderes sagt, sind sie vollstaendig - hier geht es um die Seiten, nicht
+# um die Rechte. Dass fehlende Rechte auffallen, prueft test_berechtigungen.
+ALLE_RECHTE = {
+    "data": [
+        {"permission": "instagram_basic", "status": "granted"},
+        {"permission": "instagram_content_publish", "status": "granted"},
+        {"permission": "instagram_manage_insights", "status": "granted"},
+        {"permission": "pages_show_list", "status": "granted"},
+        {"permission": "pages_read_engagement", "status": "granted"},
+    ]
+}
+
+
 def _antwortet(**routen):
     """Baut einen Transport, der je nach Pfad antwortet."""
+    routen.setdefault("me/permissions", ALLE_RECHTE)
 
     def handler(request: httpx.Request) -> httpx.Response:
         for teil, antwort in routen.items():
