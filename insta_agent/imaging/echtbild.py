@@ -329,6 +329,28 @@ def guete(breite: int, hoehe: int) -> float:
     return form * (0.75 + 0.25 * groesse)
 
 
+def rangfaktor(platz: int) -> float:
+    """Wie stark ein Treffer dadurch verliert, dass er weiter hinten steht.
+
+    Der Fehler, den das behebt, war unsichtbar, bis man das Ergebnis las:
+    Bei "deep sea creature" gewann eine Aufnahme mit dem Titel "2018 NYEC
+    in Dalian (Self-participation; Deep Sea Legend following Fireworks)" -
+    ein Feuerwerk, das zufaellig "Deep Sea" im Namen hat.
+
+    Der Grund: Aus zwoelf Treffern wurde der mit der besten Form genommen,
+    egal an welcher Stelle er stand. Damit war die Rangfolge der
+    Suchmaschine weggeworfen - und die ist das Einzige, was ueberhaupt
+    etwas darueber weiss, ob ein Bild zum Thema gehoert. Form und
+    Aufloesung wissen das nicht.
+
+    Die Steigung ist ausprobiert, nicht geraten. Bei 0,15 gilt beides:
+    Unter aehnlich brauchbaren Bildern gewinnt das vorderste, weil es
+    wahrscheinlicher zum Thema gehoert. Eine unbrauchbare Tafel auf Platz
+    eins verliert trotzdem noch gegen ein gutes Foto auf Platz acht.
+    """
+    return 1.0 / (1.0 + 0.15 * max(0, platz))
+
+
 def _taugt_der_titel(titel: str) -> bool:
     klein = titel.casefold()
     return not any(schrott in klein for schrott in UNBRAUCHBAR)
@@ -553,11 +575,18 @@ def suche_bild(
                 kandidaten = _frage_openverse(begriff, client, treffer)
             if not kandidaten:
                 continue
-            beste = max(kandidaten, key=lambda b: guete(b.breite, b.hoehe))
+            # Rang mal Eignung: Das Archiv weiss, was zum Thema gehoert,
+            # wir wissen, was sich als Beitragsbild macht. Beides allein
+            # geht daneben.
+            platz, beste = max(
+                enumerate(kandidaten),
+                key=lambda p: guete(p[1].breite, p[1].hoehe) * rangfaktor(p[0]),
+            )
             log.info(
-                "Bildsuche %r: %s Treffer, genommen %s (%sx%s)",
+                "Bildsuche %r: %s Treffer, genommen Platz %s: %s (%sx%s)",
                 begriff,
                 len(kandidaten),
+                platz + 1,
                 beste.seite,
                 beste.breite,
                 beste.hoehe,
@@ -684,4 +713,5 @@ __all__ = [
     "Bilanz",
     "kennung",
     "guete",
+    "rangfaktor",
 ]

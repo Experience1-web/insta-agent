@@ -744,3 +744,90 @@ def test_die_auswahl_nimmt_wirklich_das_geeignetste():
 
     assert gefunden is not None
     assert "foto" in gefunden.url, "Die Tafel hat gewonnen, obwohl sie unbrauchbar ist"
+
+
+# --- Rang und Eignung zusammen ---------------------------------------------
+
+
+def test_der_rang_der_suchmaschine_zaehlt_mit():
+    """Der Fehler, den der dritte Durchlauf gezeigt hat.
+
+    Bei "deep sea creature" gewann eine Aufnahme mit dem Titel "2018 NYEC
+    in Dalian (Self-participation; Deep Sea Legend following Fireworks)" -
+    ein Feuerwerk, das zufaellig "Deep Sea" im Namen hat.
+
+    Der Grund: Aus zwoelf Treffern wurde der mit der besten Form genommen,
+    egal an welcher Stelle er stand. Damit war die Rangfolge weggeworfen -
+    und die ist das Einzige, was ueberhaupt etwas darueber weiss, ob ein
+    Bild zum Thema gehoert. Form und Aufloesung wissen das nicht.
+    """
+    from insta_agent.imaging.echtbild import rangfaktor
+
+    assert rangfaktor(0) == 1.0
+    # Monoton fallend, ohne Ausreisser.
+    werte = [rangfaktor(i) for i in range(12)]
+    assert werte == sorted(werte, reverse=True)
+    # Und nicht so steil, dass Platz zwei schon chancenlos waere.
+    assert werte[1] > 0.8
+
+
+def test_ein_gutes_foto_weiter_hinten_schlaegt_eine_tafel_vorn():
+    """Sonst waere die Rangfolge zur Alleinherrscherin geworden.
+
+    Das waere genauso falsch: Platz eins kann ein hochkant gescanntes
+    Blatt sein, aus dem sich kein Beitragsbild machen laesst.
+    """
+    from insta_agent.imaging.echtbild import guete, rangfaktor
+
+    tafel_vorn = guete(2400, 5317) * rangfaktor(0)
+    foto_hinten = guete(2400, 3000) * rangfaktor(7)
+    assert foto_hinten > tafel_vorn
+
+
+def test_unter_aehnlichen_gewinnt_das_vordere():
+    """Weil es wahrscheinlicher zum Thema gehoert."""
+    from insta_agent.imaging.echtbild import guete, rangfaktor
+
+    vorn = guete(2400, 3000) * rangfaktor(0)
+    hinten = guete(2600, 3250) * rangfaktor(2)
+    assert vorn > hinten, "Ein paar Pixel mehr schlagen die Fundstelle"
+
+
+def test_die_auswahl_beachtet_die_reihenfolge_wirklich():
+    """Nicht nur die Formel - auch der Weg dorthin."""
+    from insta_agent.imaging.echtbild import suche_bild
+
+    def seite(name: str, breite: int, hoehe: int) -> dict:
+        return {
+            "title": f"File:{name}.jpg",
+            "imageinfo": [
+                {
+                    "thumburl": f"https://x.example/{name}.jpg",
+                    "thumbwidth": breite,
+                    "thumbheight": hoehe,
+                    "extmetadata": {"LicenseShortName": {"value": "CC0"}},
+                }
+            ],
+        }
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        if "openverse" in str(anfrage.url):
+            return httpx.Response(200, json={"results": []})
+        # Platz 1 ist brauchbar, Platz 2 hat nur etwas mehr Flaeche.
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": {
+                        "1": seite("treffend", 2400, 3000),
+                        "2": seite("danebenliegend", 2600, 3250),
+                    }
+                }
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        gefunden = suche_bild("deep sea creature", client=client)
+
+    assert gefunden is not None
+    assert "treffend" in gefunden.url, "Die Fundstelle wurde wieder weggeworfen"
