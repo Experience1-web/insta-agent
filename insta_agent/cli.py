@@ -1057,6 +1057,16 @@ def instagram(config: Path = typer.Option(None)) -> None:
     )
 
     app_id = typer.prompt("App-ID").strip()
+
+    # Die Adresse erst jetzt nennen, dafuer vollstaendig: Ohne die
+    # App-Nummer laesst sie sich nicht hinschreiben, und "geh in die
+    # Einstellungen" ist bei Metas Menue keine Wegbeschreibung.
+    console.print(
+        f"\n[dim]Das App-Geheimnis steht hier - Adresse kopieren und oeffnen:[/dim]\n"
+        f"[bold]https://developers.facebook.com/apps/{app_id}/settings/basic/[/bold]\n"
+        "[dim]Dort in der Zeile 'App-Geheimnis' auf  Anzeigen  klicken.\n"
+        "Facebook fragt dann nach deinem Passwort.[/dim]"
+    )
     app_secret = _frag_schluessel("App-Geheimnis")
     kurzer = _frag_schluessel("Zugriffsschluessel aus dem Explorer")
 
