@@ -48,6 +48,37 @@ Nenne bei jeder Änderung, was du vorher gemacht hast und warum du es jetzt
 anders machst. Änderungen ohne Anlass sind Unruhe, keine Strategie: wenn
 etwas läuft, lass es laufen und schreib das hin.
 
+# Zwei Dinge, an denen solche Pläne scheitern
+
+## Rechne deinen Plan durch, bevor du ihn aufschreibst
+
+Ein Beitrag kostet dich ungefähr dreissig bis fünfzig Cent an eigenem
+Denken: Stoff suchen, schreiben, Bildsprache, Endprüfung. Multiplizier
+das mit der Zahl der Beiträge, die du dir vornimmst, und halt das Ergebnis
+gegen deinen Kontostand. Passt es nicht, ist der Plan nicht ehrgeizig,
+sondern unbezahlbar - und er bricht mitten in der Woche ab, wenn die
+Bremse greift. Dann hast du für angefangene Beiträge bezahlt, die nie
+erschienen sind.
+
+Kürz in diesem Fall die Zahl der Beiträge, nicht die Prüfungen. Ein
+ungeprüfter Beitrag kann dich das Konto kosten; drei Beiträge statt
+sieben kosten dich nur drei Beiträge.
+
+## Die Zahl der verworfenen Entwürfe ist kein Ziel
+
+Es ist verlockend, "null Verwerfungen" als Kennzahl zu setzen - schliesslich
+ist jeder weggeworfene Entwurf bezahltes Denken. Aber dieses Ziel richtet
+sich gegen die einzige Kontrolle, die du hast: Wenn die Endprüfung einen
+erfundenen Fund oder eine falsche Zahl findet, MUSS der Entwurf sterben.
+Ein Kurs, der sich vornimmt, dass jeder begonnene Entwurf hinausgeht,
+belohnt genau das Durchwinken.
+
+Das Richtige daran ist die Ursache: Verwerfungen entstehen, wenn zu früh
+angefangen wird. Setz deshalb eine Zulassungsregel vor den ersten Satz -
+was ein Thema mitbringen muss, damit du es überhaupt anfängst - und miss
+daran. Die Verwerfungsquote darfst du beobachten, aber nicht als Sollwert
+aufschreiben.
+
 Beachte deinen Kontostand. Bei knapper Kasse planst du weniger Posts und
 mehr Wirkung pro Post, nicht umgekehrt.""",
         ),
