@@ -320,3 +320,92 @@ def test_die_probe_ueberspringt_alte_entwuerfe_ohne_karten(
     ergebnis = lauf.invoke(app, ["karussellprobe"])
     assert ergebnis.exit_code == 0, ergebnis.output
     assert "Bilder gebaut" in ergebnis.output, "Der alte Entwurf wurde uebersprungen"
+
+
+def test_die_probe_geht_denselben_weg_wie_der_zyklus(
+    lauf, kein_modell, tmp_path, monkeypatch
+):
+    """Der Fehler, den der Betreiber zweimal hintereinander gesehen hat.
+
+    Die Probe rief die Suche direkt auf und ging an der Fotopruefung
+    vorbei. Sie zeigte damit ein Bild, das der Agent im Zyklus gar nicht
+    genommen haette - "Humpback anglerfish.png", eine Zeichnung auf
+    Weiss. Eine Probe, die etwas anderes prueft als den Ernstfall, ist
+    schlimmer als keine.
+    """
+    import io
+
+    from PIL import Image, ImageDraw
+
+    def als_png(bild) -> bytes:
+        puffer = io.BytesIO()
+        bild.save(puffer, format="PNG")
+        return puffer.getvalue()
+
+    zeichnung = Image.new("RGB", (900, 800), (255, 255, 255))
+    ImageDraw.Draw(zeichnung).ellipse([300, 300, 600, 550], fill=(60, 60, 70))
+
+    import random
+
+    zufall = random.Random(5)
+    foto = Image.new("RGB", (900, 1100))
+    punkte = foto.load()
+    for y in range(1100):
+        for x in range(900):
+            punkte[x, y] = tuple(
+                max(0, min(255, k + zufall.randint(-20, 20))) for k in (30, 60, 90)
+            )
+
+    def seite(name: str, breite: int, hoehe: int) -> dict:
+        return {
+            "title": f"File:{name}.png",
+            "imageinfo": [
+                {
+                    "thumburl": f"https://x.example/{name}.png",
+                    "thumbwidth": breite,
+                    "thumbheight": hoehe,
+                    "extmetadata": {"LicenseShortName": {"value": "CC0"}},
+                }
+            ],
+        }
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        ziel = str(anfrage.url)
+        if "openverse" in ziel:
+            return httpx.Response(200, json={"results": []})
+        if "anglerfish" in ziel:
+            return httpx.Response(200, content=als_png(zeichnung))
+        if "seeteufel" in ziel:
+            return httpx.Response(200, content=als_png(foto))
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": {
+                        "1": seite("anglerfish", 2400, 2248),
+                        "2": seite("seeteufel", 2400, 2933),
+                    }
+                }
+            },
+        )
+
+    echtes = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda *a, **k: echtes(
+            *a,
+            transport=httpx.MockTransport(antworte),
+            **{key: wert for key, wert in k.items() if key != "transport"},
+        ),
+    )
+    monkeypatch.setenv("INSTA_AGENT_MEDIA", str(tmp_path))
+
+    ergebnis = lauf.invoke(app, ["bildsuche", "deep sea creature"])
+
+    assert ergebnis.exit_code == 0, ergebnis.output
+    # Die Zeichnung wird genannt, nicht verschwiegen.
+    assert "Verworfen auf dem Weg dorthin" in ergebnis.output
+    assert "anglerfish" in ergebnis.output
+    # Und genommen wird das Foto dahinter.
+    assert "seeteufel" in ergebnis.output

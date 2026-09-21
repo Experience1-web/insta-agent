@@ -727,7 +727,12 @@ def hole_bild(
 
 
 def finde_und_hole(
-    suchwort: str, ziel: Path, *, client: httpx.Client | None = None, versuche: int = 4
+    suchwort: str,
+    ziel: Path,
+    *,
+    client: httpx.Client | None = None,
+    versuche: int = 4,
+    beobachter=None,
 ):
     """Suchen, laden und nachsehen, ob es wirklich eine Fotografie ist.
 
@@ -738,6 +743,10 @@ def finde_und_hole(
     es wurde gemalt; jetzt kommt der naechste Treffer dran.
 
     None heisst: Von den ersten paar Treffern war keiner brauchbar.
+
+    `beobachter` wird fuer jeden Versuch aufgerufen, mit dem Bild, ob es
+    taugte und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
+    die Suche tut, will auch sehen, was sie verworfen hat.
     """
     from .fotoprobe import wirkt_wie_foto
 
@@ -745,13 +754,19 @@ def finde_und_hole(
     for bild in kandidaten[: max(1, versuche)]:
         geladen = hole_bild(bild, ziel, client=client)
         if geladen is None:
+            if beobachter:
+                beobachter(bild, False, bild.grund or "nicht ladbar")
             continue
         taugt, grund = wirkt_wie_foto(ziel)
         if not taugt:
             log.info("Verworfen (%s): %s", bild.seite, grund)
             bild.grund = grund
+            if beobachter:
+                beobachter(bild, False, grund)
             continue
         log.info("Echtes Bild gefunden: %s (%s)", geladen.seite, geladen.lizenz)
+        if beobachter:
+            beobachter(bild, True, "")
         return geladen
     return None
 

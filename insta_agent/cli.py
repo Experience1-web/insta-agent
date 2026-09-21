@@ -1331,7 +1331,7 @@ def bildsuche(
     besser traegt als "Muenzfund", probiert hier beides und sieht in
     zwei Sekunden, was herauskommt.
     """
-    from .imaging.echtbild import suchbegriffe, suche_bild
+    from .imaging.echtbild import finde_und_hole, suchbegriffe
     from .imaging.panorama import ist_panorama, stueckzahl
 
     settings = load_settings(config)
@@ -1365,37 +1365,39 @@ def bildsuche(
                 console.print(f"      Openverse: {bo}")
 
     console.print("\n[dim]Suche laeuft ...[/dim]")
-    gefunden = suche_bild(suchwort)
-    if gefunden is None:
-        console.print(
-            Panel(
-                "Zu diesem Thema gibt es in beiden Archiven nichts frei\n"
-                "Verwendbares - jedenfalls nichts Grosses genug.\n\n"
-                "Im Zyklus wuerde der Agent hier ein Bild malen lassen.\n"
-                "Probier ein allgemeineres Wort, oder Englisch statt Deutsch.",
-                title="[yellow]Nichts gefunden[/yellow]",
-            )
-        )
-        raise typer.Exit(1)
 
+    # Genau derselbe Weg wie im Zyklus, einschliesslich der Fotopruefung.
+    # Vorher rief die Probe die Suche direkt auf und ging daran vorbei -
+    # dann zeigt sie ein Bild, das der Agent gar nicht genommen haette.
     ziel = ziel_ordner / "suchprobe.jpg"
-    from .imaging.echtbild import hole_bild
+    verworfen: list[tuple[str, str]] = []
 
-    geladen = hole_bild(gefunden, ziel)
+    def mitschreiben(bild, taugte: bool, grund: str) -> None:
+        if not taugte:
+            verworfen.append((bild.seite, grund))
+
+    geladen = finde_und_hole(suchwort, ziel, beobachter=mitschreiben)
+
+    if verworfen:
+        console.print("\n[dim]Verworfen auf dem Weg dorthin:[/dim]")
+        for seite, grund in verworfen:
+            kurz = seite.rsplit("/", 1)[-1][:56]
+            console.print(f"  [dim]{kurz}[/dim]  [yellow]{grund}[/yellow]")
+
     if geladen is None:
         console.print(
             Panel(
-                f"Gefunden wurde: {gefunden.seite}\n"
-                f"Adresse:        {gefunden.url[:70]}\n\n"
-                f"Woran es lag:   [red]{gefunden.grund}[/red]\n\n"
-                "[dim]Manche Anbieter lassen fremde Anfragen nicht zu. Der\n"
-                "Agent versucht dann die naechste Adresse desselben Bildes -\n"
-                "wenn hier mehrere Gruende stehen, hat keine davon gereicht.[/dim]",
-                title="[red]Gefunden, aber nicht ladbar[/red]",
+                "Aus den ersten Treffern ist nichts geworden - entweder gab\n"
+                "es nichts frei Verwendbares in brauchbarer Groesse, oder\n"
+                "alles, was da war, hat die Pruefung oben verworfen.\n\n"
+                "Im Zyklus wuerde der Agent hier ein Bild malen lassen.\n"
+                "Probier ein allgemeineres Wort, oder Englisch statt Deutsch.",
+                title="[yellow]Nichts Brauchbares gefunden[/yellow]",
             )
         )
         raise typer.Exit(1)
 
+    gefunden = geladen
     breite, hoehe = gefunden.breite, gefunden.hoehe
     verhaeltnis = breite / hoehe if hoehe else 0
     pano = ist_panorama(ziel)
