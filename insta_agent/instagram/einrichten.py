@@ -41,6 +41,16 @@ NOETIGE_RECHTE = {
     "pages_read_engagement": "die Seite auslesen",
 }
 
+# Meta hat die Instagram-Berechtigungen umbenannt, als die Anmeldung
+# über Instagram selbst dazukam. Beide Familien gibt es weiter, je
+# nachdem wie die App angelegt wurde - und sie tun dasselbe. Wer die
+# neuen Namen hat, soll hier nicht hören, ihm fehle etwas.
+GLEICHWERTIG = {
+    "instagram_basic": ("instagram_business_basic",),
+    "instagram_content_publish": ("instagram_business_content_publish",),
+    "instagram_manage_insights": ("instagram_business_manage_insights",),
+}
+
 
 @dataclass(slots=True)
 class Zugang:
@@ -62,7 +72,13 @@ class Zugang:
         betroffenen Felder einfach weglässt. Ohne diese Gegenprobe merkt
         man es erst Wochen später an leeren Kennzahlen.
         """
-        return tuple(r for r in NOETIGE_RECHTE if r not in self.erteilt)
+        vorhanden = set(self.erteilt)
+        return tuple(
+            recht
+            for recht in NOETIGE_RECHTE
+            if recht not in vorhanden
+            and not vorhanden.intersection(GLEICHWERTIG.get(recht, ()))
+        )
 
 
 class Einrichtungsfehler(RuntimeError):

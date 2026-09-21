@@ -159,3 +159,38 @@ def test_ein_abgelaufener_token_wird_erklaert(monkeypatch):
 
 def test_ohne_angabe_gilt_nichts_als_erteilt():
     assert len(Zugang("1", "t", "S", "h", 0).fehlend) == len(NOETIGE_RECHTE)
+
+
+def test_die_neuen_namen_gelten_genauso(meta):
+    """Meta hat umbenannt, als die Anmeldung über Instagram dazukam.
+
+    Wer eine App der neueren Art hat, soll hier nicht hören, ihm fehle
+    etwas - die Berechtigungen tun dasselbe.
+    """
+    meta(
+        [
+            "instagram_business_basic",
+            "instagram_business_content_publish",
+            "instagram_business_manage_insights",
+            "pages_show_list",
+            "pages_read_engagement",
+        ]
+    )
+
+    zugang = richte_ein("kurz", "app", "geheim")
+
+    assert zugang.fehlend == ()
+
+
+def test_gemischte_namen_gehen_auch(meta):
+    meta(
+        [
+            "instagram_basic",
+            "instagram_business_content_publish",
+            "instagram_manage_insights",
+            "pages_show_list",
+            "pages_read_engagement",
+        ]
+    )
+
+    assert richte_ein("kurz", "app", "geheim").fehlend == ()
