@@ -831,3 +831,122 @@ def test_die_auswahl_beachtet_die_reihenfolge_wirklich():
 
     assert gefunden is not None
     assert "treffend" in gefunden.url, "Die Fundstelle wurde wieder weggeworfen"
+
+
+# --- Weitersuchen, wenn der erste Treffer eine Zeichnung ist ---------------
+
+
+def _seite(name: str, breite: int, hoehe: int) -> dict:
+    return {
+        "title": f"File:{name}.png",
+        "imageinfo": [
+            {
+                "thumburl": f"https://x.example/{name}.png",
+                "thumbwidth": breite,
+                "thumbheight": hoehe,
+                "extmetadata": {"LicenseShortName": {"value": "CC0"}},
+            }
+        ],
+    }
+
+
+def _als_bytes(bild) -> bytes:
+    import io
+
+    puffer = io.BytesIO()
+    bild.save(puffer, format="PNG")
+    return puffer.getvalue()
+
+
+def test_eine_zeichnung_fuehrt_nicht_zum_aufgeben(tmp_path):
+    """Der Fall aus dem Betrieb, ein Schritt weiter gedacht.
+
+    "Humpback anglerfish.png" war frei, gross, gut geschnitten und
+    trotzdem eine Zeichnung auf Weiss. Frueher war damit Schluss und es
+    wurde gemalt - obwohl auf Platz zwei ein Foto lag.
+    """
+    import random
+
+    from PIL import Image, ImageDraw
+
+    from insta_agent.imaging.echtbild import finde_und_hole
+
+    zeichnung = Image.new("RGB", (900, 800), (255, 255, 255))
+    ImageDraw.Draw(zeichnung).ellipse([300, 300, 600, 550], fill=(60, 60, 70))
+
+    zufall = random.Random(3)
+    foto = Image.new("RGB", (900, 1100))
+    punkte = foto.load()
+    for y in range(1100):
+        for x in range(900):
+            punkte[x, y] = tuple(
+                max(0, min(255, k + zufall.randint(-20, 20))) for k in (30, 60, 90)
+            )
+
+    geholt: list[str] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        ziel = str(anfrage.url)
+        if "openverse" in ziel:
+            return httpx.Response(200, json={"results": []})
+        if "zeichnung" in ziel:
+            geholt.append("zeichnung")
+            return httpx.Response(200, content=_als_bytes(zeichnung))
+        if "foto" in ziel:
+            geholt.append("foto")
+            return httpx.Response(200, content=_als_bytes(foto))
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": {
+                        "1": _seite("zeichnung", 2400, 2133),
+                        "2": _seite("foto", 2400, 2933),
+                    }
+                }
+            },
+        )
+
+    ziel = tmp_path / "ergebnis.jpg"
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        gefunden = finde_und_hole("deep sea creature", ziel, client=client)
+
+    assert gefunden is not None, "Es wurde aufgegeben, statt weiterzusuchen"
+    assert geholt == ["zeichnung", "foto"], geholt
+    assert "foto" in gefunden.url
+
+
+def test_sind_alle_treffer_zeichnungen_wird_gemalt(tmp_path):
+    """Dann ist Schluss - aber erst dann, und nicht nach dem ersten."""
+    from PIL import Image, ImageDraw
+
+    from insta_agent.imaging.echtbild import finde_und_hole
+
+    zeichnung = Image.new("RGB", (900, 800), (255, 255, 255))
+    ImageDraw.Draw(zeichnung).ellipse([300, 300, 600, 550], fill=(60, 60, 70))
+
+    geholt: list[str] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        ziel = str(anfrage.url)
+        if "openverse" in ziel:
+            return httpx.Response(200, json={"results": []})
+        if ".png" in ziel and "api.php" not in ziel:
+            geholt.append(ziel)
+            return httpx.Response(200, content=_als_bytes(zeichnung))
+        return httpx.Response(
+            200,
+            json={
+                "query": {
+                    "pages": {
+                        str(i): _seite(f"z{i}", 2400, 2133) for i in range(1, 6)
+                    }
+                }
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        assert finde_und_hole("x", tmp_path / "e.jpg", client=client) is None
+
+    # Vier Versuche, nicht einer und nicht alle fuenf.
+    assert len(geholt) == 4, geholt

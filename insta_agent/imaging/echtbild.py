@@ -578,15 +578,17 @@ def suche_bild(
             # Rang mal Eignung: Das Archiv weiss, was zum Thema gehoert,
             # wir wissen, was sich als Beitragsbild macht. Beides allein
             # geht daneben.
-            platz, beste = max(
+            geordnet = sorted(
                 enumerate(kandidaten),
                 key=lambda p: guete(p[1].breite, p[1].hoehe) * rangfaktor(p[0]),
+                reverse=True,
             )
+            beste = geordnet[0][1]
             log.info(
                 "Bildsuche %r: %s Treffer, genommen Platz %s: %s (%sx%s)",
                 begriff,
                 len(kandidaten),
-                platz + 1,
+                geordnet[0][0] + 1,
                 beste.seite,
                 beste.breite,
                 beste.hoehe,
@@ -596,6 +598,39 @@ def suche_bild(
         if eigener:
             client.close()
     return None
+
+
+def suche_bilder(
+    suchwort: str, *, client: httpx.Client | None = None, treffer: int = 12
+) -> list[Fundbild]:
+    """Alle brauchbaren Treffer, das beste zuerst.
+
+    Gebraucht, weil sich erst am heruntergeladenen Bild feststellen
+    laesst, ob es eine Fotografie ist oder eine Zeichnung auf weissem
+    Grund. Ein einzelner Treffer waere dann eine Sackgasse: Faellt er
+    durch, wird gemalt, obwohl der naechste gut gewesen waere.
+    """
+    eigener = client is None
+    client = client or httpx.Client(timeout=GEDULD, follow_redirects=True)
+    try:
+        for begriff in suchbegriffe(suchwort):
+            kandidaten = _frage_commons(begriff, client, treffer)
+            if not kandidaten:
+                kandidaten = _frage_openverse(begriff, client, treffer)
+            if not kandidaten:
+                continue
+            return [
+                bild
+                for _platz, bild in sorted(
+                    enumerate(kandidaten),
+                    key=lambda p: guete(p[1].breite, p[1].hoehe) * rangfaktor(p[0]),
+                    reverse=True,
+                )
+            ]
+    finally:
+        if eigener:
+            client.close()
+    return []
 
 
 def _kopfzeilen(adresse: str) -> dict[str, str]:
@@ -691,15 +726,34 @@ def hole_bild(
     return None
 
 
-def finde_und_hole(suchwort: str, ziel: Path, *, client: httpx.Client | None = None):
-    """Beides in einem: suchen und laden. None heisst - es wird gemalt."""
-    gefunden = suche_bild(suchwort, client=client)
-    if gefunden is None:
-        return None
-    geladen = hole_bild(gefunden, ziel, client=client)
-    if geladen is not None:
+def finde_und_hole(
+    suchwort: str, ziel: Path, *, client: httpx.Client | None = None, versuche: int = 4
+):
+    """Suchen, laden und nachsehen, ob es wirklich eine Fotografie ist.
+
+    Der Reihe nach, denn erst am geladenen Bild zeigt sich, was es ist.
+    Bei "deep sea creature" gewann eine Datei namens "Humpback
+    anglerfish.png" - frei, gross, gut geschnitten und trotzdem eine
+    wissenschaftliche Zeichnung auf Weiss. Frueher war damit Schluss und
+    es wurde gemalt; jetzt kommt der naechste Treffer dran.
+
+    None heisst: Von den ersten paar Treffern war keiner brauchbar.
+    """
+    from .fotoprobe import wirkt_wie_foto
+
+    kandidaten = suche_bilder(suchwort, client=client)
+    for bild in kandidaten[: max(1, versuche)]:
+        geladen = hole_bild(bild, ziel, client=client)
+        if geladen is None:
+            continue
+        taugt, grund = wirkt_wie_foto(ziel)
+        if not taugt:
+            log.info("Verworfen (%s): %s", bild.seite, grund)
+            bild.grund = grund
+            continue
         log.info("Echtes Bild gefunden: %s (%s)", geladen.seite, geladen.lizenz)
-    return geladen
+        return geladen
+    return None
 
 
 __all__ = [
@@ -708,6 +762,7 @@ __all__ = [
     "finde_und_hole",
     "hole_bild",
     "suche_bild",
+    "suche_bilder",
     "suchbegriffe",
     "suchworte_fuer",
     "Bilanz",
