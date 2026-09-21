@@ -678,9 +678,10 @@ def bilder(
             "   Schluessel auf aistudio.google.com, ohne Zahlungsdaten.\n"
             "   Knappes Freikontingent pro Tag.\n\n"
             "[bold]4  Eigener Rechner[/bold]  [green]dauerhaft kostenlos[/green]\n"
-            "   Braucht eine NVIDIA-Karte ab 8 GB und ein laufendes\n"
-            "   Bildprogramm (AUTOMATIC1111, Forge, SD.Next) mit --api.\n"
-            "   Einmal aufbauen, danach keine Grenzen.\n\n"
+            "   Braucht eine NVIDIA-Karte und ein laufendes Bildprogramm\n"
+            "   (AUTOMATIC1111, Forge, SD.Next) mit --api. Ab 4 GB mit\n"
+            "   SD 1.5, ab 8 GB auch SDXL. Einmal aufbauen, danach keine\n"
+            "   Grenzen - aber der Aufbau ist der muehsamste von allen.\n\n"
             "[bold]5  Replicate[/bold]  wenige Cent je Bild\n"
             "   Kein Aufbau, keine Grenzen, beste Qualitaet.\n\n"
             "[bold]6  Leonardo.ai[/bold]  [green]5 USD Startguthaben[/green]\n"
@@ -1318,7 +1319,10 @@ def bildtest(config: Path = typer.Option(None)) -> None:
         console.print("Zugang:   [red]keiner hinterlegt[/red]")
 
     generator = baue_generator(
-        settings.bild.anbieter, settings.bild.token, settings.bild.modell
+        settings.bild.anbieter,
+        settings.bild.token,
+        settings.bild.modell,
+        art=settings.bild.art,
     )
     if generator is None:
         console.print(
