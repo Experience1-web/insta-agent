@@ -53,7 +53,12 @@ def _antwort(*bilder) -> dict:
     }
 
 
-def _client(daten, *, bilddaten=b"JPEGDATEN"):
+# Echte JPEG-Bytes, nicht irgendein Wort: Seit eine Fehlerseite nicht
+# mehr als Bild durchgeht, muss ein Testbild auch wie eines anfangen.
+JPEG = b"\xff\xd8\xff" + b"Bilddaten" * 40
+
+
+def _client(daten, *, bilddaten=JPEG):
     def antworte(anfrage: httpx.Request) -> httpx.Response:
         if "api.php" in anfrage.url.path:
             return httpx.Response(200, json=daten)
@@ -151,12 +156,12 @@ def test_ein_ausfall_des_archivs_haelt_nichts_auf():
 
 def test_das_bild_landet_auf_der_platte(tmp_path):
     ziel = tmp_path / "echt.jpg"
-    with _client(_antwort({"lizenz": "CC0"}), bilddaten=b"INHALT") as client:
+    with _client(_antwort({"lizenz": "CC0"}), bilddaten=JPEG) as client:
         bild = finde_und_hole("x", ziel, client=client)
 
     assert bild is not None
     assert bild.pfad == ziel
-    assert ziel.read_bytes() == b"INHALT"
+    assert ziel.read_bytes() == JPEG
 
 
 def test_eine_leere_antwort_gilt_nicht_als_bild(tmp_path):
@@ -438,3 +443,130 @@ def test_ohne_fund_wird_nicht_gesucht():
     from insta_agent.imaging.echtbild import suchworte_fuer
 
     assert suchworte_fuer(None) == []
+
+
+# --- Wenn der Anbieter nicht mitspielt -------------------------------------
+
+
+def test_ein_gesperrtes_original_weicht_auf_openverse_aus(tmp_path):
+    """Der Fehler, den der Betreiber beim ersten echten Versuch traf.
+
+    Openverse verweist auf das Original beim Anbieter - Flickr, ein
+    Museum, ein Archiv. Die lassen eine fremde Anfrage gern nicht zu,
+    und dann stand da "Gefunden, aber nicht ladbar", obwohl Openverse
+    dasselbe Bild selbst vorhaelt.
+    """
+    from insta_agent.imaging.echtbild import hole_bild, suche_bild
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        ziel = str(anfrage.url)
+        if "commons.wikimedia" in ziel:
+            return httpx.Response(200, json={"query": {"pages": {}}})
+        if "anbieter.example" in ziel:
+            return httpx.Response(403, text="Forbidden")
+        if "thumb" in ziel:
+            return httpx.Response(
+                200,
+                content=b"\xff\xd8\xff" + b"x" * 500,
+                headers={"content-type": "image/jpeg"},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "abc-123",
+                        "title": "Seltener Vogel",
+                        "license": "by",
+                        "license_version": "4.0",
+                        "creator": "Ein Fotograf",
+                        "width": 3000,
+                        "height": 2000,
+                        "url": "https://anbieter.example/original.jpg",
+                        "thumbnail": "https://api.openverse.org/v1/images/abc-123/thumb/",
+                        "foreign_landing_url": "https://anbieter.example/seite",
+                    }
+                ]
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        gefunden = suche_bild("rare bird", client=client)
+        assert gefunden is not None
+        # Keine doppelten Ausweichadressen - das laedt nur zweimal dasselbe.
+        assert len(gefunden.ersatz) == len(set(gefunden.ersatz))
+
+        geladen = hole_bild(gefunden, tmp_path / "vogel.jpg", client=client)
+
+    assert geladen is not None, f"Nicht geladen: {gefunden.grund}"
+    assert (tmp_path / "vogel.jpg").exists()
+
+
+def test_eine_fehlerseite_gilt_nicht_als_bild(tmp_path):
+    """200 heisst nicht Bild.
+
+    Wird eine Aufnahme abgelehnt, kommt oft trotzdem ein 200 zurueck -
+    nur mit HTML darin. Ohne die Pruefung landet eine Fehlerseite als
+    Beitragsbild auf der Platte und faellt erst beim Beschriften auf.
+    """
+    from insta_agent.imaging.echtbild import Fundbild, hole_bild
+
+    def html(anfrage: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"<html><body>Nicht gefunden</body></html>" + b" " * 300,
+            headers={"content-type": "text/html"},
+        )
+
+    bild = Fundbild(
+        url="https://anbieter.example/a.jpg",
+        pfad=None,
+        lizenz="CC0",
+        urheber="x",
+        seite="y",
+        breite=2000,
+        hoehe=1500,
+    )
+    with httpx.Client(transport=httpx.MockTransport(html)) as client:
+        assert hole_bild(bild, tmp_path / "a.jpg", client=client) is None
+
+    assert not (tmp_path / "a.jpg").exists()
+    assert "text/html" in bild.grund
+
+
+def test_der_grund_nennt_jede_gescheiterte_adresse(tmp_path):
+    """"Nicht ladbar" allein sagt niemandem, woran es lag."""
+    from insta_agent.imaging.echtbild import Fundbild, hole_bild
+
+    def abweisend(anfrage: httpx.Request) -> httpx.Response:
+        return httpx.Response(403 if "eins" in str(anfrage.url) else 404)
+
+    bild = Fundbild(
+        url="https://x.example/eins.jpg",
+        pfad=None,
+        lizenz="CC0",
+        urheber="x",
+        seite="y",
+        breite=2000,
+        hoehe=1500,
+        ersatz=["https://x.example/zwei.jpg"],
+    )
+    with httpx.Client(transport=httpx.MockTransport(abweisend)) as client:
+        assert hole_bild(bild, tmp_path / "a.jpg", client=client) is None
+
+    assert "403" in bild.grund and "404" in bild.grund
+
+
+def test_die_bilanz_unterscheidet_leer_von_wegsortiert():
+    """Ein Unterschied wie Tag und Nacht.
+
+    "Nichts gefunden" kann heissen, dass das Archiv nichts hatte - oder
+    dass die eigenen Filter alles aussortiert haben. Im einen Fall
+    braucht es ein anderes Suchwort, im anderen eine andere Schwelle.
+    """
+    from insta_agent.imaging.echtbild import Bilanz
+
+    assert str(Bilanz()) == "0 Treffer"
+    assert "zu klein" in str(Bilanz(roh=10, zu_klein=10))
+    assert "Lizenz" in str(Bilanz(roh=5, lizenz=5))
+    assert "Fehler" in str(Bilanz(fehler="ConnectError"))

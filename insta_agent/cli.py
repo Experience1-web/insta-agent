@@ -1334,17 +1334,18 @@ def bildsuche(
     )
 
     if alle:
-        from .imaging.echtbild import _frage_commons, _frage_openverse
         import httpx as _httpx
+
+        from .imaging.echtbild import Bilanz, _frage_commons, _frage_openverse
 
         with _httpx.Client(timeout=20.0, follow_redirects=True) as client:
             for begriff in versuche:
-                c = _frage_commons(begriff, client, 12)
-                o = _frage_openverse(begriff, client, 12)
-                console.print(
-                    f"  [bold]{begriff}[/bold]: "
-                    f"Commons {len(c)}, Openverse {len(o)}"
-                )
+                bc, bo = Bilanz(), Bilanz()
+                _frage_commons(begriff, client, 12, bc)
+                _frage_openverse(begriff, client, 12, bo)
+                console.print(f"  [bold]{begriff}[/bold]")
+                console.print(f"      Commons:   {bc}")
+                console.print(f"      Openverse: {bo}")
 
     console.print("\n[dim]Suche laeuft ...[/dim]")
     gefunden = suche_bild(suchwort)
@@ -1365,7 +1366,17 @@ def bildsuche(
 
     geladen = hole_bild(gefunden, ziel)
     if geladen is None:
-        console.print("[red]Gefunden, aber nicht ladbar.[/red]")
+        console.print(
+            Panel(
+                f"Gefunden wurde: {gefunden.seite}\n"
+                f"Adresse:        {gefunden.url[:70]}\n\n"
+                f"Woran es lag:   [red]{gefunden.grund}[/red]\n\n"
+                "[dim]Manche Anbieter lassen fremde Anfragen nicht zu. Der\n"
+                "Agent versucht dann die naechste Adresse desselben Bildes -\n"
+                "wenn hier mehrere Gruende stehen, hat keine davon gereicht.[/dim]",
+                title="[red]Gefunden, aber nicht ladbar[/red]",
+            )
+        )
         raise typer.Exit(1)
 
     breite, hoehe = gefunden.breite, gefunden.hoehe

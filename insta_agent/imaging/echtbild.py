@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -130,6 +130,13 @@ class Fundbild:
     seite: str
     breite: int
     hoehe: int
+    # Weitere Adressen desselben Bildes. Openverse verweist auf das
+    # Original beim Anbieter - Flickr, ein Museum, ein Archiv -, und
+    # nicht jeder davon laesst sich einfach abrufen. Dann hilft die
+    # Fassung, die Openverse selbst vorhaelt.
+    ersatz: list[str] = field(default_factory=list)
+    # Warum es nicht geklappt hat, falls es nicht geklappt hat.
+    grund: str = ""
 
     @property
     def nachweis(self) -> str:
@@ -258,19 +265,25 @@ def _taugt_der_titel(titel: str) -> bool:
     return not any(schrott in klein for schrott in UNBRAUCHBAR)
 
 
-def _bewerte(info: dict, seite: dict) -> Fundbild | None:
+def _bewerte(info: dict, seite: dict, bilanz: "Bilanz | None" = None) -> Fundbild | None:
     """Macht aus einem Treffer ein Fundbild - oder None, wenn er durchfaellt."""
     meta = info.get("extmetadata") or {}
     lizenz = (meta.get("LicenseShortName") or {}).get("value", "")
     if not darf_genutzt_werden(lizenz):
         log.debug("Bild verworfen, Lizenz %r", lizenz)
+        if bilanz:
+            bilanz.lizenz += 1
         return None
     titel = str(seite.get("title", ""))
     if not _taugt_der_titel(titel):
+        if bilanz:
+            bilanz.titel += 1
         return None
     breite = int(info.get("thumbwidth") or info.get("width") or 0)
     hoehe = int(info.get("thumbheight") or info.get("height") or 0)
     if breite < MINDESTBREITE:
+        if bilanz:
+            bilanz.zu_klein += 1
         return None
     return Fundbild(
         url=str(info.get("thumburl") or info.get("url") or ""),
@@ -283,9 +296,44 @@ def _bewerte(info: dict, seite: dict) -> Fundbild | None:
     )
 
 
+@dataclass(slots=True)
+class Bilanz:
+    """Was eine Suche gebracht hat - und was sie weggeworfen hat.
+
+    Ohne das steht am Ende nur "nichts gefunden", und man weiss nicht,
+    ob das Archiv nichts hatte oder ob die eigenen Filter alles
+    aussortiert haben. Das ist ein Unterschied wie Tag und Nacht: Im
+    einen Fall braucht es ein anderes Suchwort, im anderen eine andere
+    Schwelle.
+    """
+
+    roh: int = 0
+    lizenz: int = 0
+    titel: int = 0
+    zu_klein: int = 0
+    genommen: int = 0
+    fehler: str = ""
+
+    def __str__(self) -> str:
+        if self.fehler:
+            return f"Fehler: {self.fehler}"
+        if not self.roh:
+            return "0 Treffer"
+        verworfen = []
+        if self.lizenz:
+            verworfen.append(f"{self.lizenz}x Lizenz")
+        if self.titel:
+            verworfen.append(f"{self.titel}x Art")
+        if self.zu_klein:
+            verworfen.append(f"{self.zu_klein}x zu klein")
+        rest = f" ({', '.join(verworfen)})" if verworfen else ""
+        return f"{self.roh} Treffer, {self.genommen} brauchbar{rest}"
+
+
 def _frage_commons(
-    begriff: str, client: httpx.Client, treffer: int
+    begriff: str, client: httpx.Client, treffer: int, bilanz: Bilanz | None = None
 ) -> list[Fundbild]:
+    bilanz = bilanz if bilanz is not None else Bilanz()
     try:
         antwort = client.get(
             COMMONS_API,
@@ -306,18 +354,21 @@ def _frage_commons(
         daten = antwort.json()
     except Exception as exc:  # noqa: BLE001 - ohne Foto wird eben gemalt
         log.info("Bildsuche fehlgeschlagen (%r): %s", begriff, exc)
+        bilanz.fehler = f"{type(exc).__name__}: {exc}"
         return []
 
     gefunden: list[Fundbild] = []
     for seite in _treffer(daten):
         for info in seite.get("imageinfo") or []:
-            if (bild := _bewerte(info, seite)) is not None:
+            bilanz.roh += 1
+            if (bild := _bewerte(info, seite, bilanz)) is not None:
                 gefunden.append(bild)
+                bilanz.genommen += 1
     return gefunden
 
 
 def _frage_openverse(
-    begriff: str, client: httpx.Client, treffer: int
+    begriff: str, client: httpx.Client, treffer: int, bilanz: Bilanz | None = None
 ) -> list[Fundbild]:
     """Dieselbe Suche bei Openverse. Leer heisst: nichts Brauchbares.
 
@@ -343,31 +394,49 @@ def _frage_openverse(
         daten = antwort.json()
     except Exception as exc:  # noqa: BLE001 - dann bleibt es bei Commons
         log.info("Openverse fehlgeschlagen (%r): %s", begriff, exc)
+        if bilanz is not None:
+            bilanz.fehler = f"{type(exc).__name__}: {exc}"
         return []
 
+    bilanz = bilanz if bilanz is not None else Bilanz()
     gefunden: list[Fundbild] = []
     for eintrag in daten.get("results") or []:
         if not isinstance(eintrag, dict):
             continue
+        bilanz.roh += 1
         lizenz = str(eintrag.get("license") or "")
         version = str(eintrag.get("license_version") or "")
         # "by" + "4.0" ergibt "CC BY 4.0" - so, wie die Pruefung es kennt.
         lesbar = f"CC {lizenz.upper()} {version}".strip() if lizenz != "pdm" else "Public domain"
         if not darf_genutzt_werden(lesbar):
+            bilanz.lizenz += 1
             continue
 
         titel = str(eintrag.get("title") or "")
         if not _taugt_der_titel(titel):
+            bilanz.titel += 1
             continue
 
         breite = int(eintrag.get("width") or 0)
         hoehe = int(eintrag.get("height") or 0)
         if breite < MINDESTBREITE:
+            bilanz.zu_klein += 1
             continue
 
         url = str(eintrag.get("url") or "")
         if not url.startswith("http"):
+            bilanz.titel += 1
             continue
+
+        bilanz.genommen += 1
+
+        # Die Adressen, unter denen dasselbe Bild zu haben ist, in der
+        # Reihenfolge der Qualitaet: das Original beim Anbieter zuerst,
+        # dann die Fassungen, die Openverse selbst ausliefert.
+        ausweich = [
+            str(eintrag.get("thumbnail") or ""),
+            f"{OPENVERSE_API}{eintrag.get('id')}/thumb/" if eintrag.get("id") else "",
+        ]
 
         gefunden.append(
             Fundbild(
@@ -378,6 +447,9 @@ def _frage_openverse(
                 seite=str(eintrag.get("foreign_landing_url") or titel),
                 breite=breite,
                 hoehe=hoehe,
+                # Ohne Doppelte: `thumbnail` ist oft schon genau die
+                # Adresse, die wir sonst selbst zusammensetzen wuerden.
+                ersatz=list(dict.fromkeys(a for a in ausweich if a and a != url)),
             )
         )
     return gefunden
@@ -428,33 +500,87 @@ def suche_bild(
     return None
 
 
-def hole_bild(bild: Fundbild, ziel: Path, *, client: httpx.Client | None = None) -> Fundbild | None:
-    """Lädt die ausgewählte Aufnahme herunter. None, wenn es nicht klappt."""
-    quelle = bild.url
-    if not quelle.startswith("http"):
+def _ist_wirklich_ein_bild(inhalt: bytes) -> bool:
+    """Ob das Heruntergeladene ein Bild ist - und keine Fehlerseite.
+
+    Wird eine Aufnahme vom Anbieter abgelehnt, kommt oft trotzdem ein
+    200 zurueck, nur mit HTML darin. Ohne diese Pruefung landet eine
+    Fehlerseite als Beitragsbild auf der Platte und faellt erst beim
+    Beschriften auf.
+    """
+    # Die eigentliche Arbeit machen die Kennbytes weiter unten. Die
+    # Laengengrenze faengt nur den Fall ab, dass ueberhaupt nichts kam -
+    # sie darf nicht so hoch liegen, dass ein kleines, aber echtes Bild
+    # daran scheitert.
+    if len(inhalt) < 64:
+        return False
+    anfaenge = (
+        b"\xff\xd8\xff",      # JPEG
+        b"\x89PNG\r\n\x1a\n",  # PNG
+        b"GIF8",              # GIF
+        b"RIFF",              # WEBP
+    )
+    return inhalt.startswith(anfaenge)
+
+
+def hole_bild(
+    bild: Fundbild, ziel: Path, *, client: httpx.Client | None = None
+) -> Fundbild | None:
+    """Lädt die ausgewählte Aufnahme herunter. None, wenn es nicht klappt.
+
+    Mehrere Adressen, weil eine nicht reicht: Openverse verweist auf das
+    Original beim Anbieter, und Flickr oder ein Museumsserver lehnen eine
+    fremde Anfrage gern ab. Dann wird die Fassung genommen, die Openverse
+    selbst vorhaelt.
+
+    Der Grund eines Fehlschlags landet in `bild.grund` - "nicht ladbar"
+    allein sagt niemandem, ob es am Netz lag, an einer Absage oder daran,
+    dass eine HTML-Seite kam statt eines Bildes.
+    """
+    adressen = [a for a in [bild.url, *bild.ersatz] if a and a.startswith("http")]
+    if not adressen:
+        bild.grund = "keine brauchbare Adresse"
         return None
 
     eigener = client is None
     client = client or httpx.Client(timeout=GEDULD, follow_redirects=True)
+    gruende: list[str] = []
     try:
-        antwort = client.get(
-            quelle, headers={"User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)"}
-        )
-        antwort.raise_for_status()
-        inhalt = antwort.content
-    except Exception as exc:  # noqa: BLE001 - ohne Foto wird eben gemalt
-        log.info("Bild nicht geladen: %s", exc)
-        return None
+        for adresse in adressen:
+            try:
+                antwort = client.get(
+                    adresse,
+                    headers={
+                        "User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)",
+                        "Accept": "image/*,*/*;q=0.8",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 - die naechste Adresse
+                gruende.append(f"{type(exc).__name__}")
+                continue
+
+            if antwort.status_code >= 400:
+                gruende.append(f"HTTP {antwort.status_code}")
+                continue
+
+            inhalt = antwort.content
+            if not _ist_wirklich_ein_bild(inhalt):
+                typ = antwort.headers.get("content-type", "?")
+                gruende.append(f"kein Bild, sondern {typ} ({len(inhalt)} Byte)")
+                continue
+
+            ziel.parent.mkdir(parents=True, exist_ok=True)
+            ziel.write_bytes(inhalt)
+            bild.pfad = ziel
+            bild.grund = ""
+            return bild
     finally:
         if eigener:
             client.close()
 
-    if not inhalt:
-        return None
-    ziel.parent.mkdir(parents=True, exist_ok=True)
-    ziel.write_bytes(inhalt)
-    bild.pfad = ziel
-    return bild
+    bild.grund = "; ".join(gruende) or "unbekannt"
+    log.info("Bild nicht geladen (%s): %s", bild.seite, bild.grund)
+    return None
 
 
 def finde_und_hole(suchwort: str, ziel: Path, *, client: httpx.Client | None = None):
@@ -476,4 +602,5 @@ __all__ = [
     "suche_bild",
     "suchbegriffe",
     "suchworte_fuer",
+    "Bilanz",
 ]

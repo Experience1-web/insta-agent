@@ -85,15 +85,13 @@ def archiv(monkeypatch):
             return httpx.Response(200, json={"results": []})
         if "commons.wikimedia" in ziel:
             return httpx.Response(200, json=_commons(True))
-        # Das Bild selbst: ein winziges, aber gueltiges PNG.
+        # Das Bild selbst. Gross genug, dass es nicht an der Pruefung
+        # auf "ueberhaupt etwas angekommen" scheitert - ein echtes Foto
+        # in Beitragsgroesse hat sowieso Hunderttausende Bytes.
         return httpx.Response(
             200,
-            content=(
-                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00"
-                b"\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT"
-                b"\x08\xd7c\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xdc\xccY\xe7\x00"
-                b"\x00\x00\x00IEND\xaeB`\x82"
-            ),
+            content=b"\xff\xd8\xff" + b"Bilddaten" * 80,
+            headers={"content-type": "image/jpeg"},
         )
 
     echtes = httpx.Client
