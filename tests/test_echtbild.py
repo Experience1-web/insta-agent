@@ -570,3 +570,65 @@ def test_die_bilanz_unterscheidet_leer_von_wegsortiert():
     assert "zu klein" in str(Bilanz(roh=10, zu_klein=10))
     assert "Lizenz" in str(Bilanz(roh=5, lizenz=5))
     assert "Fehler" in str(Bilanz(fehler="ConnectError"))
+
+
+# --- Wie wir uns vorstellen -------------------------------------------------
+
+
+def test_jede_anfrage_nennt_eine_kontaktadresse():
+    """Der Fehler, an dem die ganze Bildsuche gescheitert ist.
+
+    Wikimedia verlangt eine Kennung, aus der hervorgeht, wer anfragt und
+    wo man sich beschweren kann. Wer ohne kommt, bekommt 403 - von der
+    Schnittstelle und vom Bildserver gleichermassen. Die Meldung sah
+    dann aus, als sei das Bild gesperrt.
+    """
+    from insta_agent.imaging.echtbild import kennung
+
+    zeile = kennung()
+    assert "insta-agent" in zeile
+    # Eine Kennung ohne Kontakt ist genau die, die abgewiesen wird.
+    assert "http" in zeile
+    assert "(" in zeile and ")" in zeile
+
+
+def test_die_kontaktadresse_laesst_sich_ersetzen(monkeypatch):
+    """Wer seine eigene nennen will, soll das koennen.
+
+    Voreingestellt ist die Adresse des Quelltexts, nicht die des
+    Betreibers: Eine E-Mail-Adresse gehoert niemandem ungefragt in eine
+    Kopfzeile, die an jeden Server geht.
+    """
+    from insta_agent.imaging.echtbild import HERKUNFT, kennung
+
+    assert HERKUNFT in kennung()
+    monkeypatch.setenv("BILD_KONTAKT", "https://meine-seite.example")
+    assert "meine-seite.example" in kennung()
+
+
+def test_die_kennung_geht_wirklich_mit(tmp_path):
+    """Eine Kennung, die nur in einer Funktion steht, hilft niemandem."""
+    from insta_agent.imaging.echtbild import suche_bild
+
+    gesehen: list[str] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        gesehen.append(anfrage.headers.get("user-agent", ""))
+        return httpx.Response(200, json=_antwort({"lizenz": "CC0"}))
+
+    with httpx.Client(transport=httpx.MockTransport(antworte)) as client:
+        suche_bild("x", client=client)
+
+    assert gesehen, "Es wurde gar nicht angefragt"
+    assert all("insta-agent" in ua and "http" in ua for ua in gesehen), gesehen
+
+
+def test_der_verweis_geht_nur_an_wikimedia():
+    """Ihn an jeden fremden Server zu schicken waere eine Behauptung."""
+    from insta_agent.imaging.echtbild import _kopfzeilen
+
+    assert "Referer" in _kopfzeilen("https://upload.wikimedia.org/a.jpg")
+    assert "Referer" not in _kopfzeilen("https://live.staticflickr.com/a.jpg")
+    # Die Kennung geht ueberallhin - sie ist keine Behauptung, sondern
+    # eine Auskunft.
+    assert "insta-agent" in _kopfzeilen("https://irgendwo.example/a.jpg")["User-Agent"]

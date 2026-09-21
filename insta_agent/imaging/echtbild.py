@@ -31,6 +31,30 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+# Wie wir uns bei den Archiven vorstellen - und das ist keine Formalie.
+#
+# Wikimedia verlangt eine Kennung, aus der hervorgeht, wer da anfragt und
+# wo man sich beschweren kann. Wer ohne kommt oder nur einen Programmnamen
+# nennt, bekommt 403 Forbidden - von der Schnittstelle und vom Bildserver
+# gleichermassen. Genau daran ist die Suche beim ersten echten Versuch
+# gescheitert, und die Fehlermeldung sah aus, als sei das Bild gesperrt.
+#
+# Als Kontakt steht die Adresse des Quelltexts da, nicht die des
+# Betreibers: Sie ist oeffentlich, dauerhaft und fuehrt zu jemandem, der
+# etwas aendern kann. Wer seine eigene Anschrift nennen will, setzt
+# BILD_KONTAKT - eine E-Mail-Adresse gehoert niemandem ungefragt in einen
+# Kopfzeileneintrag, der an jeden Server geht.
+HERKUNFT = "https://github.com/Experience1-web/insta-agent"
+
+
+def kennung() -> str:
+    """Die Zeile, mit der wir uns bei jedem Archiv melden."""
+    import os
+
+    kontakt = (os.getenv("BILD_KONTAKT") or "").strip() or HERKUNFT
+    return f"insta-agent/1.0 ({kontakt}) python-httpx"
+
+
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 
 # Die zweite Quelle. Openverse gehoert zu WordPress und wird zusammen mit
@@ -348,7 +372,7 @@ def _frage_commons(
                 "iiprop": "url|size|extmetadata",
                 "iiurlwidth": str(WUNSCHBREITE),
             },
-            headers={"User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)"},
+            headers={"User-Agent": kennung(), "Api-User-Agent": kennung()},
         )
         antwort.raise_for_status()
         daten = antwort.json()
@@ -388,7 +412,7 @@ def _frage_openverse(
                 "size": "large",
                 "mature": "false",
             },
-            headers={"User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)"},
+            headers={"User-Agent": kennung(), "Api-User-Agent": kennung()},
         )
         antwort.raise_for_status()
         daten = antwort.json()
@@ -500,6 +524,19 @@ def suche_bild(
     return None
 
 
+def _kopfzeilen(adresse: str) -> dict[str, str]:
+    """Womit wir ein einzelnes Bild abholen.
+
+    Der Verweis auf die Herkunftsseite geht nur an Wikimedia, wo er
+    erwartet wird. Ihn an jeden fremden Server zu schicken waere eine
+    Behauptung ueber etwas, das gar nicht stattgefunden hat.
+    """
+    kopf = {"User-Agent": kennung(), "Accept": "image/*,*/*;q=0.8"}
+    if "wikimedia.org" in adresse or "wikipedia.org" in adresse:
+        kopf["Referer"] = "https://commons.wikimedia.org/"
+    return kopf
+
+
 def _ist_wirklich_ein_bild(inhalt: bytes) -> bool:
     """Ob das Heruntergeladene ein Bild ist - und keine Fehlerseite.
 
@@ -550,10 +587,7 @@ def hole_bild(
             try:
                 antwort = client.get(
                     adresse,
-                    headers={
-                        "User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)",
-                        "Accept": "image/*,*/*;q=0.8",
-                    },
+                    headers=_kopfzeilen(adresse),
                 )
             except Exception as exc:  # noqa: BLE001 - die naechste Adresse
                 gruende.append(f"{type(exc).__name__}")
@@ -603,4 +637,5 @@ __all__ = [
     "suchbegriffe",
     "suchworte_fuer",
     "Bilanz",
+    "kennung",
 ]
