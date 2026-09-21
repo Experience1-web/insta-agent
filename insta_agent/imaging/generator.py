@@ -164,6 +164,78 @@ def _lesbarer_fehler(antwort: httpx.Response) -> str:
     return f"Der Bilddienst antwortete mit {antwort.status_code}: {str(detail)[:200]}"
 
 
+def ist_flux(modellname: str) -> bool:
+    """Ob dieser Modellname nach FLUX aussieht.
+
+    Die Unterscheidung ist kein Feinschliff, sondern entscheidet über
+    Bild oder Matsch: FLUX ist auf Prompt-Treue trainiert und braucht
+    CFG 1, SDXL dagegen 4 bis 7. Wer FLUX mit CFG 5 fährt, bekommt
+    verbrannte, überzeichnete Bilder und sucht den Fehler beim Prompt.
+    """
+    return "flux" in (modellname or "").casefold()
+
+
+def werte_fuer(modellname: str) -> dict[str, object]:
+    """Schritte, CFG und Sampler, die zu diesem Modell passen."""
+    negativ = "text, watermark, logo, signature, letters, caption"
+    if ist_flux(modellname):
+        # FLUX kennt keine klassische Negativführung und arbeitet ohne
+        # CFG. Das Negativfeld bleibt leer, statt wirkungslos mitzulaufen.
+        return {
+            "negative_prompt": "",
+            "steps": 20,
+            "cfg_scale": 1.0,
+            "sampler_name": "Euler",
+        }
+    return {
+        "negative_prompt": negativ,
+        "steps": 28,
+        "cfg_scale": 5.0,
+        "sampler_name": "DPM++ 2M",
+    }
+
+
+def frage_lokal_ab(adresse: str, *, timeout: float = 10.0) -> tuple[list[str], str]:
+    """Welche Modelle das eigene Bildprogramm kennt - und was gerade läuft.
+
+    Gedacht für die Einrichtung: Wer eine Adresse eintippt, soll sofort
+    erfahren, ob dort etwas antwortet, statt es beim ersten Beitrag zu
+    merken. Wirft `Bildfehler` mit einem Satz, der sagt, was zu tun ist.
+    """
+    adresse = (adresse or "").rstrip("/")
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            antwort = client.get(f"{adresse}/sdapi/v1/sd-models")
+            if antwort.status_code == 404:
+                raise Bildfehler(
+                    "Dort läuft etwas, aber es kennt diese Schnittstelle nicht. "
+                    "Starte das Bildprogramm mit --api."
+                )
+            antwort.raise_for_status()
+            modelle = [str(m.get("model_name") or m.get("title", "")) for m in antwort.json()]
+
+            geladen = ""
+            try:
+                einst = client.get(f"{adresse}/sdapi/v1/options").json()
+                geladen = str(einst.get("sd_model_checkpoint") or "")
+            except Exception:  # noqa: BLE001 - die Modellliste reicht schon
+                pass
+    except httpx.ConnectError as exc:
+        raise Bildfehler(
+            f"Unter {adresse} antwortet nichts. Läuft das Bildprogramm, und "
+            "ist es mit --api gestartet?"
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise Bildfehler(_lesbarer_fehler(exc.response)) from exc
+    except httpx.TimeoutException as exc:
+        raise Bildfehler(
+            "Keine Antwort innerhalb von zehn Sekunden. Startet das "
+            "Bildprogramm gerade noch?"
+        ) from exc
+
+    return [m for m in modelle if m], geladen
+
+
 class LokalerGenerator:
     """Ein Bildmodell, das auf dem eigenen Rechner läuft.
 
@@ -196,12 +268,9 @@ class LokalerGenerator:
         breite, hoehe = 792, 1408
         nutzlast: dict[str, object] = {
             "prompt": prompt,
-            "negative_prompt": "text, watermark, logo, signature, letters, caption",
             "width": breite,
             "height": hoehe,
-            "steps": 28,
-            "cfg_scale": 5.0,
-            "sampler_name": "DPM++ 2M",
+            **werte_fuer(self.modell),
         }
         if self.modell:
             nutzlast["override_settings"] = {"sd_model_checkpoint": self.modell}

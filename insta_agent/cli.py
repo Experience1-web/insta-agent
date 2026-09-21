@@ -696,14 +696,58 @@ def bilder(
     wahl = typer.prompt("Welcher Weg? [1/2/3/4/5/6]", default="1").strip()[:1]
 
     if wahl == "4":
-        adresse = typer.prompt("Adresse des Bildprogramms", default="http://127.0.0.1:7860")
-        set_env_value("BILD_ANBIETER", "lokal")
-        set_env_value("BILD_TOKEN", adresse.strip().rstrip("/"))
-        set_env_value("BILD_KOSTEN", "0")
+        console.print(
+            "\n[dim]Das Bildprogramm muss laufen und mit --api gestartet sein.\n"
+            "Bei Forge und AUTOMATIC1111 traegt man dazu  --api  in die Datei\n"
+            "webui-user.bat ein, in die Zeile COMMANDLINE_ARGS.[/dim]\n"
+        )
+        adresse = typer.prompt(
+            "Adresse des Bildprogramms", default="http://127.0.0.1:7860"
+        ).strip().rstrip("/")
+
+        # Sofort nachsehen, ob dort wirklich etwas antwortet. Sonst faellt
+        # es erst beim ersten Beitrag auf - und dann sieht es aus, als
+        # laege es am Agenten.
+        from .imaging.generator import Bildfehler, frage_lokal_ab, ist_flux
+
+        console.print("\n[dim]Probe: frage das Bildprogramm ...[/dim]")
+        try:
+            modelle, geladen = frage_lokal_ab(adresse)
+        except Bildfehler as exc:
+            console.print(f"\n[red]Das hat nicht geklappt.[/red]\n{exc}")
+            if not _bestaetigt("Trotzdem so eintragen?"):
+                raise typer.Exit(1) from None
+            modelle, geladen = [], ""
+        else:
+            console.print(
+                Panel(
+                    f"Gefunden: {len(modelle)} Modell(e)\n"
+                    f"Geladen:  {geladen or 'keines'}",
+                    title="[green]Verbindung steht[/green]",
+                )
+            )
+            for i, name in enumerate(modelle[:12], 1):
+                console.print(f"  {i:2}  {name}")
+            if len(modelle) > 12:
+                console.print(f"  [dim]... und {len(modelle) - 12} weitere[/dim]")
+
         modell = typer.prompt(
-            "Name der Modelldatei (leer lassen fuer die geladene)", default=""
+            "\nName oder Nummer des Modells (leer lassen fuer das geladene)", default=""
         ).strip()
+        if modell.isdigit() and modelle and 1 <= int(modell) <= len(modelle):
+            modell = modelle[int(modell) - 1]
+
+        set_env_value("BILD_ANBIETER", "lokal")
+        set_env_value("BILD_TOKEN", adresse)
+        set_env_value("BILD_KOSTEN", "0")
         set_env_value("BILD_MODELL", modell)
+
+        if ist_flux(modell):
+            console.print(
+                "\n[dim]FLUX erkannt: Er rechnet damit ohne Negativfuehrung, mit\n"
+                "CFG 1 und 20 Schritten. Mit den SDXL-Werten wuerde FLUX\n"
+                "verbrannte Bilder liefern.[/dim]"
+            )
         console.print(
             "\n[green]Eingetragen.[/green] Lass das Bildprogramm laufen, wenn der "
             "Agent arbeitet."
