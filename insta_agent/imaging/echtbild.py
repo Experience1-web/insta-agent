@@ -38,8 +38,35 @@ COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 GEDULD = 20.0
 
 # Kleiner als das taugt nichts: Instagram zeigt 1080 Pixel breit, und ein
-# hochskaliertes Bild sieht schlechter aus als ein gemaltes.
-MINDESTBREITE = 1000
+# hochskaliertes Bild sieht schlechter aus als ein gemaltes. Mit Rand zum
+# Beschneiden - der Beitrag ist hochkant, die meisten Aufnahmen sind quer.
+MINDESTBREITE = 1400
+
+# So gross fragen wir an. Wikimedia rechnet die Vorschau auf Wunsch
+# herunter, aber nie hoch: Was hier steht, ist die Obergrenze dessen, was
+# wir bekommen koennen.
+WUNSCHBREITE = 2400
+
+# Dateien, die zwar frei sind, aber keinen Beitrag tragen: Wappen,
+# Diagramme, Karten, Bildschirmfotos. Sie stehen bei fast jeder Suche
+# weit oben, weil ihre Beschreibung genau die gesuchten Worte enthaelt.
+UNBRAUCHBAR = (
+    "logo",
+    "icon",
+    "coat of arms",
+    "wappen",
+    "diagram",
+    "diagramm",
+    "chart",
+    "graph",
+    "map of",
+    "karte von",
+    "screenshot",
+    "flag of",
+    "signature",
+    "stub",
+    "disambig",
+)
 
 # Was ausdrücklich auch gewerblich erlaubt ist. Die Liste ist bewusst
 # knapp: Was hier nicht steht, wird nicht genommen, auch wenn es
@@ -117,19 +144,64 @@ def _treffer(daten: dict) -> list[dict]:
     return list(seiten.values()) if isinstance(seiten, dict) else list(seiten)
 
 
-def suche_bild(
-    suchwort: str, *, client: httpx.Client | None = None, treffer: int = 8
-) -> Fundbild | None:
-    """Sucht bei Wikimedia Commons ein brauchbares, freies Bild.
+def suchbegriffe(suchwort: str) -> list[str]:
+    """Derselbe Fund, vom Genauen zum Allgemeinen.
 
-    Gibt None zurück, wenn nichts passt - das ist der Normalfall und kein
-    Fehler. Dann wird gemalt.
+    Der Grund, warum die Bildsuche bisher fast immer leer ausging: Die
+    Stoffsuche liefert ein Suchwort wie "Exoplanet WASP-121b Atmosphaere
+    Eisenregen". Danach gibt es in keinem Archiv ein Foto - den Planeten
+    hat nie jemand fotografiert.
 
-    Das Bild wird hier noch nicht geladen, nur ausgewählt: `pfad` bleibt
-    leer, bis `hole_bild` es abholt.
+    Ein Bild von einem Exoplaneten gibt es aber sehr wohl. Also wird
+    nicht einmal gesucht, sondern mehrfach: erst genau, dann immer
+    weiter gefasst, bis etwas kommt. Das letzte Wort faellt zuerst weg,
+    weil vorne meist der Oberbegriff steht.
     """
-    eigener = client is None
-    client = client or httpx.Client(timeout=GEDULD, follow_redirects=True)
+    worte = [w for w in re.split(r"[\s,;/]+", (suchwort or "").strip()) if w]
+    if not worte:
+        return []
+    versuche: list[str] = []
+    for ende in range(len(worte), 0, -1):
+        begriff = " ".join(worte[:ende])
+        if begriff not in versuche:
+            versuche.append(begriff)
+    # Mehr als vier Anlaeufe kosten mehr Zeit, als sie einbringen.
+    return versuche[:4]
+
+
+def _taugt_der_titel(titel: str) -> bool:
+    klein = titel.casefold()
+    return not any(schrott in klein for schrott in UNBRAUCHBAR)
+
+
+def _bewerte(info: dict, seite: dict) -> Fundbild | None:
+    """Macht aus einem Treffer ein Fundbild - oder None, wenn er durchfaellt."""
+    meta = info.get("extmetadata") or {}
+    lizenz = (meta.get("LicenseShortName") or {}).get("value", "")
+    if not darf_genutzt_werden(lizenz):
+        log.debug("Bild verworfen, Lizenz %r", lizenz)
+        return None
+    titel = str(seite.get("title", ""))
+    if not _taugt_der_titel(titel):
+        return None
+    breite = int(info.get("thumbwidth") or info.get("width") or 0)
+    hoehe = int(info.get("thumbheight") or info.get("height") or 0)
+    if breite < MINDESTBREITE:
+        return None
+    return Fundbild(
+        url=str(info.get("thumburl") or info.get("url") or ""),
+        pfad=None,
+        lizenz=lizenz,
+        urheber=_ohne_markup((meta.get("Artist") or {}).get("value", "")),
+        seite=titel,
+        breite=breite,
+        hoehe=hoehe,
+    )
+
+
+def _frage_commons(
+    begriff: str, client: httpx.Client, treffer: int
+) -> list[Fundbild]:
     try:
         antwort = client.get(
             COMMONS_API,
@@ -137,44 +209,66 @@ def suche_bild(
                 "action": "query",
                 "format": "json",
                 "generator": "search",
-                "gsrsearch": f"filetype:bitmap {suchwort}",
+                "gsrsearch": f"filetype:bitmap {begriff}",
                 "gsrnamespace": "6",
                 "gsrlimit": str(treffer),
                 "prop": "imageinfo",
                 "iiprop": "url|size|extmetadata",
-                "iiurlwidth": "1440",
+                "iiurlwidth": str(WUNSCHBREITE),
             },
             headers={"User-Agent": "insta-agent/1.0 (Bildsuche fuer eigene Beitraege)"},
         )
         antwort.raise_for_status()
         daten = antwort.json()
     except Exception as exc:  # noqa: BLE001 - ohne Foto wird eben gemalt
-        log.info("Bildsuche fehlgeschlagen: %s", exc)
-        return None
+        log.info("Bildsuche fehlgeschlagen (%r): %s", begriff, exc)
+        return []
+
+    gefunden: list[Fundbild] = []
+    for seite in _treffer(daten):
+        for info in seite.get("imageinfo") or []:
+            if (bild := _bewerte(info, seite)) is not None:
+                gefunden.append(bild)
+    return gefunden
+
+
+def suche_bild(
+    suchwort: str, *, client: httpx.Client | None = None, treffer: int = 12
+) -> Fundbild | None:
+    """Sucht bei Wikimedia Commons die beste brauchbare freie Aufnahme.
+
+    Gibt None zurück, wenn nichts passt - das ist kein Fehler, dann wird
+    gemalt. Nur ist es seltener geworden: Gesucht wird in mehreren
+    Anlaeufen vom Genauen zum Allgemeinen, und genommen wird die groesste
+    Aufnahme des ersten Anlaufs, der etwas bringt - nicht die erste.
+
+    Der Unterschied ist nicht klein: "die erste" hiess bisher "die, die
+    Wikimedias Volltextsuche zufaellig oben hatte", und die ist oft
+    knapp ueber der Mindestgroesse.
+
+    Das Bild wird hier noch nicht geladen, nur ausgewählt: `pfad` bleibt
+    leer, bis `hole_bild` es abholt.
+    """
+    eigener = client is None
+    client = client or httpx.Client(timeout=GEDULD, follow_redirects=True)
+    try:
+        for begriff in suchbegriffe(suchwort):
+            kandidaten = _frage_commons(begriff, client, treffer)
+            if not kandidaten:
+                continue
+            beste = max(kandidaten, key=lambda b: b.breite * b.hoehe)
+            log.info(
+                "Bildsuche %r: %s Treffer, genommen %s (%sx%s)",
+                begriff,
+                len(kandidaten),
+                beste.seite,
+                beste.breite,
+                beste.hoehe,
+            )
+            return beste
     finally:
         if eigener:
             client.close()
-
-    for seite in _treffer(daten):
-        for info in seite.get("imageinfo") or []:
-            meta = info.get("extmetadata") or {}
-            lizenz = (meta.get("LicenseShortName") or {}).get("value", "")
-            if not darf_genutzt_werden(lizenz):
-                log.debug("Bild verworfen, Lizenz %r", lizenz)
-                continue
-            breite = int(info.get("thumbwidth") or info.get("width") or 0)
-            hoehe = int(info.get("thumbheight") or info.get("height") or 0)
-            if breite < MINDESTBREITE:
-                continue
-            return Fundbild(
-                url=str(info.get("thumburl") or info.get("url") or ""),
-                pfad=None,
-                lizenz=lizenz,
-                urheber=_ohne_markup((meta.get("Artist") or {}).get("value", "")),
-                seite=str(seite.get("title", "")),
-                breite=breite,
-                hoehe=hoehe,
-            )
     return None
 
 
@@ -218,4 +312,11 @@ def finde_und_hole(suchwort: str, ziel: Path, *, client: httpx.Client | None = N
     return geladen
 
 
-__all__ = ["Fundbild", "darf_genutzt_werden", "finde_und_hole", "hole_bild", "suche_bild"]
+__all__ = [
+    "Fundbild",
+    "darf_genutzt_werden",
+    "finde_und_hole",
+    "hole_bild",
+    "suche_bild",
+    "suchbegriffe",
+]

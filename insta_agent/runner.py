@@ -345,7 +345,19 @@ class Agent:
 
     # -- Ein Zyklus --------------------------------------------------------
 
-    def run_cycle(self, *, operator_hint: str | None = None) -> CycleReport:
+    def run_cycle(
+        self, *, operator_hint: str | None = None, nur_beenden: bool = False
+    ) -> CycleReport:
+        """Ein vollstaendiger Zyklus - oder nur sein zweiter Teil.
+
+        `nur_beenden` ist fuer den Fall, dass die Zyklusgrenze mitten im
+        Lauf gegriffen hat. Dann ist die teure Vorarbeit schon getan und
+        bezahlt: Reflexion, Marktrecherche und Kurs stehen im Speicher.
+        Sie noch einmal zu denken, waere das Geld ein zweites Mal aus dem
+        Fenster - und ein anderes Ergebnis obendrein.
+
+        Also wird nur nachgeholt, was fehlt: die Beitraege selbst.
+        """
         cycle = self.store.next_cycle_number()
         report = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.begin_cycle()
@@ -354,7 +366,10 @@ class Agent:
         self._bilder_heute_aus: str | None = None
 
         try:
-            self._run_cycle_inner(cycle, report, operator_hint)
+            if nur_beenden:
+                self._beende_zyklus_inner(cycle, report)
+            else:
+                self._run_cycle_inner(cycle, report, operator_hint)
         except BudgetExhausted as exc:
             report.halted_reason = str(exc)
             self.store.log("halt", str(exc), cycle)
@@ -450,6 +465,37 @@ class Agent:
         if cycle % MONETIZATION_EVERY == 0 or self.treasury.state().mode is Mode.FRUGAL:
             self._plan_monetization(cycle, identity, performance, report)
 
+    def _beende_zyklus_inner(self, cycle: int, report: CycleReport) -> None:
+        """Holt nach, was der abgebrochene Zyklus nicht mehr geschafft hat.
+
+        Bewusst ohne Reflexion, Marktrecherche, Kursbestimmung und
+        Geschaeftsplanung: Die haben beim ersten Anlauf stattgefunden und
+        liegen im Speicher. Was fehlt, sind die Beitraege.
+
+        Ohne Kurs geht es nicht - dann hat der Zyklus so frueh abgebrochen,
+        dass es nichts fortzusetzen gibt, und ein normaler Lauf ist das
+        Richtige.
+        """
+        state = self.treasury.check()
+        report.steps.append(f"Kasse: {state.balance_usd:.4f} USD ({state.mode.value})")
+
+        identity = self.identity
+        strategy = self.strategy
+        if identity is None or strategy is None:
+            report.halted_reason = (
+                "Es liegt noch kein Kurs vor - da ist nichts fortzusetzen. "
+                "Starte einen normalen Zyklus."
+            )
+            return
+
+        report.steps.append(
+            f"Fortsetzung ohne neue Vorarbeit - Kurs steht: {strategy.current_goal}"
+        )
+
+        performance = self.collect_metrics(cycle)
+        self._veroeffentliche_freigegebenes(report)
+        self._produce_posts(cycle, identity, strategy, performance, report)
+
     def _produce_posts(
         self, cycle: int, identity, strategy, performance: str, report: CycleReport
     ) -> None:
@@ -461,6 +507,12 @@ class Agent:
             except (BudgetExhausted, CycleBudgetExceeded) as exc:
                 report.steps.append(f"Weitere Posts abgebrochen: {exc}")
                 break
+
+            # Was dieser eine Beitrag kostet, vom Stand vor dem ersten
+            # Aufruf bis zum letzten. Die Kasse kennt nur die Summe des
+            # Zyklus; was ein einzelner Beitrag gekostet hat, ist aber die
+            # Zahl, an der sich entscheidet, ob er sein Geld wert war.
+            stand_vorher = self.treasury.state().cycle_spent_usd
 
             # Erst der Stoff, dann der Text. Andersherum schreibt der
             # Agent über das, was ihm einfällt - und was einem einfällt,
@@ -506,6 +558,11 @@ class Agent:
                 self.store.set_gestaltung(post_id, gestaltung)
             bericht = self._pruefe(post_id, draft, identity, report, fund)
             bericht = self._bessere_nach(post_id, bericht, report)
+
+            kosten = self.treasury.state().cycle_spent_usd - stand_vorher
+            self.store.setze_kosten(post_id, kosten)
+            report.steps.append(f"Beitrag fertig, Kosten {kosten:.4f} USD")
+
             if zeile := self.store.get_post(post_id):
                 # Nach einer Nachbesserung steht dort ein anderes Bild.
                 image_path = Path(zeile["image_path"] or image_path)
@@ -531,6 +588,18 @@ class Agent:
 
             recent.append(draft.caption)
 
+    def _mitrechnen(self, post_id: int, vorher: float) -> float:
+        """Bucht auf den Beitrag, was seit `vorher` fuer ihn ausgegeben wurde.
+
+        Nachbessern, nachpruefen und ein neues Bild kosten erneut. Wer
+        spaeter fragt, was ein Beitrag gekostet hat, meint alles davon -
+        nicht nur den ersten Anlauf.
+        """
+        kosten = self.treasury.state().cycle_spent_usd - vorher
+        if kosten > 0:
+            self.store.setze_kosten(post_id, kosten)
+        return kosten
+
     def bild_neu(self, post_id: int) -> dict:
         """Malt das Bild eines Entwurfs neu, ohne den Text anzufassen.
 
@@ -555,6 +624,7 @@ class Agent:
         draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
         lauf = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.check()
+        vorher = self.treasury.state().cycle_spent_usd
 
         gestaltung = self._gestalte(draft, identity, lauf)
 
@@ -577,7 +647,10 @@ class Agent:
         self.store.setze_bildnachweis(post_id, getattr(self, "_letzter_nachweis", ""))
         if gestaltung is not None:
             self.store.set_gestaltung(post_id, gestaltung)
-        self.store.log("bild_neu", f"Entwurf {post_id}: Bild neu gemalt")
+        kosten = self._mitrechnen(post_id, vorher)
+        self.store.log(
+            "bild_neu", f"Entwurf {post_id}: Bild neu gemalt ({kosten:.4f} USD)"
+        )
 
         return {
             "ok": True,
@@ -662,6 +735,7 @@ class Agent:
         )
 
         self.treasury.check()
+        vorher = self.treasury.state().cycle_spent_usd
         neu = ueberarbeite_beitrag(
             self.brain,
             identity=identity,
@@ -698,16 +772,23 @@ class Agent:
         try:
             zweiter = self._pruefe(post_id, neu, identity, bericht_lauf, fund)
         except (BudgetExhausted, CycleBudgetExceeded):
+            # Auch der abgebrochene Versuch hat Geld gekostet. Ihn nicht
+            # mitzuzaehlen, wuerde den Beitrag billiger aussehen lassen,
+            # als er war - und ausgerechnet der teure Fall faellt dann
+            # unter den Tisch.
+            self._mitrechnen(post_id, vorher)
             self.store.log(
                 "nachbesserung",
                 f"Entwurf {post_id} nachgebessert, aber nicht mehr geprüft - "
                 "das Budget war aufgebraucht. Vor der Freigabe prüfen lassen.",
             )
             raise
+        kosten = self._mitrechnen(post_id, vorher)
         self.store.log(
             "nachbesserung",
             f"Entwurf {post_id} nachgebessert"
-            + (f", Endprüfung: {zweiter.urteil}" if zweiter else ""),
+            + (f", Endprüfung: {zweiter.urteil}" if zweiter else "")
+            + f" ({kosten:.4f} USD)",
         )
         return {
             "ok": True,
@@ -747,6 +828,7 @@ class Agent:
         )
         lauf = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.check()
+        vorher = self.treasury.state().cycle_spent_usd
 
         # Absichtlich ohne die Abschaltung zu beachten: Wer hier drückt,
         # will geprüft haben, auch wenn die Prüfung sonst ausgeschaltet ist.
@@ -760,9 +842,11 @@ class Agent:
             fund=fund,
         )
         self.store.set_pruefung(post_id, bericht)
+        kosten = self._mitrechnen(post_id, vorher)
         self.store.log(
             "pruefung",
-            f"Entwurf {post_id} nachträglich geprüft: {bericht.urteil} - {bericht.zusammenfassung}",
+            f"Entwurf {post_id} nachträglich geprüft: {bericht.urteil} - "
+            f"{bericht.zusammenfassung} ({kosten:.4f} USD)",
         )
         return {
             "ok": True,

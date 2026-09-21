@@ -121,7 +121,10 @@ class EconomyConfig:
     low_balance_usd: float = 5.0
     # Darunter stoppt er komplett und meldet sich beim Betreiber.
     halt_balance_usd: float = 0.50
-    # Harte Obergrenze pro Zyklus, verhindert Ausreißer.
+    # Harte Obergrenze pro Zyklus, verhindert Ausreißer. Verstellbar im
+    # Dashboard: Was ein Zyklus kosten darf, haengt davon ab, wie viele
+    # Rollen auf teuren Modellen laufen und wie viele Beitraege er macht -
+    # eine feste Zahl im Quelltext kann das nicht wissen.
     max_cost_per_cycle_usd: float = 1.50
 
 
@@ -310,6 +313,11 @@ def load_settings(config_path: Path | None = None) -> Settings:
         settings.bild.modell = modell
     if art := os.getenv("BILD_ART"):
         settings.bild.art = art.strip().casefold()
+    if grenze := os.getenv("ZYKLUS_GRENZE"):
+        try:
+            settings.economy.max_cost_per_cycle_usd = max(0.10, float(grenze))
+        except ValueError:
+            log.warning("ZYKLUS_GRENZE ist keine Zahl (%r) - Voreinstellung bleibt", grenze)
     if preis := os.getenv("BILD_KOSTEN"):
         try:
             settings.bild.kosten_pro_bild_usd = float(preis)

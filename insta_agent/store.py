@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS posts (
     gestaltung_json TEXT,
     fund_json       TEXT,
     rohbild_path    TEXT,
-    bildnachweis    TEXT
+    bildnachweis    TEXT,
+    kosten_usd      REAL
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -100,6 +101,7 @@ class Store:
             "fund_json": "TEXT",
             "rohbild_path": "TEXT",
             "bildnachweis": "TEXT",
+            "kosten_usd": "REAL",
         }
     }
 
@@ -161,6 +163,23 @@ class Store:
                 ),
             )
             return int(cur.lastrowid)
+
+    def setze_kosten(self, post_id: int, usd: float) -> None:
+        """Was dieser Beitrag gekostet hat, am Beitrag selbst.
+
+        Die Kasse weiss, was ein Zyklus gekostet hat. Was ein einzelner
+        Beitrag gekostet hat, wusste bisher niemand - und genau das ist
+        die Zahl, an der sich entscheidet, ob ein Beitrag sein Geld wert
+        war. Sie gehoert an den Beitrag, nicht in eine Summe.
+
+        Nachgebessert wird aufaddiert: Eine Korrektur kostet erneut, und
+        der Beitrag hat den Betreiber am Ende beides gekostet.
+        """
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET kosten_usd = COALESCE(kosten_usd, 0) + ? WHERE id=?",
+                (float(usd), post_id),
+            )
 
     def get_post(self, post_id: int) -> sqlite3.Row | None:
         return self._conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()

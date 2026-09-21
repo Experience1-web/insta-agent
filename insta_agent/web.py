@@ -102,7 +102,12 @@ class Steuerung:
         return self._thread is not None and self._thread.is_alive()
 
     def starte(
-        self, *, zyklen: int, hinweis: str | None, von_hand: bool = True
+        self,
+        *,
+        zyklen: int,
+        hinweis: str | None,
+        von_hand: bool = True,
+        nur_beenden: bool = False,
     ) -> tuple[bool, str]:
         """Startet einen Lauf und nennt bei Ablehnung den Grund.
 
@@ -128,19 +133,27 @@ class Steuerung:
             self.letzter_fehler = None
             self.letzter_bericht = None
             self._thread = threading.Thread(
-                target=self._arbeite, args=(zyklen, hinweis), daemon=True
+                target=self._arbeite, args=(zyklen, hinweis, nur_beenden), daemon=True
             )
             self._thread.start()
             return True, ""
 
-    def _arbeite(self, zyklen: int, hinweis: str | None) -> None:
+    def _arbeite(
+        self, zyklen: int, hinweis: str | None, nur_beenden: bool = False
+    ) -> None:
         wurzel = logging.getLogger("insta_agent")
         wurzel.addHandler(self.protokoll)
         agent = Agent(self.settings)
         try:
             for nummer in range(zyklen):
-                self.protokoll.zeilen.append(f"— Zyklus {nummer + 1} von {zyklen} —")
-                bericht = agent.run_cycle(operator_hint=hinweis)
+                self.protokoll.zeilen.append(
+                    "— Zyklus zu Ende führen —"
+                    if nur_beenden
+                    else f"— Zyklus {nummer + 1} von {zyklen} —"
+                )
+                bericht = agent.run_cycle(
+                    operator_hint=hinweis, nur_beenden=nur_beenden
+                )
                 self.letzter_bericht = bericht.model_dump(mode="json")
                 for schritt in bericht.steps:
                     self.protokoll.zeilen.append(f"  · {schritt}")
@@ -242,6 +255,10 @@ class Steuerung:
                         # Bei einem übernommenen Foto die Pflichtangabe.
                         # Leer heißt: gemalt.
                         "bildnachweis": zeile["bildnachweis"] or "",
+                        # Was dieser Beitrag gekostet hat - Stoffsuche,
+                        # Text, Bild, Pruefung und jede Nachbesserung
+                        # zusammen. None heisst: von vor dieser Zaehlung.
+                        "kosten_usd": zeile["kosten_usd"],
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
                         # Was die Endprüfung gefunden hat. None heißt:
                         # nicht geprüft - das ist etwas anderes als sauber.
@@ -616,6 +633,60 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json({"ok": True})
 
+        def _setze_grenze(self, rumpf: dict) -> None:
+            """Verstellt, was ein einzelner Zyklus kosten darf.
+
+            Die Grenze ist eine Notbremse gegen Ausreisser, kein Sparplan:
+            Sie verhindert, dass ein einziger Lauf durch eine Schleife das
+            halbe Guthaben verbrennt. Wie hoch sie gehoert, haengt davon
+            ab, wie viele Rollen auf teuren Modellen laufen und wie viele
+            Beitraege ein Zyklus macht - das weiss nur der Betreiber.
+
+            Gilt sofort, auch fuer einen Lauf, der gleich startet, und
+            steht danach in der .env, damit sie den Neustart uebersteht.
+            """
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            try:
+                usd = float(rumpf.get("usd"))
+            except (TypeError, ValueError):
+                self._json({"ok": False, "grund": "Das ist keine Zahl."}, 400)
+                return
+            if usd < 0.10:
+                self._json(
+                    {"ok": False, "grund": "Unter 10 Cent kommt kein Zyklus durch."}, 400
+                )
+                return
+            if usd > 50:
+                # Kein Verbot, sondern eine Ruecksicht: Wer sich vertippt
+                # und 500 statt 5 eintraegt, hat keine Bremse mehr.
+                self._json(
+                    {
+                        "ok": False,
+                        "grund": "Ueber 50 USD je Zyklus ist keine Bremse mehr. "
+                        "Wenn du das wirklich willst, trag ZYKLUS_GRENZE von Hand "
+                        "in die .env ein.",
+                    },
+                    400,
+                )
+                return
+
+            from .config import set_env_value
+
+            set_env_value("ZYKLUS_GRENZE", f"{usd:.2f}")
+            # Und sofort wirksam: Der Agent bekommt dieselben Einstellungen
+            # gereicht, die hier liegen - ohne das hier wuerde die neue
+            # Grenze erst nach einem Neustart gelten.
+            steuerung.settings.economy.max_cost_per_cycle_usd = usd
+
+            agent = Agent(steuerung.settings)
+            try:
+                agent.store.log("budget", f"Zyklusgrenze auf {usd:.2f} USD gesetzt")
+            finally:
+                agent.close()
+            self._json({"ok": True, "usd": usd})
+
         def _setze_kasse(self, rumpf: dict) -> None:
             """Trägt den echten Kontostand ein.
 
@@ -988,6 +1059,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/einnahme",
                 "/api/entscheiden",
                 "/api/kasse",
+                "/api/grenze",
                 "/api/modell",
                 "/api/portraits",
                 "/api/bildsprache",
@@ -1013,6 +1085,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/kasse":
                 self._setze_kasse(rumpf)
+                return
+
+            if pfad == "/api/grenze":
+                self._setze_grenze(rumpf)
                 return
 
             if pfad == "/api/modell":
@@ -1049,8 +1125,15 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))
             hinweis = (rumpf.get("hinweis") or "").strip() or None
+            # "Zu Ende führen" ist kein neuer Zyklus: Die Vorarbeit ist
+            # bezahlt und steht im Speicher, es fehlen nur die Beiträge.
+            nur_beenden = bool(rumpf.get("nur_beenden"))
 
-            gestartet, grund = steuerung.starte(zyklen=zyklen, hinweis=hinweis)
+            gestartet, grund = steuerung.starte(
+                zyklen=1 if nur_beenden else zyklen,
+                hinweis=hinweis,
+                nur_beenden=nur_beenden,
+            )
             if gestartet:
                 self._json({"gestartet": True})
             else:

@@ -511,6 +511,27 @@
   </div>
   <p class="hinweis" id="starthinweis" style="margin:13px 0 0"></p>
   <p class="hinweis" id="takthinweis" style="margin:8px 0 0; display:none"></p>
+
+  <div id="fortsetzen" style="display:none; margin-top:14px; padding-top:14px;
+       border-top:1px solid rgba(255,255,255,.09)">
+    <p class="hinweis" style="margin:0 0 10px" id="fortsetzengrund"></p>
+    <button class="klein" id="weiter">Zyklus zu Ende führen</button>
+  </div>
+
+  <div class="zeile" style="margin-top:14px; padding-top:14px;
+       border-top:1px solid rgba(255,255,255,.09)">
+    <label for="grenze" style="font-size:13px; opacity:.8">Höchstens je Zyklus</label>
+    <input id="grenze" type="number" step="0.25" min="0.10" max="50"
+           style="max-width:110px; min-width:90px">
+    <span style="font-size:13px; opacity:.8">USD</span>
+    <button class="klein" id="grenzesetzen">Übernehmen</button>
+  </div>
+  <p class="hinweis" style="margin:8px 0 0">
+    Die Notbremse gegen Ausreißer, kein Sparplan: Sie verhindert, dass ein
+    einzelner Lauf durch eine Schleife das halbe Guthaben verbrennt. Greift
+    sie, bricht der Zyklus ab – dann erscheint oben der Knopf zum
+    Zu-Ende-führen.
+  </p>
 </div>
 
 <div id="protokollbox" style="display:none">
@@ -986,6 +1007,29 @@ function preisspanne(x) {
  */
 const AUFRUFE_JE_BEITRAG = 5;
 
+/** Was dieser Beitrag gekostet hat, als kleine Marke am Bild.
+ *
+ * Die Kasse kennt nur die Summe. Ob ein einzelner Beitrag sein Geld wert
+ * war, entscheidet sich aber an ihm selbst - also steht die Zahl an ihm.
+ */
+function kosten_marke(p) {
+  if (p.kosten_usd == null) return "";
+  return `<span class="marke">${cent(Number(p.kosten_usd) * 100)}</span>`;
+}
+
+function kosten_zeile(p) {
+  if (p.kosten_usd == null) {
+    return `<p class="hinweis" style="margin:-8px 0 14px">
+      Für diesen Beitrag wurde noch nicht mitgerechnet – er ist älter als
+      die Kostenzählung.</p>`;
+  }
+  const usd = Number(p.kosten_usd);
+  return `<p class="hinweis" style="margin:-8px 0 14px">
+    💶 Dieser Beitrag hat <b>${cent(usd * 100)}</b> gekostet –
+    Stoffsuche, Text, Bild, Prüfung und jede Nachbesserung zusammen.
+    Bei einem Beitrag am Tag wären das <b>${euro(usd * 100 * 30)}</b> im Monat.</p>`;
+}
+
 function modellsteckbrief(x, d, jetzt) {
   if (!x) return "";
   const alle = d.modelle || [];
@@ -1362,6 +1406,28 @@ function zeichne(d) {
     ? "Er schreibt neue Beiträge. Hinaus geht nur, was du freigibst."
     : "Es entstehen nur Entwürfe – veröffentlicht wird nichts.";
 
+  // Die Grenze nur setzen, solange niemand darin tippt - sonst springt
+  // der Wert beim naechsten Auffrischen zurueck.
+  const grenze = $("grenze");
+  if (document.activeElement !== grenze) {
+    grenze.value = Number(d.grenze_pro_zyklus || 0).toFixed(2);
+  }
+
+  // Der Knopf zum Fortsetzen erscheint nur, wenn wirklich die Grenze
+  // gegriffen hat. Bei einem Netzfehler oder leerer Kasse waere er
+  // falsch: Da hilft kein Fortsetzen, sondern etwas anderes.
+  const fort = $("fortsetzen");
+  const wegen_budget = !d.laeuft && !!d.fehler &&
+    /Zyklusbudget aufgebraucht/i.test(String(d.fehler));
+  fort.style.display = wegen_budget ? "" : "none";
+  if (wegen_budget) {
+    $("weiter").disabled = false;
+    $("fortsetzengrund").textContent =
+      "Der Zyklus wurde von der Grenze gestoppt. Reflexion, Kurs und " +
+      "Recherche sind schon bezahlt und bleiben stehen – fortsetzen holt " +
+      "nur die Beiträge nach.";
+  }
+
   const takt = $("takthinweis");
   takt.style.display = d.auto_stunden ? "" : "none";
   if (d.auto_stunden) {
@@ -1613,6 +1679,7 @@ function zeichne_beitraege(d) {
             ${reiz_marke(p.fund, p.status)}
             ${pruef_marke(p.pruefung)}
             ${p.bildnachweis ? '<span class="marke gepruft">echtes Foto</span>' : ""}
+            ${kosten_marke(p)}
           </div>
         </div>
         <div class="inhalt">
@@ -1658,6 +1725,7 @@ function zeige_beitrag(p) {
       <div class="feldkopf"><span>Der Fund, auf dem das steht</span></div>
       ${fund_html(p.fund)}
     </div>
+    ${kosten_zeile(p)}
     ${p.bildnachweis ? `<p class="hinweis" style="margin:-8px 0 14px">
       📷 Echte Aufnahme · ${esc(p.bildnachweis)}<br>
       Diese Zeile geht mit dem Beitrag hinaus – sie ist die Bedingung der Lizenz.
@@ -1997,6 +2065,25 @@ $("start").onclick = async () => {
     { zyklen: +$("zyklen").value, hinweis: $("hinweis").value });
   if (!ergebnis.gestartet) alert(ergebnis.grund || "Start nicht möglich.");
   setTimeout(laden, 300);
+};
+
+$("weiter").onclick = async () => {
+  $("weiter").disabled = true;
+  // Ohne neue Vorarbeit: Reflexion, Kurs und Recherche sind bezahlt und
+  // stehen im Speicher. Nur die Beitraege fehlen.
+  const ergebnis = await sende("/api/start", { nur_beenden: true });
+  if (!ergebnis.gestartet) alert(ergebnis.grund || "Fortsetzen nicht möglich.");
+  setTimeout(laden, 300);
+};
+
+$("grenzesetzen").onclick = async () => {
+  const usd = parseFloat($("grenze").value);
+  if (!(usd > 0)) { alert("Trag eine Zahl ein."); return; }
+  const ergebnis = await sende("/api/grenze", { usd });
+  if (!ergebnis.ok) { alert(ergebnis.grund || "Ging nicht."); return; }
+  $("grenzesetzen").textContent = "Steht";
+  setTimeout(() => { $("grenzesetzen").textContent = "Übernehmen"; }, 1800);
+  laden();
 };
 
 laden();

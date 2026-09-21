@@ -788,8 +788,39 @@ class PollinationsGenerator:
 
         ziel.parent.mkdir(parents=True, exist_ok=True)
         ziel.write_bytes(antwort.content)
+        schneide_wasserzeichen_ab(ziel)
         log.info("Bild von Pollinations: %s", ziel)
         return ziel
+
+
+# Wie viel vom unteren Rand wegfaellt. Das Wasserzeichen sitzt unten
+# rechts und ist bei 1080 Pixel Hoehe rund 60 Pixel hoch; 7 Prozent
+# decken es mit Rand ab, ohne dass vom Motiv etwas Wesentliches fehlt.
+WASSERZEICHEN_ANTEIL = 0.07
+
+
+def schneide_wasserzeichen_ab(ziel: Path) -> None:
+    """Schneidet den unteren Rand ab, wo Pollinations sein Zeichen setzt.
+
+    Der Schalter `nologo` wirkt nur mit Konto - ohne eines kommt das
+    Bild mit Logo, und dann steht auf einem Beitrag, der aussehen soll,
+    als haette ihn jemand gemacht, die Marke eines fremden Dienstes.
+
+    Lieber sieben Prozent Bildhoehe verlieren als das. Schlaegt es fehl,
+    bleibt das Bild wie es ist: ein Bild mit Zeichen ist immer noch
+    besser als gar keines.
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(ziel) as bild:
+            breite, hoehe = bild.size
+            neu = int(hoehe * (1 - WASSERZEICHEN_ANTEIL))
+            if neu < 64:
+                return
+            bild.crop((0, 0, breite, neu)).save(ziel)
+    except Exception as exc:  # noqa: BLE001 - lieber mit Zeichen als gar nicht
+        log.warning("Wasserzeichen nicht abgeschnitten: %s", exc)
 
 
 def _pollinations_fehler(antwort: httpx.Response) -> Bildfehler:
