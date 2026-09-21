@@ -1298,6 +1298,212 @@ def instagram(config: Path = typer.Option(None)) -> None:
 
 
 @app.command()
+def bildsuche(
+    suchwort: str = typer.Argument(..., help="Wonach gesucht wird, am besten englisch"),
+    config: Path = typer.Option(None),
+    alle: bool = typer.Option(False, "--alle", help="Jeden Anlauf einzeln zeigen"),
+) -> None:
+    """Sucht eine echte freie Aufnahme - und kostet dabei nichts.
+
+    Der ganze Weg ohne einen einzigen Modellaufruf: Wikimedia Commons,
+    dann Openverse, Lizenzpruefung, Herunterladen. Damit laesst sich
+    nachsehen, ob die Bildsuche bei einem Thema ueberhaupt etwas findet,
+    bevor ein Zyklus dafuer Geld ausgibt.
+
+    Gedacht zum Ausprobieren: Wer wissen will, ob "roman coin hoard"
+    besser traegt als "Muenzfund", probiert hier beides und sieht in
+    zwei Sekunden, was herauskommt.
+    """
+    from .imaging.echtbild import suchbegriffe, suche_bild
+    from .imaging.panorama import ist_panorama, stueckzahl
+
+    settings = load_settings(config)
+    ziel_ordner = settings.media_dir
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+
+    versuche = suchbegriffe(suchwort)
+    console.print(
+        Panel(
+            f"Gesucht wird nach: [bold]{suchwort}[/bold]\n\n"
+            "Anlaeufe, vom Genauen zum Allgemeinen:\n"
+            + "\n".join(f"  {i}. {b}" for i, b in enumerate(versuche, 1))
+            + "\n\n[dim]Quellen: Wikimedia Commons, dann Openverse.\n"
+            "Kostet nichts - hier wird kein Modell gefragt.[/dim]",
+            title="Bildsuche",
+        )
+    )
+
+    if alle:
+        from .imaging.echtbild import _frage_commons, _frage_openverse
+        import httpx as _httpx
+
+        with _httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            for begriff in versuche:
+                c = _frage_commons(begriff, client, 12)
+                o = _frage_openverse(begriff, client, 12)
+                console.print(
+                    f"  [bold]{begriff}[/bold]: "
+                    f"Commons {len(c)}, Openverse {len(o)}"
+                )
+
+    console.print("\n[dim]Suche laeuft ...[/dim]")
+    gefunden = suche_bild(suchwort)
+    if gefunden is None:
+        console.print(
+            Panel(
+                "Zu diesem Thema gibt es in beiden Archiven nichts frei\n"
+                "Verwendbares - jedenfalls nichts Grosses genug.\n\n"
+                "Im Zyklus wuerde der Agent hier ein Bild malen lassen.\n"
+                "Probier ein allgemeineres Wort, oder Englisch statt Deutsch.",
+                title="[yellow]Nichts gefunden[/yellow]",
+            )
+        )
+        raise typer.Exit(1)
+
+    ziel = ziel_ordner / "suchprobe.jpg"
+    from .imaging.echtbild import hole_bild
+
+    geladen = hole_bild(gefunden, ziel)
+    if geladen is None:
+        console.print("[red]Gefunden, aber nicht ladbar.[/red]")
+        raise typer.Exit(1)
+
+    breite, hoehe = gefunden.breite, gefunden.hoehe
+    verhaeltnis = breite / hoehe if hoehe else 0
+    pano = ist_panorama(ziel)
+    stuecke = stueckzahl(breite, hoehe, 864 / 1080) if pano else 0
+
+    console.print(
+        Panel(
+            f"Quelle:   {gefunden.seite}\n"
+            f"Lizenz:   [bold]{gefunden.lizenz}[/bold]\n"
+            f"Urheber:  {gefunden.urheber or 'nicht genannt'}\n"
+            f"Groesse:  [bold]{breite} x {hoehe}[/bold] "
+            f"(Verhaeltnis {verhaeltnis:.2f})\n"
+            + (
+                f"Panorama: [green]ja, {stuecke} Stuecke zum Durchwandern[/green]\n"
+                if stuecke >= 2
+                else "Panorama: nein, gewoehnliches Format\n"
+            )
+            + f"\nLiegt hier: [bold]{ziel}[/bold]\n\n"
+            f"[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
+            title="[green]Gefunden[/green]",
+        )
+    )
+    console.print(
+        "\n[dim]Mach das Bild auf und schau, ob es zum Thema passt. "
+        "Genau dieses wuerde im Beitrag landen.[/dim]"
+    )
+
+
+@app.command()
+def karussellprobe(
+    post_id: int = typer.Argument(0, help="Welcher Entwurf, 0 heisst der neueste"),
+    config: Path = typer.Option(None),
+) -> None:
+    """Baut die Bilder eines vorhandenen Entwurfs noch einmal - ohne Modell.
+
+    Der teuerste Weg, das Karussell auszuprobieren, waere ein ganzer
+    Zyklus: Stoffsuche, Text, Pruefung, alles noch einmal bezahlt, nur um
+    zu sehen, ob die Bilder zusammenpassen. Hier wird ein Entwurf
+    genommen, der schon dasteht, und nur der Bildteil wiederholt.
+
+    Was dabei wirklich laeuft: die Bildsuche in beiden Archiven, das
+    Angleichen der ganzen Reihe, das Zerschneiden eines Panoramas und
+    die Beschriftung. Was nicht laeuft: jeder Modellaufruf. Gemalt wird
+    auch nicht - es geht um die echten Aufnahmen.
+    """
+    import json as _json
+
+    from .imaging.angleichen import gleiche_reihe_an
+    from .imaging.panorama import ist_panorama, zerschneide
+    from .models import PostDraft
+
+    agent = _agent(config)
+    try:
+        if post_id:
+            zeile = agent.store.get_post(post_id)
+        else:
+            entwuerfe = agent.store.recent_posts(limit=1)
+            zeile = entwuerfe[0] if entwuerfe else None
+        if zeile is None:
+            console.print("[red]Diesen Entwurf gibt es nicht.[/red]")
+            raise typer.Exit(1)
+
+        draft = PostDraft.model_validate(_json.loads(zeile["draft_json"]))
+        identitaet = agent.identity
+        if identitaet is None:
+            console.print("[red]Es gibt noch kein Profil.[/red]")
+            raise typer.Exit(1)
+
+        karten = list(getattr(draft, "karten", None) or [])
+        console.print(
+            Panel(
+                f"Entwurf:  [bold]{zeile['id']}[/bold] - {draft.bildtext[:60]}\n"
+                f"Karten:   [bold]{len(karten)}[/bold] zusaetzlich zum ersten Bild\n"
+                f"Farben:   {draft.visual.background_hex} / {draft.visual.accent_hex}\n\n"
+                "[dim]Kein Modellaufruf, kein Malen - nur Suche, Angleichen\n"
+                "und Beschriften. Kostet nichts.[/dim]",
+                title="Karussellprobe",
+            )
+        )
+        if not karten:
+            console.print(
+                "[yellow]Dieser Entwurf hat keine Karten.[/yellow] "
+                "Er stammt von vor dem Karussell, oder der Agent fand den "
+                "Fund nicht ergiebig genug."
+            )
+            raise typer.Exit(0)
+
+        stamm = f"probe-{zeile['id']}"
+        rohbilder = []
+        for nummer, karte in enumerate(karten, start=2):
+            roh, nachweis = agent._karte_rohbild(karte, stamm, nummer)
+            rohbilder.append(roh)
+            woher = "echte Aufnahme" if nachweis else ("gemalt" if roh else "nichts")
+            console.print(f"  Karte {nummer}: {karte.text[:46]:<46} {woher}")
+
+        echte = [b for b in rohbilder if b is not None]
+        if len(echte) > 1:
+            angeglichen = gleiche_reihe_an(
+                echte,
+                hintergrund_hex=draft.visual.background_hex,
+                akzent_hex=draft.visual.accent_hex,
+            )
+            console.print(f"\n  Angeglichen: {angeglichen} von {len(echte)} Bildern")
+
+        fertige = []
+        for versatz, (karte, roh) in enumerate(zip(karten, rohbilder)):
+            fertige.append(
+                agent._beschrifte_karte(karte, roh, stamm, versatz + 2, draft, identitaet)
+            )
+
+        pano = [b for b in rohbilder if b is not None and ist_panorama(b)]
+        if pano:
+            stuecke = zerschneide(
+                pano[0], agent.settings.media_dir / f"{stamm}-pano",
+                format_breite=864, format_hoehe=1080,
+            )
+            if stuecke:
+                console.print(
+                    f"  Panorama gefunden: {len(stuecke)} Stuecke zum Durchwandern"
+                )
+
+        console.print(
+            Panel(
+                "\n".join(f"  {p}" for p in fertige),
+                title=f"[green]{len(fertige)} Bilder gebaut[/green]",
+            )
+        )
+        console.print(
+            "[dim]Mach sie nebeneinander auf. Die Frage ist nicht, ob jedes "
+            "fuer sich gut ist, sondern ob sie zusammen aussehen.[/dim]"
+        )
+    finally:
+        agent.close()
+
+
+@app.command()
 def bildtest(config: Path = typer.Option(None)) -> None:
     """Erzeugt ein einzelnes Probebild und sagt genau, was dabei passiert.
 

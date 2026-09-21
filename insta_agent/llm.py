@@ -89,10 +89,35 @@ class Brain:
     def __init__(self, config: LLMConfig, treasury: Treasury, api_key: str | None = None) -> None:
         self.config = config
         self.treasury = treasury
-        self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        self._api_key = api_key
+        self._client: anthropic.Anthropic | None = None
         # Die Quellen des letzten Aufrufs. Sie gehören zum Ergebnis, passen
         # aber in kein Schema, das der Aufrufer vorgibt.
         self.letzte_quellen: list[str] = []
+
+    @property
+    def client(self) -> anthropic.Anthropic:
+        """Der Zugang zum Modell - gebaut, wenn er zum ersten Mal gebraucht wird.
+
+        Frueher entstand er im Konstruktor. Das hiess: Wer einen Agenten
+        anlegt, braucht einen Schluessel, auch wenn er nie ein Modell
+        fragt. Genau das trifft die Proben, die ausdruecklich nichts
+        kosten sollen - und `anthropic.Anthropic()` ohne Schluessel wirft
+        nicht etwa None zurueck, sondern eine englische Fehlermeldung
+        mitten in einem Befehl, der mit Modellen nichts zu tun hat.
+        """
+        if self._client is None:
+            self._client = (
+                anthropic.Anthropic(api_key=self._api_key)
+                if self._api_key
+                else anthropic.Anthropic()
+            )
+        return self._client
+
+    @client.setter
+    def client(self, ersatz: Any) -> None:
+        """Damit Tests einen Doppelgaenger unterschieben koennen."""
+        self._client = ersatz
 
     @property
     def suchbudget(self) -> int:
