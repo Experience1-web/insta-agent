@@ -114,8 +114,10 @@ class Publisher:
         image_path.with_name(name).write_bytes(fuer_instagram(image_path))
         return relative.with_name(name)
 
-    def publish(self, draft: PostDraft, image_path: Path) -> PublishResult:
-        caption = self.full_caption(draft)
+    def publish(
+        self, draft: PostDraft, image_path: Path, bildnachweis: str = ""
+    ) -> PublishResult:
+        caption = self.full_caption(draft, bildnachweis)
 
         if not self.live:
             path = self._write_draft(draft, image_path, caption)
@@ -162,12 +164,19 @@ class Publisher:
         return PublishResult(published=False, draft_path=path, reason="\n  ".join(gruende))
 
     @staticmethod
-    def full_caption(draft: PostDraft) -> str:
-        """Caption, Handlungsaufruf und Hashtags zu einem Text zusammensetzen."""
+    def full_caption(draft: PostDraft, bildnachweis: str = "") -> str:
+        """Caption, Handlungsaufruf, Bildnachweis und Hashtags zusammensetzen.
+
+        Der Bildnachweis steht vor den Hashtags und nicht dazwischen: Er
+        ist die Bedingung, unter der das Foto genutzt werden darf, und
+        keine Zierde. Bei einem gemalten Bild ist er leer und entfällt.
+        """
         parts = [draft.caption.strip()]
         cta = draft.call_to_action.strip()
         if cta and not _schon_gesagt(draft.caption, cta):
             parts.append(cta)
+        if nachweis := (bildnachweis or "").strip():
+            parts.append(nachweis)
         if draft.hashtags:
             parts.append(" ".join(f"#{tag}" for tag in draft.hashtags))
         return "\n\n".join(parts)

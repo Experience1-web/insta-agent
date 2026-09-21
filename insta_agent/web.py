@@ -222,6 +222,9 @@ class Steuerung:
                         "aufruf": daten.get("call_to_action", ""),
                         "bildtext": daten.get("hook_text_on_screen", ""),
                         "bildprompt": daten.get("image_generation_prompt", ""),
+                        # Bei einem übernommenen Foto die Pflichtangabe.
+                        # Leer heißt: gemalt.
+                        "bildnachweis": zeile["bildnachweis"] or "",
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
                         # Was die Endprüfung gefunden hat. None heißt:
                         # nicht geprüft - das ist etwas anderes als sauber.

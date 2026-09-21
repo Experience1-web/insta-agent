@@ -183,6 +183,16 @@ class Fund(BaseModel):
             "oder die vorhandenen unscheinbar sind."
         ),
     )
+    bildsuche: str = Field(
+        default="",
+        description=(
+            "Zwei bis vier Wörter, mit denen sich in einem Bildarchiv eine "
+            "Aufnahme der Sache finden lässt: der wissenschaftliche Name, "
+            "der Fundort, der Gegenstand. Nicht der Titel des Beitrags und "
+            "keine Beschreibung - Suchbegriffe. Englisch oder Latein bringt "
+            "mehr Treffer als Deutsch."
+        ),
+    )
     verworfen: list[str] = Field(
         default_factory=list,
         description="Was du auch gefunden und als zu gewöhnlich verworfen hast",

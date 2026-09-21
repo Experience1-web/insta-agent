@@ -127,6 +127,15 @@ Trag nichts ein, wenn die vorhandenen Aufnahmen unscheinbar sind: ein
 graues Belegfoto aus einer Fachveröffentlichung ist schlechter als ein
 gutes erzeugtes Bild. Dann bleibt das Feld leer und es wird gemalt.
 
+Unter `bildsuche` schreibst du zwei bis vier Suchbegriffe, mit denen sich
+in einem Bildarchiv eine Aufnahme finden lässt - der wissenschaftliche
+Name, der Fundort, der Gegenstand. Nicht den Titel des Beitrags, keine
+Beschreibung, keine Sätze. Englisch oder Latein bringt mehr Treffer als
+Deutsch: "Dulcibella camanchaca", "Aquincum Roman coins hoard", "JWST
+Cassiopeia A". Danach wird in einem freien Bildarchiv gesucht, und wenn
+sich dort etwas Brauchbares findet, steht ein echtes Foto im Beitrag
+statt eines gemalten.
+
 Unter `verworfen` schreibst du, was du sonst noch gefunden und
 weggelegt hast, mit einem halben Satz warum. Das ist keine Fleißarbeit:
 Daran sieht man, ob wirklich gesucht wurde.
@@ -344,5 +353,6 @@ Beleglage: {fund.beleglage}
 Reiz: {fund.reiz} von 5 (Hook {fund.hookkraft}, Bild {fund.bildkraft}, verständlich {fund.breite})
 Bildidee: {fund.bildidee}
 Echte Aufnahme: {fund.echtes_bild or "keine gefunden"}
+Suchbegriffe fürs Bildarchiv: {fund.bildsuche or "keine genannt"}
 Quellen:
 {quellen}"""

@@ -1480,6 +1480,7 @@ function zeichne_beitraege(d) {
             <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
             ${reiz_marke(p.fund, p.status)}
             ${pruef_marke(p.pruefung)}
+            ${p.bildnachweis ? '<span class="marke gepruft">echtes Foto</span>' : ""}
           </div>
         </div>
         <div class="inhalt">
@@ -1525,6 +1526,10 @@ function zeige_beitrag(p) {
       <div class="feldkopf"><span>Der Fund, auf dem das steht</span></div>
       ${fund_html(p.fund)}
     </div>
+    ${p.bildnachweis ? `<p class="hinweis" style="margin:-8px 0 14px">
+      📷 Echte Aufnahme · ${esc(p.bildnachweis)}<br>
+      Diese Zeile geht mit dem Beitrag hinaus – sie ist die Bedingung der Lizenz.
+    </p>` : ""}
     ${p.bildtext ? `<div class="feld">
       <div class="feldkopf">
         <span>Text fürs Bild</span>

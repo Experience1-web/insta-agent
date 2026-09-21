@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS posts (
     pruefung_json   TEXT,
     gestaltung_json TEXT,
     fund_json       TEXT,
-    rohbild_path    TEXT
+    rohbild_path    TEXT,
+    bildnachweis    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -98,6 +99,7 @@ class Store:
             "gestaltung_json": "TEXT",
             "fund_json": "TEXT",
             "rohbild_path": "TEXT",
+            "bildnachweis": "TEXT",
         }
     }
 
@@ -233,6 +235,19 @@ class Store:
         with self._tx() as conn:
             conn.execute(
                 "UPDATE posts SET rohbild_path=? WHERE id=?", (str(pfad) if pfad else None, post_id)
+            )
+
+    def setze_bildnachweis(self, post_id: int, nachweis: str | None) -> None:
+        """Die Pflichtangabe zu einem übernommenen Foto.
+
+        Ohne sie darf das Bild nicht erscheinen - sie ist die Bedingung
+        der Lizenz, nicht eine Höflichkeit. Deshalb hängt sie am Beitrag
+        und nicht an der Datei: Die Datei kann ersetzt werden, die
+        Bedingung gilt für das, was veröffentlicht wird.
+        """
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET bildnachweis=? WHERE id=?", (nachweis or None, post_id)
             )
 
     def letzte_gebiete(self, limit: int = 6) -> list[str]:

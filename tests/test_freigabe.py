@@ -97,9 +97,13 @@ class MitschreibenderVerlag:
 
     def __init__(self) -> None:
         self.veroeffentlicht: list[str] = []
+        # Womit der Beitrag hinausging - bei einem uebernommenen Foto die
+        # Pflichtangabe, sonst leer.
+        self.nachweise: list[str] = []
 
-    def publish(self, draft, image_path) -> PublishResult:
+    def publish(self, draft, image_path, bildnachweis: str = "") -> PublishResult:
         self.veroeffentlicht.append(draft.caption)
+        self.nachweise.append(bildnachweis)
         return PublishResult(published=True, ig_media_id=f"ig-{len(self.veroeffentlicht)}")
 
 

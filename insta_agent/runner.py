@@ -491,11 +491,12 @@ class Agent:
             # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
             # zu ändern - und ein zweites Bild kostet zweimal.
             gestaltung = self._gestalte(draft, identity, report)
-            erzeugt, rohbild = self._erzeuge_bild(draft, basis, identity, report)
+            erzeugt, rohbild = self._erzeuge_bild(draft, basis, identity, report, fund)
             if erzeugt:
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
             self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
+            self.store.setze_bildnachweis(post_id, getattr(self, "_letzter_nachweis", ""))
             if fund is not None:
                 self.store.set_fund(post_id, fund)
             if gestaltung is not None:
@@ -561,12 +562,16 @@ class Agent:
             self.settings.media_dir / f"{basis}.png",
             groesse=STORY if self.settings.posting.bildformat == "story" else FEED,
         )
-        gemalt, rohbild = self._erzeuge_bild(draft, basis, identity, lauf)
+        fund = (
+            Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
+        )
+        gemalt, rohbild = self._erzeuge_bild(draft, basis, identity, lauf, fund)
         if gemalt:
             bild = gemalt
 
         self.store.setze_bild(post_id, draft, str(bild))
         self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
+        self.store.setze_bildnachweis(post_id, getattr(self, "_letzter_nachweis", ""))
         if gestaltung is not None:
             self.store.set_gestaltung(post_id, gestaltung)
         self.store.log("bild_neu", f"Entwurf {post_id}: Bild neu gemalt")
@@ -1119,8 +1124,42 @@ class Agent:
         self.store.log("gestaltung", f"Niveau {urteil.niveau}/5 - {urteil.urteil}")
         return urteil
 
+    def _echtes_bild(self, fund, basis: str, report: CycleReport) -> tuple[Path | None, str]:
+        """Sucht eine echte Aufnahme des Fundes in einem freien Bildarchiv.
+
+        Ein gemaltes Bild zeigt, wie etwas aussehen könnte. Bei einem Fund
+        ist das die zweitbeste Lösung: Wer liest, dass 140 Münzen 1.800
+        Jahre unberührt lagen, will die Münzen sehen.
+
+        Gibt den Pfad und die Pflichtangabe zurück, oder zweimal nichts -
+        dann wird gemalt. Genommen wird nur, was ausdrücklich auch
+        gewerblich genutzt und bearbeitet werden darf; auf jedes Bild
+        kommt schliesslich Schrift.
+        """
+        if fund is None or not (suchwort := (fund.bildsuche or "").strip()):
+            return None, ""
+
+        from .imaging.echtbild import finde_und_hole
+
+        ziel = self.settings.media_dir / f"{basis}-echt.jpg"
+        try:
+            gefunden = finde_und_hole(suchwort, ziel)
+        except Exception as exc:  # noqa: BLE001 - ohne Foto wird gemalt
+            log.info("Bildsuche fehlgeschlagen: %s", exc)
+            return None, ""
+
+        if gefunden is None:
+            report.steps.append(f"Keine freie Aufnahme zu '{suchwort}' - es wird gemalt")
+            return None, ""
+
+        report.steps.append(
+            f"Echte Aufnahme übernommen: {gefunden.seite} ({gefunden.lizenz})"
+        )
+        self.store.log("bild_echt", f"{gefunden.seite} - {gefunden.lizenz}")
+        return gefunden.pfad, gefunden.nachweis
+
     def _erzeuge_bild(
-        self, draft, basis: str, identity, report: CycleReport
+        self, draft, basis: str, identity, report: CycleReport, fund=None
     ) -> tuple[Path | None, Path | None]:
         """Lässt das Bild malen und legt den Hook darüber.
 
@@ -1140,6 +1179,28 @@ class Agent:
                 self.store.log("image_error", "Der Bilddienst liess sich nicht aufbauen")
             return None, None
 
+        # Erst nach einer echten Aufnahme sehen. Sie schlägt jedes
+        # gemalte Bild, weil sie die Sache zeigt und nicht eine
+        # Vorstellung davon.
+        echt, nachweis = self._echtes_bild(fund, basis, report)
+        if echt is not None:
+            self._letzter_nachweis = nachweis
+            fertig = self.settings.media_dir / f"{basis}-fertig.png"
+            try:
+                lege_hook_auf(
+                    echt,
+                    fertig,
+                    text=draft.bildtext,
+                    spec=draft.visual,
+                    handle=f"@{identity.handle}",
+                )
+            except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
+                log.warning("Hook auf echtem Bild fehlgeschlagen: %s", exc)
+                return echt, echt
+            report.steps.append("Echte Aufnahme beschriftet")
+            return fertig, echt
+
+        self._letzter_nachweis = ""
         if not draft.image_generation_prompt.strip():
             report.steps.append("Kein Bild-Prompt geschrieben - Typografie bleibt")
             return None, None
@@ -1215,7 +1276,9 @@ class Agent:
                 report.steps.append(f"Beitrag {zeile['id']}: Bild fehlt")
                 continue
 
-            ergebnis = self.publisher.publish(draft, bild)
+            # Der Bildnachweis geht mit hinaus: Bei einem übernommenen
+            # Foto ist er die Bedingung der Lizenz.
+            ergebnis = self.publisher.publish(draft, bild, zeile["bildnachweis"] or "")
             if ergebnis.published and ergebnis.ig_media_id:
                 self.store.mark_published(zeile["id"], ergebnis.ig_media_id)
                 report.published_media_ids.append(ergebnis.ig_media_id)
