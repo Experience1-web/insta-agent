@@ -757,7 +757,25 @@ class PollinationsGenerator:
         if self.token:
             params["token"] = self.token
 
-        antwort = self.client.get(f"{self.ADRESSE}/{quote(prompt[:1800], safe='')}", params=params)
+        # Ein kostenloser Dienst ohne Anmeldung gibt keine Zusagen: Ist er
+        # gerade ueberlastet, antwortet er mit 500 oder 502, und beim
+        # naechsten Versuch geht es. Einmal aufgeben waere hier zu frueh -
+        # zweimal warten dagegen laesst den Zyklus haengen, deshalb drei
+        # Versuche mit kurzer Pause und dann Schluss.
+        adresse = f"{self.ADRESSE}/{quote(prompt[:1800], safe='')}"
+        antwort = None
+        for versuch in range(3):
+            antwort = self.client.get(adresse, params=params)
+            if antwort.status_code < 500:
+                break
+            if versuch < 2:
+                log.warning(
+                    "Pollinations antwortete mit %s - Versuch %s von 3.",
+                    antwort.status_code,
+                    versuch + 2,
+                )
+                time.sleep(3.0 * (versuch + 1))
+        assert antwort is not None
         if antwort.status_code >= 400:
             raise _pollinations_fehler(antwort)
 
@@ -782,6 +800,15 @@ def _pollinations_fehler(antwort: httpx.Response) -> Bildfehler:
         )
     if antwort.status_code in (401, 403):
         return Bildfehler("Pollinations weist den Zugang zurück.")
+    if antwort.status_code >= 500:
+        return Bildfehler(
+            f"Pollinations antwortete dreimal mit {antwort.status_code}. Das ist "
+            "ein Fehler auf deren Seite, nicht bei dir - der Dienst ist "
+            "kostenlos und ohne Anmeldung, und dann ist er manchmal "
+            "ueberlastet. Warte eine halbe Stunde, oder nimm solange einen "
+            "anderen Weg. Der Zyklus laeuft auch ohne Bild weiter: Dann "
+            "entsteht die typografische Fassung."
+        )
     return Bildfehler(f"Pollinations antwortete mit {antwort.status_code}.")
 
 

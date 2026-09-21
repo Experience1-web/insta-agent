@@ -353,3 +353,47 @@ def test_jeder_eingetragene_anbieter_laesst_sich_bauen():
         assert gen is not None, name
         if hasattr(gen, "close"):
             gen.close()
+
+
+def test_pollinations_versucht_es_bei_serverfehlern_nochmal(tmp_path, monkeypatch):
+    """Ein kostenloser Dienst ohne Anmeldung ist manchmal einfach ueberlastet.
+
+    Beim ersten 500 aufzugeben waere zu frueh: Der naechste Versuch geht
+    oft durch. Ewig warten waere aber auch falsch, denn der Zyklus haengt
+    solange - also drei Versuche und dann ein Satz, der sagt, woran es lag.
+    """
+    import insta_agent.imaging.generator as g
+
+    monkeypatch.setattr(g.time, "sleep", lambda _s: None)
+    rufe: list[int] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        rufe.append(1)
+        if len(rufe) < 3:
+            return httpx.Response(500, text="upstream error")
+        return httpx.Response(200, content=b"\x89PNG\r\n\x1a\n", headers={"content-type": "image/png"})
+
+    gen = g.PollinationsGenerator()
+    gen.client = httpx.Client(transport=httpx.MockTransport(antworte), follow_redirects=True)
+    gen.erzeuge("ein Stuhl", tmp_path / "b.png")
+
+    assert len(rufe) == 3
+    assert (tmp_path / "b.png").exists()
+
+
+def test_pollinations_gibt_nach_drei_versuchen_auf(tmp_path, monkeypatch):
+    import insta_agent.imaging.generator as g
+
+    monkeypatch.setattr(g.time, "sleep", lambda _s: None)
+    rufe: list[int] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        rufe.append(1)
+        return httpx.Response(500, text="upstream error")
+
+    gen = g.PollinationsGenerator()
+    gen.client = httpx.Client(transport=httpx.MockTransport(antworte), follow_redirects=True)
+    with pytest.raises(Bildfehler, match="nicht bei dir"):
+        gen.erzeuge("ein Stuhl", tmp_path / "b.png")
+
+    assert len(rufe) == 3
