@@ -1062,12 +1062,13 @@ def finde_und_hole(
         )
         if bester is None or punkte > bester[0]:
             if bester is not None:
-                ausgeschieden.append(
-                    (bester[1], f"ein besserer Treffer kam dazu ({bester[0]:.2f} Punkte)")
-                )
+                verdraengt = f"{bester[0]:.2f} Punkte, ein besserer kam dazu"
+                if bester[1].gesehen:
+                    verdraengt += f" - {bester[1].gesehen}"
+                ausgeschieden.append((bester[1], verdraengt))
             bester = (punkte, geladen, entwurf)
         else:
-            wieso = f"weniger geeignet ({punkte:.2f} Punkte)"
+            wieso = f"{punkte:.2f} Punkte, weniger geeignet"
             if bild.gesehen:
                 wieso += f" - {bild.gesehen}"
             ausgeschieden.append((bild, wieso))
@@ -1077,7 +1078,7 @@ def finde_und_hole(
             beobachter(bild, False, grund)
 
     if bester is None:
-        _raeume_auf(zwischendateien, behalte=None)
+        _raeume_auf(zwischendateien, behalte=None, ziel=ziel)
         return None
 
     punkte, gewinner, datei = bester
@@ -1086,11 +1087,11 @@ def finde_und_hole(
             shutil.copyfile(datei, ziel)
     except OSError as exc:
         log.warning("Fund nicht an seinen Platz gelegt: %s", exc)
-        _raeume_auf(zwischendateien, behalte=datei)
+        _raeume_auf(zwischendateien, behalte=datei, ziel=ziel)
         gewinner.pfad = datei
         return gewinner
 
-    _raeume_auf(zwischendateien, behalte=None)
+    _raeume_auf(zwischendateien, behalte=None, ziel=ziel)
     gewinner.pfad = ziel
     log.info(
         "Genommen: %s (%s, %.2f Punkte)", gewinner.seite, gewinner.lizenz, punkte
@@ -1100,13 +1101,22 @@ def finde_und_hole(
     return gewinner
 
 
-def _raeume_auf(dateien: list[Path], *, behalte: Path | None) -> None:
+def _raeume_auf(
+    dateien: list[Path], *, behalte: Path | None, ziel: Path | None = None
+) -> None:
     """Die Zwischenstaende wegwerfen.
 
     Ohne das bleibt nach jeder Suche ein halbes Dutzend Dateien im
     Bilderordner liegen, und beim naechsten Mal weiss niemand mehr,
     welche davon im Beitrag steht.
+
+    `ziel` nimmt auch die Altlast mit: Die "-rueckhalt"-Datei stammt aus
+    einem Verfahren, das es nicht mehr gibt, lag danach aber weiter im
+    Ordner - mit demselben Motiv wie das richtige Bild, sodass niemand
+    mehr sagen konnte, welches davon im Beitrag steht.
     """
+    if ziel is not None:
+        dateien = [*dateien, ziel.with_name(f"{ziel.stem}-rueckhalt{ziel.suffix}")]
     for datei in dateien:
         if datei == behalte:
             continue

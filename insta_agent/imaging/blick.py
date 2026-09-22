@@ -71,16 +71,27 @@ Zwei Regeln, die schwerer wiegen als alles andere:
    ein Modell, eine Nachbildung im Museum, eine Zeichnung, ein Gemaelde,
    eine Computergrafik, ein Kostuem, eine Skulptur oder ein Spielzeug
    bekommen hoechstens 3 - auch dann, wenn sie die Sache taeuschend
-   aehnlich darstellen. Gesucht ist eine Fotografie von der Sache
-   selbst. Eine leuchtende Quallen-Lichtinstallation ist kein
-   Tiefseetier, so schoen sie auch aussieht.
+   aehnlich darstellen.
+
+   Aber: Im Zweifel ist es eine echte Aufnahme. Gib nur dann hoechstens
+   3, wenn im Bild etwas zu sehen ist, das eine Nachbildung verraet -
+   ein Ausstellungsraum, ein Schild, Besucher, ein Sockel, ein Geruest,
+   Kabel, eine Leinwand, ein Buehnenaufbau, ein Zaun, eine Wand, ein
+   Bilderrahmen, sichtbare Pinselstriche oder Papier.
+
+   Dass etwas unwirklich aussieht, ist kein solcher Hinweis. Aufnahmen
+   aus der Tiefsee, unter Scheinwerferlicht, mit Biolumineszenz, durch
+   ein Mikroskop, ein Teleskop, eine Waermebildkamera oder aus dem All
+   sehen fast immer unwirklich aus und sind trotzdem echte Aufnahmen.
+   Ein leuchtend blauer Meeresgrund voller Korallen ist ein Foto vom
+   Meeresgrund, keine Lichtinstallation.
 
 Antworte in genau einer Zeile, in dieser Form:
 {form}
 
 Die Beschreibung auf Deutsch, hoechstens acht Woerter, und sie sagt, was
-wirklich zu sehen ist - nicht, was zu sehen sein sollte. Wenn es eine
-Nachbildung ist, sage das ausdruecklich dazu."""
+wirklich zu sehen ist - nicht, was zu sehen sein sollte. Haeltst du es
+fuer eine Nachbildung, nenne darin das, woran du das siehst."""
 
 # Was zurueckkommt, wenn nicht gefragt werden konnte. Nicht null:
 # Eine Pruefung, die nicht stattgefunden hat, darf kein Bild abwerten.

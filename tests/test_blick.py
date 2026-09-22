@@ -391,3 +391,48 @@ def test_ohne_urteil_bleibt_der_rang_so_stark_wie_vorher():
     from insta_agent.imaging.echtbild import rangfaktor
 
     assert rangfaktor(3) == 1.0 / (1.0 + 0.30 * 3)
+
+
+# --- Ein echtes Foto darf nicht fuer eine Nachbildung gehalten werden ------
+
+
+def test_die_frage_warnt_vor_dem_umgekehrten_fehler():
+    """Die Regel gegen Nachbildungen hat einen neuen Fehler erzeugt.
+
+    Dieselbe Tiefseeaufnahme bekam vorher 7 von 10 ("Tiefseeboden mit
+    Korallen und Meeresorganismen") und danach 3 ("Leuchtende blaue
+    Kunstinstallation"). Sie hat sich nicht geaendert - die Frage hat
+    sich geaendert, und das Modell wurde misstrauisch.
+
+    Unwirklich auszusehen ist kein Hinweis auf eine Nachbildung. Die
+    Tiefsee, das Mikroskop und das Weltall liefern fast nur Bilder, die
+    unwirklich aussehen. Erkennbar ist eine Nachbildung an etwas
+    Sichtbarem - einem Sockel, einem Schild, Besuchern, Kabeln.
+    """
+    from insta_agent.imaging.blick import FRAGE
+
+    klein = FRAGE.casefold()
+    assert "im zweifel ist es eine echte aufnahme" in klein
+    # Die Merkmale, an denen sich eine Nachbildung wirklich zeigt.
+    for beleg in ("sockel", "schild", "besucher", "kabel"):
+        assert beleg in klein
+    # Und die Aufnahmen, die nur so aussehen.
+    for echt in ("biolumineszenz", "mikroskop", "teleskop"):
+        assert echt in klein
+
+
+def test_die_altlast_verschwindet_mit(tmp_path, monkeypatch):
+    """Die "-rueckhalt"-Datei lag noch neben dem richtigen Bild.
+
+    Beide zeigten dasselbe Motiv, und keiner konnte mehr sagen, welche
+    davon im Beitrag landet.
+    """
+    echtbild = _suche_vorbereiten(monkeypatch, [_fund("gut.jpg", 2400, 1600)])
+
+    ziel = tmp_path / "suchprobe.jpg"
+    altlast = tmp_path / "suchprobe-rueckhalt.jpg"
+    Image.new("RGB", (60, 40), (10, 10, 10)).save(altlast)
+
+    assert echtbild.finde_und_hole("x", ziel) is not None
+    assert not altlast.exists()
+    assert [p.name for p in sorted(tmp_path.iterdir())] == ["suchprobe.jpg"]
