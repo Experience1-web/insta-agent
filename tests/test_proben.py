@@ -405,7 +405,7 @@ def test_die_probe_geht_denselben_weg_wie_der_zyklus(
 
     assert ergebnis.exit_code == 0, ergebnis.output
     # Die Zeichnung wird genannt, nicht verschwiegen.
-    assert "Verworfen auf dem Weg dorthin" in ergebnis.output
+    assert "Angesehen, aber nicht genommen" in ergebnis.output
     assert "anglerfish" in ergebnis.output
     # Und genommen wird das Foto dahinter.
     assert "seeteufel" in ergebnis.output

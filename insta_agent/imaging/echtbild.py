@@ -458,12 +458,22 @@ def rangfaktor(platz: int) -> float:
     etwas darueber weiss, ob ein Bild zum Thema gehoert. Form und
     Aufloesung wissen das nicht.
 
-    Die Steigung ist ausprobiert, nicht geraten. Bei 0,15 gilt beides:
-    Unter aehnlich brauchbaren Bildern gewinnt das vorderste, weil es
-    wahrscheinlicher zum Thema gehoert. Eine unbrauchbare Tafel auf Platz
-    eins verliert trotzdem noch gegen ein gutes Foto auf Platz acht.
+    Die Steigung ist ausprobiert, nicht geraten - und einmal nachgezogen.
+    Mit 0,15 stand dasselbe Feuerwerk ein zweites Mal im Ergebnis: Eine
+    echte Aufnahme vom Meeresgrund auf Platz zwei kam auf 0,77, das
+    Feuerwerk auf Platz drei auf 0,70. Zu knapp fuer einen Unterschied,
+    der so gross ist.
+
+    Mit 0,30 sind es 0,68 gegen 0,57, und die Eigenschaft, wegen der die
+    Steigung flach war, bleibt erhalten: Eine unbrauchbare gescannte
+    Tafel auf Platz eins kommt auf 0,26 und verliert weiterhin gegen ein
+    gutes Foto auf Platz acht mit 0,42.
+
+    Mehr ginge nicht mehr gut. Die Rangfolge des Archivs ist ein
+    Anhaltspunkt und kein Urteil - wer ihr ganz folgt, nimmt wieder das
+    erste, was die Volltextsuche oben hatte.
     """
-    return 1.0 / (1.0 + 0.15 * max(0, platz))
+    return 1.0 / (1.0 + 0.30 * max(0, platz))
 
 
 def _taugt_der_titel(titel: str) -> bool:
@@ -891,6 +901,49 @@ def hole_bild(
     return None
 
 
+def schaerfefaktor(wert: float, schwelle: float) -> float:
+    """Wie stark ein Bild dadurch verliert, dass es weich ist.
+
+    Eine harte Schwelle war der Fehler. Bei "deep sea creature" wurde
+    damit eine echte Tiefseeaufnahme vom Meeresgrund mit 0,56
+    ausgeschlossen - und gewonnen hat ein Feuerwerk, das "Deep Sea
+    Legend" im Dateinamen hat. Scharf und am Thema vorbei ist wertlos;
+    genau darum ging es bei diesem Beitrag nie.
+
+    Die Schwelle war ausserdem an gerechneten Bildern eingestellt.
+    Echte Aufnahmen liegen tiefer: Wasser, Kompression, Rauschfilter in
+    der Kamera. Ein Wert knapp darunter heisst nicht "unbrauchbar".
+
+    Also ein Abschlag statt eines Ausschlusses, und ein milder: gerade
+    so viel, wie der Wert unter der Schwelle liegt. Bei 0,56 gegen 0,62
+    bleiben neun Zehntel.
+
+    Milde ist hier keine Bequemlichkeit, sondern Ehrlichkeit ueber das,
+    was die Messung kann. Kalibriert ist sie an gerechneten Bildern,
+    weil sich echte Aufnahmen hier nicht laden lassen - und auf denen
+    liegen die Werte dichter beieinander, als die Kalibrierung glauben
+    macht. Eine Zahl, der man nicht ganz trauen kann, darf nicht ueber
+    einen Fund entscheiden; sie darf ihn nur ein wenig schieben.
+
+    Die grobe Unschaerfe faengt ohnehin etwas anderes ab: Sie kam davon,
+    dass Bilder fuers falsche Format hochgerechnet wurden, und davon,
+    dass zu kleine ueberhaupt durchkamen. Beides steckt jetzt in der
+    Guete.
+
+    Ein nicht messbarer Wert kostet nichts: Eine Messung, die nichts
+    gefunden hat, ist kein Grund abzuwerten.
+    """
+    if wert <= 0 or schwelle <= 0:
+        return 1.0
+    return min(1.0, wert / schwelle)
+
+
+# Was ein Treffer hoechstens erreichen kann - Panoramaform mal voller
+# Groesse. Gebraucht, um die Suche abzubrechen, sobald kein Nachfolger
+# den bisher Besten mehr einholen kann.
+BESTMOEGLICHE_PUNKTE = 1.75
+
+
 def finde_und_hole(
     suchwort: str,
     ziel: Path,
@@ -900,99 +953,134 @@ def finde_und_hole(
     beobachter=None,
     groesse: tuple[int, int] = (1080, 1350),
 ):
-    """Suchen, laden und nachsehen, ob es wirklich eine Fotografie ist.
+    """Suchen, laden und den besten Fund nehmen. None, wenn keiner taugt.
 
-    Der Reihe nach, denn erst am geladenen Bild zeigt sich, was es ist.
-    Bei "deep sea creature" gewann eine Datei namens "Humpback
-    anglerfish.png" - frei, gross, gut geschnitten und trotzdem eine
-    wissenschaftliche Zeichnung auf Weiss. Frueher war damit Schluss und
-    es wurde gemalt; jetzt kommt der naechste Treffer dran.
+    Es wird nicht der erste brauchbare genommen, sondern der beste - und
+    das ist der Unterschied, an dem es zweimal gescheitert ist.
 
-    None heisst: Von den ersten paar Treffern war keiner brauchbar.
+    Beim ersten Mal gewann die Form: "Humpback anglerfish.png", frei,
+    gross, gut geschnitten und trotzdem eine wissenschaftliche Zeichnung
+    auf Weiss. Beim zweiten Mal gewann die Schaerfe: Eine echte Aufnahme
+    vom Meeresgrund flog mit 0,56 raus, und genommen wurde ein Feuerwerk
+    namens "Deep Sea Legend following Fireworks" - scharf, gross und zum
+    Thema so passend wie nichts.
 
-    Geprueft wird auch die Schaerfe, und zwar an dem Bild, das im
-    Beitrag ankommt - `groesse` ist dessen Format. Eine weiche Aufnahme
-    wird aber nicht weggeworfen, sondern zurueckgestellt: Findet sich
-    nichts Schaerferes, ist sie immer noch besser als ein gemaltes Bild.
+    Deshalb entscheidet jetzt eine Punktzahl aus dreierlei:
 
-    `beobachter` wird fuer jeden Versuch aufgerufen, mit dem Bild, ob es
-    taugte und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
+    - dem Platz im Archiv, denn nur die Suchmaschine weiss ueberhaupt
+      etwas darueber, ob ein Bild zum Thema gehoert,
+    - der Eignung fuers Beitragsformat, gerechnet an den Massen der
+      geladenen Datei,
+    - der Schaerfe, als Abschlag und nicht als Ausschluss.
+
+    Hart ausgeschlossen wird nur, was gar kein Foto ist. Eine Zeichnung
+    auf Weiss traegt keinen Beitrag, egal wie gut sie sonst passt.
+
+    Abgebrochen wird, sobald kein Nachfolger den Besten mehr einholen
+    kann - dann werden auch keine Bilder mehr geladen.
+
+    `groesse` ist das Format, in dem der Beitrag erscheint. `beobachter`
+    wird fuer jeden Treffer aufgerufen, mit dem Bild, ob es genommen
+    wurde und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
     die Suche tut, will auch sehen, was sie verworfen hat.
     """
     import shutil
 
     from .fotoprobe import wirkt_wie_foto
-    from .schaerfe import ist_scharf, schaerfewert
+    from .schaerfe import SCHARF_GENUG, schaerfewert
 
     zielverhaeltnis = groesse[0] / groesse[1] if groesse[1] else BEITRAGSVERHAELTNIS
     kandidaten = suche_bilder(suchwort, client=client, zielverhaeltnis=zielverhaeltnis)
 
-    # Das beste weiche Bild, falls kein scharfes kommt. Als eigene Datei,
-    # weil `ziel` beim naechsten Versuch ueberschrieben wird.
-    rueckhalt: tuple[float, Fundbild, Path] | None = None
+    bester: tuple[float, Fundbild, Path] | None = None
+    ausgeschieden: list[tuple[Fundbild, str]] = []
+    zwischendateien: list[Path] = []
 
-    for bild in kandidaten[: max(1, versuche)]:
-        geladen = hole_bild(bild, ziel, client=client)
+    for platz, bild in enumerate(kandidaten[: max(1, versuche)]):
+        if bester is not None and BESTMOEGLICHE_PUNKTE * rangfaktor(platz) <= bester[0]:
+            log.info("Suche abgebrochen: Platz %s kann nicht mehr gewinnen", platz + 1)
+            break
+
+        entwurf = ziel.with_name(f"{ziel.stem}-v{platz}{ziel.suffix}")
+        zwischendateien.append(entwurf)
+        geladen = hole_bild(bild, entwurf, client=client)
         if geladen is None:
-            if beobachter:
-                beobachter(bild, False, bild.grund or "nicht ladbar")
+            ausgeschieden.append((bild, bild.grund or "nicht ladbar"))
             continue
-        taugt, grund = wirkt_wie_foto(ziel)
+
+        taugt, grund = wirkt_wie_foto(entwurf)
         if not taugt:
             log.info("Verworfen (%s): %s", bild.seite, grund)
             bild.grund = grund
-            if beobachter:
-                beobachter(bild, False, grund)
+            ausgeschieden.append((bild, grund))
             continue
-        mass = massfaktor(bild.breite, bild.hoehe, zielverhaeltnis)
-        scharf, schaerfegrund = ist_scharf(ziel, groesse=groesse)
-        if scharf and mass < 1.0:
-            # Reicht nach dem Zuschnitt nicht fuer 1080 Pixel. Die
-            # Messung sagt "scharf", weil sie das Bild so sieht, wie es
-            # ist - hochgerechnet ist es das nicht mehr.
-            scharf = False
-            schaerfegrund = (
-                f"zu klein fuers Format ({bild.breite}x{bild.hoehe}, "
-                f"muesste um das {1 / mass:.2f}-fache hochgerechnet werden)"
-            )
-        if not scharf:
-            log.info("Zurueckgestellt (%s): %s", bild.seite, schaerfegrund)
-            bild.grund = schaerfegrund
-            # Beides zaehlt: Wie scharf die Datei ist und ob genug
-            # Pixel da sind. Ein weiches, grosses Bild ist besser als
-            # ein scharfes, das um das Doppelte hochgerechnet wird.
-            wert = schaerfewert(ziel, groesse=groesse) * min(1.0, mass)
-            if rueckhalt is None or wert > rueckhalt[0]:
-                kopie = ziel.with_name(f"{ziel.stem}-rueckhalt{ziel.suffix}")
-                try:
-                    shutil.copyfile(ziel, kopie)
-                    rueckhalt = (wert, geladen, kopie)
-                except OSError as exc:
-                    log.info("Rueckhalt nicht gesichert: %s", exc)
-            if beobachter:
-                beobachter(bild, False, schaerfegrund)
-            continue
-        log.info(
-            "Echtes Bild gefunden: %s (%s, %s)", geladen.seite, geladen.lizenz, schaerfegrund
-        )
-        if beobachter:
-            beobachter(bild, True, "")
-        return geladen
 
-    if rueckhalt is not None:
-        # Nichts Scharfes dabei. Lieber die beste weiche Aufnahme als ein
-        # gemaltes Bild - die zeigt wenigstens die Sache selbst.
-        _, bild, kopie = rueckhalt
+        wert = schaerfewert(entwurf, groesse=groesse)
+        punkte = (
+            guete(bild.breite, bild.hoehe, zielverhaeltnis=zielverhaeltnis)
+            * rangfaktor(platz)
+            * schaerfefaktor(wert, SCHARF_GENUG)
+        )
+        log.info(
+            "Platz %s: %s (%sx%s, Schaerfe %.2f) - %.2f Punkte",
+            platz + 1,
+            bild.seite,
+            bild.breite,
+            bild.hoehe,
+            wert,
+            punkte,
+        )
+        if bester is None or punkte > bester[0]:
+            if bester is not None:
+                ausgeschieden.append(
+                    (bester[1], f"ein besserer Treffer kam dazu ({bester[0]:.2f} Punkte)")
+                )
+            bester = (punkte, geladen, entwurf)
+        else:
+            ausgeschieden.append((bild, f"weniger geeignet ({punkte:.2f} Punkte)"))
+
+    if beobachter:
+        for bild, grund in ausgeschieden:
+            beobachter(bild, False, grund)
+
+    if bester is None:
+        _raeume_auf(zwischendateien, behalte=None)
+        return None
+
+    punkte, gewinner, datei = bester
+    try:
+        if datei != ziel:
+            shutil.copyfile(datei, ziel)
+    except OSError as exc:
+        log.warning("Fund nicht an seinen Platz gelegt: %s", exc)
+        _raeume_auf(zwischendateien, behalte=datei)
+        gewinner.pfad = datei
+        return gewinner
+
+    _raeume_auf(zwischendateien, behalte=None)
+    gewinner.pfad = ziel
+    log.info(
+        "Genommen: %s (%s, %.2f Punkte)", gewinner.seite, gewinner.lizenz, punkte
+    )
+    if beobachter:
+        beobachter(gewinner, True, "")
+    return gewinner
+
+
+def _raeume_auf(dateien: list[Path], *, behalte: Path | None) -> None:
+    """Die Zwischenstaende wegwerfen.
+
+    Ohne das bleibt nach jeder Suche ein halbes Dutzend Dateien im
+    Bilderordner liegen, und beim naechsten Mal weiss niemand mehr,
+    welche davon im Beitrag steht.
+    """
+    for datei in dateien:
+        if datei == behalte:
+            continue
         try:
-            shutil.copyfile(kopie, ziel)
-            kopie.unlink(missing_ok=True)
-        except OSError as exc:
-            log.warning("Rueckhalt nicht zurueckgeholt: %s", exc)
-            return None
-        bild.pfad = ziel
-        log.info("Kein scharfer Treffer, genommen wird der beste weiche: %s", bild.seite)
-        return bild
-    return None
+            datei.unlink(missing_ok=True)
+        except OSError as exc:  # noqa: PERF203 - eine Datei weniger ist kein Grund
+            log.debug("Zwischenstand nicht geloescht (%s): %s", datei.name, exc)
 
 
 __all__ = [
@@ -1007,6 +1095,7 @@ __all__ = [
     "Bilanz",
     "kennung",
     "guete",
+    "schaerfefaktor",
     "massfaktor",
     "nutzmasse",
     "rangfaktor",

@@ -1379,7 +1379,7 @@ def bildsuche(
     geladen = finde_und_hole(suchwort, ziel, beobachter=mitschreiben)
 
     if verworfen:
-        console.print("\n[dim]Verworfen auf dem Weg dorthin:[/dim]")
+        console.print("\n[dim]Angesehen, aber nicht genommen:[/dim]")
         for seite, grund in verworfen:
             kurz = seite.rsplit("/", 1)[-1][:56]
             console.print(f"  [dim]{kurz}[/dim]  [yellow]{grund}[/yellow]")
@@ -1408,7 +1408,7 @@ def bildsuche(
     # also wird mittig beschnitten, und was dabei uebrig bleibt, muss
     # 1080 Pixel breit werden. Reicht es nicht, wird hochgerechnet.
     from .imaging.echtbild import massfaktor, nutzmasse
-    from .imaging.schaerfe import schaerfewert
+    from .imaging.schaerfe import SCHARF_GENUG, schaerfewert
 
     nutz_b, nutz_h = nutzmasse(breite, hoehe)
     mass = massfaktor(breite, hoehe)
@@ -1424,10 +1424,10 @@ def bildsuche(
         )
     if schaerfe <= 0:
         schaerfezeile = "nicht messbar"
-    elif schaerfe >= 0.62:
+    elif schaerfe >= SCHARF_GENUG:
         schaerfezeile = f"[green]scharf[/green] ({schaerfe:.2f})"
     else:
-        schaerfezeile = f"[yellow]weich[/yellow] ({schaerfe:.2f})"
+        schaerfezeile = f"[yellow]etwas weich[/yellow] ({schaerfe:.2f})"
 
     console.print(
         Panel(

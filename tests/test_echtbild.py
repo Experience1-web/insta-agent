@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from PIL import Image
 
 from insta_agent.imaging.echtbild import (
     MINDESTBREITE,
@@ -773,8 +774,10 @@ def test_der_rang_der_suchmaschine_zaehlt_mit():
     # Monoton fallend, ohne Ausreisser.
     werte = [rangfaktor(i) for i in range(12)]
     assert werte == sorted(werte, reverse=True)
-    # Und nicht so steil, dass Platz zwei schon chancenlos waere.
-    assert werte[1] > 0.8
+    # Und nicht so steil, dass Platz zwei schon chancenlos waere. Die
+    # Steigung wurde nachgezogen, nachdem dasselbe Feuerwerk ein zweites
+    # Mal gewonnen hatte - drei Viertel bleiben Platz zwei trotzdem.
+    assert werte[1] > 0.75
 
 
 def test_ein_gutes_foto_weiter_hinten_schlaegt_eine_tafel_vorn():
@@ -1086,3 +1089,177 @@ def test_massfaktor_sagt_ob_hochgerechnet_werden_muss():
 
     assert massfaktor(2400, 1565) > 1.0
     assert massfaktor(1804, 1176) < 1.0
+
+
+# --- Es gewinnt der beste Treffer, nicht der erste brauchbare -------------
+
+
+def test_ein_leicht_weiches_thema_schlaegt_ein_scharfes_daneben():
+    """Der Fall, der zweimal hintereinander schiefgegangen ist.
+
+    Bei "deep sea creature" stand eine echte Aufnahme vom Meeresgrund
+    auf Platz zwei und ein Feuerwerk namens "Deep Sea Legend following
+    Fireworks" auf Platz drei. Die Aufnahme mass 0,56 und flog an einer
+    harten Schaerfeschwelle raus - gewonnen hat das Feuerwerk.
+
+    Scharf und am Thema vorbei ist wertlos. Die Punktzahl muss das
+    abbilden.
+    """
+    from insta_agent.imaging.echtbild import guete, rangfaktor, schaerfefaktor
+    from insta_agent.imaging.schaerfe import SCHARF_GENUG
+
+    meeresgrund = (
+        guete(1804, 1176) * rangfaktor(1) * schaerfefaktor(0.56, SCHARF_GENUG)
+    )
+    feuerwerk = guete(1280, 2276) * rangfaktor(2) * schaerfefaktor(0.66, SCHARF_GENUG)
+
+    assert meeresgrund > feuerwerk
+
+
+def test_eine_tafel_auf_platz_eins_verliert_weiter_gegen_ein_foto_weit_hinten():
+    """Die Eigenschaft, wegen der der Rangfaktor flach war.
+
+    Die Steigung wurde nachgezogen, damit die Rangfolge staerker zaehlt.
+    Sie darf dabei nicht so stark werden, dass wieder das erstbeste aus
+    der Volltextsuche gewinnt.
+    """
+    from insta_agent.imaging.echtbild import guete, rangfaktor
+
+    tafel = guete(2400, 5317) * rangfaktor(0)
+    foto = guete(2400, 1600) * rangfaktor(7)
+
+    assert foto > tafel
+
+
+def test_unmessbare_schaerfe_kostet_nichts():
+    from insta_agent.imaging.echtbild import schaerfefaktor
+
+    assert schaerfefaktor(0.0, 0.62) == 1.0
+
+
+def test_ein_weiches_bild_verliert_nur_ein_wenig():
+    """Die Messung ist an gerechneten Bildern kalibriert, nicht an echten.
+
+    Einer Zahl, der man nicht ganz trauen kann, darf man keinen Fund
+    ueberlassen - sie darf ihn nur schieben.
+    """
+    from insta_agent.imaging.echtbild import schaerfefaktor
+
+    assert 0.85 < schaerfefaktor(0.56, 0.62) < 1.0
+
+
+def test_die_suche_nimmt_den_besten_und_nicht_den_ersten(tmp_path, monkeypatch):
+    """Alle Treffer werden bewertet, dann entschieden.
+
+    Vorher war es "der erste brauchbare gewinnt" - und weil die
+    Reihenfolge von Wikimedias Volltextsuche kommt, hing das Ergebnis
+    daran, was dort zufaellig oben stand.
+    """
+    from insta_agent.imaging import echtbild
+
+    def kandidat(seite, breite, hoehe):
+        return echtbild.Fundbild(
+            url=f"https://u.example/{seite}",
+            pfad=None,
+            lizenz="CC0",
+            urheber="",
+            seite=seite,
+            breite=breite,
+            hoehe=hoehe,
+        )
+
+    # Platz eins ist hochkant wie eine Story, Platz zwei liegt nahe am
+    # Beitragsformat - der bessere Treffer steht hinten.
+    treffer = [kandidat("schmal.jpg", 1280, 2276), kandidat("gut.jpg", 2400, 1600)]
+    monkeypatch.setattr(echtbild, "suche_bilder", lambda *a, **k: treffer)
+
+    def lade(bild, ziel, **_):
+        Image.new("RGB", (bild.breite, bild.hoehe), (70, 90, 110)).save(ziel)
+        bild.pfad = ziel
+        return bild
+
+    monkeypatch.setattr(echtbild, "hole_bild", lade)
+    monkeypatch.setattr(
+        "insta_agent.imaging.fotoprobe.wirkt_wie_foto", lambda _p: (True, "")
+    )
+    monkeypatch.setattr(
+        "insta_agent.imaging.schaerfe.schaerfewert", lambda *a, **k: 0.9
+    )
+
+    gefunden = echtbild.finde_und_hole("x", tmp_path / "ziel.jpg")
+
+    assert gefunden is not None
+    assert gefunden.seite == "gut.jpg"
+    assert gefunden.pfad == tmp_path / "ziel.jpg"
+
+
+def test_die_zwischenstaende_bleiben_nicht_liegen(tmp_path, monkeypatch):
+    """Sonst liegt nach jeder Suche ein halbes Dutzend Dateien herum.
+
+    Genau das ist passiert: Im Bilderordner stand eine
+    "suchprobe-rueckhalt.jpg" neben der "suchprobe.jpg", und niemand
+    wusste mehr, welche davon im Beitrag landet.
+    """
+    from insta_agent.imaging import echtbild
+
+    treffer = [
+        echtbild.Fundbild(
+            url=f"https://u.example/{n}",
+            pfad=None,
+            lizenz="CC0",
+            urheber="",
+            seite=f"{n}.jpg",
+            breite=2400,
+            hoehe=1600,
+        )
+        for n in ("a", "b", "c")
+    ]
+    monkeypatch.setattr(echtbild, "suche_bilder", lambda *a, **k: treffer)
+
+    def lade(bild, ziel, **_):
+        Image.new("RGB", (240, 160), (70, 90, 110)).save(ziel)
+        bild.pfad = ziel
+        return bild
+
+    monkeypatch.setattr(echtbild, "hole_bild", lade)
+    monkeypatch.setattr(
+        "insta_agent.imaging.fotoprobe.wirkt_wie_foto", lambda _p: (True, "")
+    )
+    monkeypatch.setattr(
+        "insta_agent.imaging.schaerfe.schaerfewert", lambda *a, **k: 0.9
+    )
+
+    ziel = tmp_path / "suchprobe.jpg"
+    assert echtbild.finde_und_hole("x", ziel) is not None
+    assert [p.name for p in sorted(tmp_path.iterdir())] == ["suchprobe.jpg"]
+
+
+def test_eine_zeichnung_bleibt_hart_ausgeschlossen(tmp_path, monkeypatch):
+    """Ein Abschlag reicht dafuer nicht - eine Zeichnung traegt keinen Beitrag."""
+    from insta_agent.imaging import echtbild
+
+    treffer = [
+        echtbild.Fundbild(
+            url="https://u.example/zeichnung.png",
+            pfad=None,
+            lizenz="CC0",
+            urheber="",
+            seite="Humpback anglerfish.png",
+            breite=2400,
+            hoehe=2248,
+        )
+    ]
+    monkeypatch.setattr(echtbild, "suche_bilder", lambda *a, **k: treffer)
+
+    def lade(bild, ziel, **_):
+        Image.new("RGB", (240, 224), (255, 255, 255)).save(ziel)
+        bild.pfad = ziel
+        return bild
+
+    monkeypatch.setattr(echtbild, "hole_bild", lade)
+    monkeypatch.setattr(
+        "insta_agent.imaging.fotoprobe.wirkt_wie_foto",
+        lambda _p: (False, "auf Weiss freigestellt - eine Zeichnung, kein Foto"),
+    )
+
+    assert echtbild.finde_und_hole("x", tmp_path / "ziel.jpg") is None
