@@ -1573,11 +1573,15 @@ def quellprobe(
         if befund.kandidaten is not None:
             console.print(f"Bilder auf der Seite: {len(befund.kandidaten)}")
 
+    fuers_karussell = {bild.url for bild in weitere}
     if verworfen:
-        console.print("\n[dim]Angesehen, aber nicht genommen:[/dim]")
+        console.print("\n[dim]Angesehen:[/dim]")
         for url, grund in verworfen:
             kurz = url.rsplit("/", 1)[-1][:50]
-            console.print(f"  [dim]{kurz}[/dim]  [yellow]{grund}[/yellow]")
+            if url in fuers_karussell:
+                console.print(f"  [dim]{kurz}[/dim]  [green]kommt ins Karussell[/green]")
+            else:
+                console.print(f"  [dim]{kurz}[/dim]  [yellow]{grund}[/yellow]")
 
     if gefunden is None:
         gruende = "; ".join(b.grund for b in befunde if b.grund) or "unbekannt"
@@ -1604,7 +1608,9 @@ def quellprobe(
             + (f"Angesehen: [bold]{gefunden.gesehen}[/bold]\n" if gefunden.gesehen else "")
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n"
             + (
-                f"Dazu {len(weitere)} weitere Bilder vom selben Fund fürs Karussell\n"
+                "Dazu ein weiteres Bild von derselben Seite fürs Karussell\n"
+                if len(weitere) == 1
+                else f"Dazu {len(weitere)} weitere Bilder von derselben Seite fürs Karussell\n"
                 if weitere
                 else ""
             )

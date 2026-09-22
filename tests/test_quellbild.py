@@ -206,7 +206,9 @@ def test_aus_einer_freien_studie_kommt_ein_bild_mit_pflichtangabe(tmp_path):
     assert gefunden.pfad == tmp_path / "z.jpg"
     assert gefunden.pfad.exists()
     assert (gefunden.breite, gefunden.hoehe) == (2000, 1500)
-    assert gefunden.nachweis == "Bild: Anna Müller et al. (PLOS ONE) · CC BY 4.0 · via PLOS"
+    # Die Zeitschrift steht schon beim Urheber - ein "via PLOS" dahinter
+    # naennte sie zweimal.
+    assert gefunden.nachweis == "Bild: Anna Müller et al. (PLOS ONE) · CC BY 4.0"
     # Das zweite Bild derselben Studie fuellt das Karussell.
     assert len(weitere) == 1
     assert weitere[0].pfad.exists()
@@ -343,7 +345,7 @@ def test_im_zyklus_kommt_das_bild_aus_der_studie_vor_dem_archiv(tmp_path, monkey
     pfad, nachweis = agent._echtes_bild(_Fund(), "test", bericht)
 
     assert pfad is not None and pfad.exists()
-    assert "via PLOS" in nachweis
+    assert "(PLOS ONE) · CC BY 4.0" in nachweis
     # Das Archiv wurde gar nicht erst gefragt.
     assert archiv_gefragt == []
     assert any("vom Fund selbst" in schritt for schritt in bericht.steps)
@@ -356,7 +358,7 @@ def test_im_zyklus_kommt_das_bild_aus_der_studie_vor_dem_archiv(tmp_path, monkey
 
     roh, karten_nachweis = agent._karte_rohbild(Karte(), "test", 2)
     assert roh is not None and roh.exists()
-    assert "via PLOS" in karten_nachweis
+    assert "(PLOS ONE) · CC BY 4.0" in karten_nachweis
     assert archiv_gefragt == []
 
 
@@ -377,3 +379,20 @@ def test_ohne_freie_quelle_geht_es_ins_archiv_wie_bisher(tmp_path, monkeypatch):
     agent._echtes_bild(Fund(), "test", _Bericht())
 
     assert archiv_gefragt[0] == "Roman coin hoard"
+
+
+def test_die_quelle_steht_nicht_zweimal_in_der_pflichtangabe():
+    """Aus dem ersten echten Lauf: "Bild: NASA · Public domain · via NASA"."""
+    from insta_agent.imaging.echtbild import Fundbild
+
+    bild = Fundbild(
+        url="https://www.nasa.gov/x.jpg",
+        pfad=None,
+        lizenz="Public domain",
+        urheber="NASA",
+        seite="https://www.nasa.gov/images/",
+        breite=0,
+        hoehe=0,
+        quelle="NASA",
+    )
+    assert bild.nachweis == "Bild: NASA · Public domain"

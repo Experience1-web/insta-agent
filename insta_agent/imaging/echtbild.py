@@ -214,7 +214,10 @@ class Fundbild:
         if wer:
             teile.append(f"{wer} ·")
         teile.append(self.lizenz)
-        if quelle := self.quellenname:
+        # "Bild: NASA · Public domain · via NASA" nennt dieselbe Stelle
+        # zweimal. Steht die Quelle schon im Urheber, faellt das "via" weg.
+        quelle = self.quellenname
+        if quelle and quelle.casefold() not in wer.casefold():
             teile.append(f"· via {quelle}")
         return " ".join(teile)
 

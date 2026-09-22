@@ -10,11 +10,11 @@ echo   Dieselbe Bildsuche wie bei 18 - aber jedes gefundene Bild wird
 echo   kurz angesehen, bevor entschieden wird.
 echo.
 echo   Das ist das Einzige, was beantworten kann, ob ein Bild die Sache
-echo   zeigt, um die es geht. Alles andere - Name, Groesse, Schaerfe -
+echo   zeigt, um die es geht. Alles andere - Name, Größe, Schärfe -
 echo   steht neben dem Bild und nicht darin.
 echo.
-echo   Kostet rund 0,05 Cent je Bild. Bei vier Bildern also ungefaehr
-echo   ein Fuenftel Cent fuer den ganzen Versuch.
+echo   Kostet rund 0,05 Cent je Bild. Bei vier Bildern also ungefähr
+echo   ein Fünftel Cent für den ganzen Versuch.
 echo.
 set /p WORT=Wonach suchen (englisch bringt mehr Treffer): 
 echo.
