@@ -1015,7 +1015,13 @@ def finde_und_hole(
     zwischendateien: list[Path] = []
 
     for platz, bild in enumerate(kandidaten[: max(1, versuche)]):
-        if bester is not None and BESTMOEGLICHE_PUNKTE * rangfaktor(platz) <= bester[0]:
+        # Mit derselben Steigung rechnen, mit der die Punkte gleich
+        # berechnet werden. Wird hingesehen, faellt der Rang flacher ab -
+        # und ein spaeterer Treffer hat mehr Aussicht, als die steile
+        # Kurve ihm zutraut. Mit der falschen Kurve bricht die Suche ab,
+        # bevor ein Bild angesehen wurde, das gewonnen haette.
+        obergrenze = BESTMOEGLICHE_PUNKTE * rangfaktor(platz, geprueft=blick is not None)
+        if bester is not None and obergrenze <= bester[0]:
             log.info("Suche abgebrochen: Platz %s kann nicht mehr gewinnen", platz + 1)
             break
 

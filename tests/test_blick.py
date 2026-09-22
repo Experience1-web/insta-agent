@@ -436,3 +436,32 @@ def test_die_altlast_verschwindet_mit(tmp_path, monkeypatch):
     assert echtbild.finde_und_hole("x", ziel) is not None
     assert not altlast.exists()
     assert [p.name for p in sorted(tmp_path.iterdir())] == ["suchprobe.jpg"]
+
+
+def test_mit_hinsehen_bricht_die_suche_nicht_zu_frueh_ab(tmp_path, monkeypatch):
+    """Die Abbruchgrenze muss mit derselben Kurve rechnen wie die Punkte.
+
+    Wird hingesehen, faellt der Rang flacher ab. Rechnet der Abbruch
+    trotzdem mit der steilen Kurve, haelt er einen spaeteren Treffer fuer
+    chancenlos, der in Wahrheit gewonnen haette - und sieht ihn gar
+    nicht erst an.
+    """
+    # Platz eins passt ordentlich (6 von 10), Platz zwei bis vier gar
+    # nicht, Platz fuenf genau. Mit der steilen Kurve gilt Platz fuenf als
+    # chancenlos, bevor ihn jemand angesehen hat - mit der flachen, die
+    # beim Hinsehen gilt, gewinnt er.
+    treffer = [_fund(f"{n}.jpg", 2400, 1600) for n in range(6)]
+    echtbild = _suche_vorbereiten(monkeypatch, treffer)
+    urteile = {0: (6, "passt ordentlich"), 4: (10, "genau die Sache")}
+    angesehen = []
+
+    def hinsehen(pfad):
+        platz = int(pfad.stem.rsplit("-v", 1)[1])
+        angesehen.append(platz)
+        return urteile.get(platz, (0, "etwas anderes"))
+
+    gefunden = echtbild.finde_und_hole(
+        "x", tmp_path / "ziel.jpg", versuche=6, blick=hinsehen
+    )
+    assert 4 in angesehen
+    assert gefunden.seite == "4.jpg"

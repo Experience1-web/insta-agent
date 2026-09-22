@@ -319,9 +319,15 @@ class Brain:
 
         Gefragt wird das guenstigste Modell, und das Bild geht auf 512
         Pixel heruntergerechnet hinaus. Beides zusammen kostet rund ein
-        Zwanzigstel Cent - bei fuenf Bildern im Karussell also ein
-        Viertelcent fuer einen Beitrag, der sonst weit ueber einen Euro
-        kostet.
+        Zwanzigstel Cent je Bild.
+
+        Je Beitrag ist es mehr als je Karte, und das stand hier zuerst
+        falsch: Angesehen werden bei jeder Suche bis zu vier Kandidaten,
+        nicht nur der Gewinner. Ein Beitrag mit fuenf Karten sucht bis zu
+        sechsmal - also hoechstens 24 Bilder, rund 1,3 Cent. Meist weniger,
+        weil Zeichnungen vorher ausscheiden und die Suche abbricht, sobald
+        kein Nachfolger mehr gewinnen kann. Der Beitrag kostet sonst weit
+        ueber einen Euro.
 
         Geht etwas schief, kommt `UNGEPRUEFT` zurueck und kein Urteil.
         Eine Pruefung, die nicht stattgefunden hat, darf kein Bild
