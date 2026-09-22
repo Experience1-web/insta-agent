@@ -184,6 +184,13 @@ class Fundbild:
     grund: str = ""
     # Was jemand darauf gesehen hat, falls jemand hingesehen hat.
     gesehen: str = ""
+    # Die Seite, auf der das Bild gefunden wurde - gesetzt nur, wenn wir
+    # sie tatsaechlich aufgerufen haben. Dann geht sie beim Laden als
+    # Herkunft mit; manche Zeitschriften liefern Abbildungen nur so aus.
+    verweis: str = ""
+    # Der Name der Quelle fuer die Pflichtangabe, wenn er feststeht - aus
+    # der Adresse erraten wird er nur, wenn hier nichts steht.
+    quelle: str = ""
 
     @property
     def nachweis(self) -> str:
@@ -214,6 +221,8 @@ class Fundbild:
     @property
     def quellenname(self) -> str:
         """Woher das Bild stammt, lesbar - aus der Adresse der Fundstelle."""
+        if self.quelle:
+            return self.quelle
         seite = self.seite or ""
         if "commons.wikimedia" in seite or seite.startswith("File:"):
             return "Wikimedia Commons"
@@ -230,6 +239,15 @@ class Fundbild:
             "nasa.gov": "NASA",
             "esa.int": "ESA",
             "noaa.gov": "NOAA",
+            "usgs.gov": "USGS",
+            "nps.gov": "National Park Service",
+            "plos.org": "PLOS",
+            "frontiersin.org": "Frontiers",
+            "mdpi.com": "MDPI",
+            "pensoft.net": "Pensoft",
+            "elifesciences.org": "eLife",
+            "peerj.com": "PeerJ",
+            "nature.com": "Nature",
         }
         for endung, name in bekannt.items():
             if rechner.endswith(endung):
@@ -783,15 +801,19 @@ def suche_bilder(
     return []
 
 
-def _kopfzeilen(adresse: str) -> dict[str, str]:
+def _kopfzeilen(adresse: str, verweis: str = "") -> dict[str, str]:
     """Womit wir ein einzelnes Bild abholen.
 
-    Der Verweis auf die Herkunftsseite geht nur an Wikimedia, wo er
-    erwartet wird. Ihn an jeden fremden Server zu schicken waere eine
-    Behauptung ueber etwas, das gar nicht stattgefunden hat.
+    Der Verweis auf die Herkunftsseite geht nur dorthin, wo er stimmt:
+    an Wikimedia, wo er erwartet wird, und an eine Seite, die wir
+    tatsaechlich aufgerufen haben - `verweis`. Ihn an jeden fremden
+    Server zu schicken waere eine Behauptung ueber etwas, das gar nicht
+    stattgefunden hat.
     """
     kopf = {"User-Agent": kennung(), "Accept": "image/*,*/*;q=0.8"}
-    if "wikimedia.org" in adresse or "wikipedia.org" in adresse:
+    if verweis:
+        kopf["Referer"] = verweis
+    elif "wikimedia.org" in adresse or "wikipedia.org" in adresse:
         kopf["Referer"] = "https://commons.wikimedia.org/"
     return kopf
 
@@ -881,7 +903,7 @@ def hole_bild(
             try:
                 antwort = client.get(
                     adresse,
-                    headers=_kopfzeilen(adresse),
+                    headers=_kopfzeilen(adresse, bild.verweis),
                 )
             except Exception as exc:  # noqa: BLE001 - die naechste Adresse
                 gruende.append(f"{type(exc).__name__}")
@@ -1001,6 +1023,57 @@ def finde_und_hole(
     wurde und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
     die Suche tut, will auch sehen, was sie verworfen hat.
     """
+    zielverhaeltnis = groesse[0] / groesse[1] if groesse[1] else BEITRAGSVERHAELTNIS
+    kandidaten = suche_bilder(suchwort, client=client, zielverhaeltnis=zielverhaeltnis)
+    return waehle_bestes(
+        kandidaten,
+        ziel,
+        client=client,
+        versuche=versuche,
+        beobachter=beobachter,
+        groesse=groesse,
+        blick=blick,
+    )
+
+
+# Ab so vielen Punkten im Urteil gilt ein Bild, das nicht gewonnen hat,
+# noch als brauchbar fuer eine weitere Karte. Darunter zeigt es etwas,
+# das nur entfernt passt - dann lieber ein anderes suchen.
+WEITERE_AB = 5
+
+# Unter diesem Massfaktor wird ein Bild gar nicht erst bewertet: Es
+# muesste auf mehr als das Doppelte hochgerechnet werden. Bei
+# Archivtreffern faengt das schon der Vorfilter nach den gemeldeten
+# Massen - Bilder von einer Seite kommen ohne Masse, und dort sind oft
+# Vorschaubildchen von 300 Pixeln dabei.
+ZU_KLEIN = 0.45
+
+
+def waehle_bestes(
+    kandidaten: list[Fundbild],
+    ziel: Path,
+    *,
+    client: httpx.Client | None = None,
+    versuche: int = 4,
+    beobachter=None,
+    groesse: tuple[int, int] = (1080, 1350),
+    blick=None,
+    weitere: list[Fundbild] | None = None,
+):
+    """Aus einer Reihe von Kandidaten den besten laden und nehmen.
+
+    Das Herz von `finde_und_hole`, herausgeloest, damit auch Bilder, die
+    nicht aus einer Archivsuche kommen, dieselbe Pruefung durchlaufen -
+    die Aufnahmen aus einer Studie, von einer Behoerde. Dort ist die
+    Reihenfolge nicht die einer Suchmaschine, sondern die der Seite:
+    das Aufmacherbild zuerst, dann die Abbildungen.
+
+    `weitere` ist fuer das Karussell. Wird eine Liste uebergeben, landen
+    darin alle anderen Kandidaten, die die Pruefung bestanden haben und
+    zum Thema passen - jeweils als eigene Datei. Aus einer Studie kommen
+    oft mehrere Aufnahmen vom selben Fund, und jede davon schlaegt ein
+    Archivbild, das nur zum Thema passt.
+    """
     import shutil
 
     from .blick import UNGEPRUEFT, blickfaktor
@@ -1008,7 +1081,7 @@ def finde_und_hole(
     from .schaerfe import SCHARF_GENUG, schaerfewert
 
     zielverhaeltnis = groesse[0] / groesse[1] if groesse[1] else BEITRAGSVERHAELTNIS
-    kandidaten = suche_bilder(suchwort, client=client, zielverhaeltnis=zielverhaeltnis)
+    brauchbar: list[tuple[float, Fundbild, Path, int]] = []
 
     bester: tuple[float, Fundbild, Path] | None = None
     ausgeschieden: list[tuple[Fundbild, str]] = []
@@ -1030,6 +1103,12 @@ def finde_und_hole(
         geladen = hole_bild(bild, entwurf, client=client)
         if geladen is None:
             ausgeschieden.append((bild, bild.grund or "nicht ladbar"))
+            continue
+
+        if massfaktor(bild.breite, bild.hoehe, zielverhaeltnis) < ZU_KLEIN:
+            grund = f"zu klein ({bild.breite}x{bild.hoehe})"
+            bild.grund = grund
+            ausgeschieden.append((bild, grund))
             continue
 
         taugt, grund = wirkt_wie_foto(entwurf)
@@ -1056,6 +1135,7 @@ def finde_und_hole(
         )
         if was_zu_sehen_ist:
             bild.gesehen = f"{gesehen}/10: {was_zu_sehen_ist}"
+        brauchbar.append((punkte, bild, entwurf, gesehen))
         log.info(
             "Platz %s: %s (%sx%s, Schaerfe %.2f, Blick %s) - %.2f Punkte",
             platz + 1,
@@ -1088,6 +1168,25 @@ def finde_und_hole(
         return None
 
     punkte, gewinner, datei = bester
+
+    if weitere is not None:
+        uebrige = sorted(
+            (b for b in brauchbar if b[1] is not gewinner),
+            key=lambda b: b[0],
+            reverse=True,
+        )
+        for nummer, (_, bild, entwurf, gesehen) in enumerate(uebrige, start=1):
+            if 0 <= gesehen < WEITERE_AB:
+                continue
+            kopie = ziel.with_name(f"{ziel.stem}-weiteres{nummer}{ziel.suffix}")
+            try:
+                shutil.copyfile(entwurf, kopie)
+            except OSError as exc:
+                log.info("Weiteres Bild nicht gesichert: %s", exc)
+                continue
+            bild.pfad = kopie
+            weitere.append(bild)
+
     try:
         if datei != ziel:
             shutil.copyfile(datei, ziel)
@@ -1144,6 +1243,7 @@ __all__ = [
     "Bilanz",
     "kennung",
     "guete",
+    "waehle_bestes",
     "schaerfefaktor",
     "massfaktor",
     "nutzmasse",

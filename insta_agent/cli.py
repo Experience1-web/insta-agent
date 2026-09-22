@@ -1347,7 +1347,7 @@ def bildsuche(
     console.print(
         Panel(
             f"Gesucht wird nach: [bold]{suchwort}[/bold]\n\n"
-            "Anlaeufe, vom Genauen zum Allgemeinen:\n"
+            "Anläufe, vom Genauen zum Allgemeinen:\n"
             + "\n".join(f"  {i}. {b}" for i, b in enumerate(versuche, 1))
             + "\n\n[dim]Quellen: Wikimedia Commons, dann Openverse.\n"
             "Kostet nichts - hier wird kein Modell gefragt.[/dim]",
@@ -1369,7 +1369,7 @@ def bildsuche(
                 console.print(f"      Commons:   {bc}")
                 console.print(f"      Openverse: {bo}")
 
-    console.print("\n[dim]Suche laeuft ...[/dim]")
+    console.print("\n[dim]Suche läuft ...[/dim]")
 
     # Genau derselbe Weg wie im Zyklus, einschliesslich der Fotopruefung.
     # Vorher rief die Probe die Suche direkt auf und ging daran vorbei -
@@ -1392,7 +1392,7 @@ def bildsuche(
         )
         console.print(
             "[dim]Jedes Bild wird kurz angesehen. Das kostet rund 0,05 Cent"
-            " je Bild - bei vier Bildern also ein Fuenftel Cent.[/dim]\n"
+            " je Bild - bei vier Bildern also ein Fünftel Cent.[/dim]\n"
         )
 
         def hinsehen(pfad):  # noqa: F811 - bewusst erst hier definiert
@@ -1412,9 +1412,9 @@ def bildsuche(
         console.print(
             Panel(
                 "Aus den ersten Treffern ist nichts geworden - entweder gab\n"
-                "es nichts frei Verwendbares in brauchbarer Groesse, oder\n"
-                "alles, was da war, hat die Pruefung oben verworfen.\n\n"
-                "Im Zyklus wuerde der Agent hier ein Bild malen lassen.\n"
+                "es nichts frei Verwendbares in brauchbarer Größe, oder\n"
+                "alles, was da war, hat die Prüfung oben verworfen.\n\n"
+                "Im Zyklus würde der Agent hier ein Bild malen lassen.\n"
                 "Probier ein allgemeineres Wort, oder Englisch statt Deutsch.",
                 title="[yellow]Nichts Brauchbares gefunden[/yellow]",
             )
@@ -1458,16 +1458,16 @@ def bildsuche(
             f"Quelle:   {gefunden.seite}\n"
             f"Lizenz:   [bold]{gefunden.lizenz}[/bold]\n"
             f"Urheber:  {gefunden.urheber or 'nicht genannt'}\n"
-            f"Groesse:  [bold]{breite} x {hoehe}[/bold] "
-            f"(Verhaeltnis {verhaeltnis:.2f})\n"
+            f"Größe:    [bold]{breite} x {hoehe}[/bold] "
+            f"(Verhältnis {verhaeltnis:.2f})\n"
             + (
-                f"Panorama: [green]ja, {stuecke} Stuecke zum Durchwandern[/green]\n"
+                f"Panorama: [green]ja, {stuecke} Stücke zum Durchwandern[/green]\n"
                 if stuecke >= 2
-                else "Panorama: nein, gewoehnliches Format\n"
+                else "Panorama: nein, gewöhnliches Format\n"
             )
             + f"Eignung:  [bold]{_eignung(verhaeltnis)}[/bold]\n"
             + f"Zuschnitt: {zuschnitt}\n"
-            + f"Schaerfe: {schaerfezeile}\n"
+            + f"Schärfe:  {schaerfezeile}\n"
             + (f"Angesehen: [bold]{gefunden.gesehen}[/bold]\n" if gefunden.gesehen else "")
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n\n"
             f"[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
@@ -1476,7 +1476,141 @@ def bildsuche(
     )
     console.print(
         "\n[dim]Mach das Bild auf und schau, ob es zum Thema passt. "
-        "Genau dieses wuerde im Beitrag landen.[/dim]"
+        "Genau dieses würde im Beitrag landen.[/dim]"
+    )
+
+
+@app.command()
+def quellprobe(
+    adresse: str = typer.Argument(
+        ..., help="Die Seite einer Studie oder Behörde, z. B. ein PLOS- oder NASA-Artikel"
+    ),
+    config: Path = typer.Option(None),
+    ansehen: bool = typer.Option(
+        False,
+        "--ansehen",
+        help="Jedes Bild kurz ansehen lassen - kostet rund 0,05 Cent je Bild",
+    ),
+) -> None:
+    """Holt die Bilder vom Fund selbst aus der Originalquelle - ohne Zyklus.
+
+    Das ist der Weg, auf dem der Agent zu Aufnahmen kommt, die den Fund
+    wirklich zeigen: Studie oder Behoerde aufrufen, Lizenz auf der Seite
+    pruefen, Bilder herunterladen, das beste nehmen. Hier laesst er sich
+    an einer einzelnen Adresse ausprobieren, bevor ein Zyklus dafuer
+    Geld ausgibt.
+    """
+    from .imaging.echtbild import massfaktor
+    from .imaging.quellbild import aus_der_quelle, erkenne_quelle
+
+    settings = load_settings(config)
+    ziel_ordner = settings.media_dir
+    ziel_ordner.mkdir(parents=True, exist_ok=True)
+
+    quelle = erkenne_quelle(adresse)
+    console.print(
+        Panel(
+            f"Seite: [bold]{adresse}[/bold]\n"
+            + (
+                f"Quelle: [green]{quelle.name}[/green] - "
+                + (
+                    "Behörde, gemeinfrei von Gesetzes wegen"
+                    if quelle.gemeinfrei
+                    else "Zeitschrift, der Lizenzvermerk muss auf der Seite stehen"
+                )
+                if quelle
+                else "Quelle: [yellow]keine freie Quelle[/yellow] - "
+                "die Seite wird gar nicht erst aufgerufen"
+            ),
+            title="Bild aus der Quelle",
+        )
+    )
+    if quelle is None:
+        console.print(
+            "\nBilder von Nachrichtenseiten gehören fast immer einer Agentur.\n"
+            "Gib die Adresse der Studie selbst ein - PLOS, Frontiers, Pensoft,\n"
+            "Scientific Reports - oder die einer Behörde wie der NASA."
+        )
+        raise typer.Exit(1)
+
+    hinsehen = None
+    if ansehen:
+        from .economy import Treasury
+        from .llm import Brain
+        from .store import Store
+
+        gehirn = Brain(
+            settings.llm, Treasury(Store(settings.db_path), settings.economy)
+        )
+
+        def hinsehen(pfad):  # noqa: F811 - bewusst erst hier definiert
+            return gehirn.beurteile_bild(pfad, adresse)
+
+    ziel = ziel_ordner / "quellprobe.jpg"
+    verworfen: list[tuple[str, str]] = []
+    weitere: list = []
+    befunde: list = []
+
+    def mitschreiben(bild, taugte: bool, grund: str) -> None:
+        if not taugte:
+            verworfen.append((bild.url, grund))
+
+    console.print("\n[dim]Seite wird geladen ...[/dim]")
+    gefunden = aus_der_quelle(
+        [adresse],
+        ziel,
+        blick=hinsehen,
+        beobachter=mitschreiben,
+        weitere=weitere,
+        befunde=befunde,
+    )
+
+    for befund in befunde:
+        if befund.lizenz:
+            console.print(f"Lizenz auf der Seite: [green]{befund.lizenz}[/green]")
+        if befund.urheber:
+            console.print(f"Zu nennen:            {befund.urheber}")
+        if befund.kandidaten is not None:
+            console.print(f"Bilder auf der Seite: {len(befund.kandidaten)}")
+
+    if verworfen:
+        console.print("\n[dim]Angesehen, aber nicht genommen:[/dim]")
+        for url, grund in verworfen:
+            kurz = url.rsplit("/", 1)[-1][:50]
+            console.print(f"  [dim]{kurz}[/dim]  [yellow]{grund}[/yellow]")
+
+    if gefunden is None:
+        gruende = "; ".join(b.grund for b in befunde if b.grund) or "unbekannt"
+        console.print(
+            Panel(
+                f"Von dieser Seite ist nichts brauchbar: {gruende}\n\n"
+                "Im Zyklus würde der Agent jetzt im Bildarchiv suchen.",
+                title="[yellow]Nichts genommen[/yellow]",
+            )
+        )
+        raise typer.Exit(1)
+
+    mass = massfaktor(gefunden.breite, gefunden.hoehe)
+    console.print(
+        Panel(
+            f"Bild:     {gefunden.url}\n"
+            f"Größe:    [bold]{gefunden.breite} x {gefunden.hoehe}[/bold]"
+            + (
+                " - wird verkleinert, bleibt scharf"
+                if mass >= 1.0
+                else f" - muss um das {1 / mass:.2f}-fache hochgerechnet werden"
+            )
+            + "\n"
+            + (f"Angesehen: [bold]{gefunden.gesehen}[/bold]\n" if gefunden.gesehen else "")
+            + f"\nLiegt hier: [bold]{ziel}[/bold]\n"
+            + (
+                f"Dazu {len(weitere)} weitere Bilder vom selben Fund fürs Karussell\n"
+                if weitere
+                else ""
+            )
+            + f"\n[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
+            title="[green]Gefunden - ein Bild vom Fund selbst[/green]",
+        )
     )
 
 

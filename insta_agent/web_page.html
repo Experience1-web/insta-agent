@@ -874,6 +874,8 @@ function fund_html(f) {
       f.echtes_bild.startsWith("http")
         ? `<a href="${esc(f.echtes_bild)}" target="_blank" rel="noopener noreferrer">${esc(f.echtes_bild)}</a>`
         : esc(f.echtes_bild)}</p>` : ""}
+    ${f.bildseite && f.bildseite.startsWith("http") ? `<p><b>Originalquelle mit freien Bildern:</b>
+      <a href="${esc(f.bildseite)}" target="_blank" rel="noopener noreferrer">${esc(f.bildseite)}</a></p>` : ""}
     ${f.warum_aussergewoehnlich ? `<p><b>Warum das kein Alltag ist:</b>
       ${esc(f.warum_aussergewoehnlich)}</p>` : ""}
     ${f.warum_kaum_bekannt ? `<p><b>Warum es kaum jemand kennt:</b>

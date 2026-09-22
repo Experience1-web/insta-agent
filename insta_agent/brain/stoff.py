@@ -127,6 +127,25 @@ Trag nichts ein, wenn die vorhandenen Aufnahmen unscheinbar sind: ein
 graues Belegfoto aus einer Fachveröffentlichung ist schlechter als ein
 gutes erzeugtes Bild. Dann bleibt das Feld leer und es wird gemalt.
 
+Das wertvollste Bild ist eines vom Fund selbst: der Schatz, der
+Fundort, das neue Tier, die Aufnahme des Teleskops. Solche Bilder
+stehen fast immer in der Originalveröffentlichung oder bei der
+Einrichtung, die den Fund gemacht hat. Die Zeitungen zeigen dieselben
+Bilder, aber dort gehören sie einer Agentur und sind nicht frei.
+
+Such deshalb die Originalquelle und trag ihre Adresse unter `bildseite`
+ein, wenn sie frei nutzbar ist:
+- eine offene Fachzeitschrift unter CC BY: PLOS, Frontiers, MDPI,
+  Pensoft (ZooKeys, PhytoKeys), eLife, PeerJ, BMC, Scientific Reports,
+  Nature Communications, Science Advances
+- eine US-Bundesbehörde: NASA, NOAA, USGS, National Park Service
+- die ESA, wenn die Bilder dort unter CC BY-SA stehen
+
+Die Adresse des Artikels selbst, nicht die einer Nachrichtenseite, die
+darüber berichtet. Die Lizenz prüft danach ein Programm auf der Seite -
+du musst sie nicht angeben, aber schreib keine Seite hin, von der du
+weißt, dass sie nicht frei ist.
+
 Unter `bildsuche` schreibst du zwei bis vier Suchbegriffe, mit denen sich
 in einem Bildarchiv eine Aufnahme finden lässt - der wissenschaftliche
 Name, der Fundort, der Gegenstand. Nicht den Titel des Beitrags, keine
@@ -353,6 +372,7 @@ Beleglage: {fund.beleglage}
 Reiz: {fund.reiz} von 5 (Hook {fund.hookkraft}, Bild {fund.bildkraft}, verständlich {fund.breite})
 Bildidee: {fund.bildidee}
 Echte Aufnahme: {fund.echtes_bild or "keine gefunden"}
+Originalquelle mit freien Bildern: {fund.bildseite or "keine genannt"}
 Suchbegriffe fürs Bildarchiv: {fund.bildsuche or "keine genannt"}
 Quellen:
 {quellen}"""

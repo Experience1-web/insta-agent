@@ -146,7 +146,7 @@ def ist_scharf(
     """
     wert = schaerfewert(pfad, groesse=groesse)
     if wert <= 0:
-        return True, "Schaerfe nicht messbar"
+        return True, "Schärfe nicht messbar"
     if wert < mindestens:
         return False, f"unscharf im Beitragsformat ({wert:.2f})"
     return True, f"scharf ({wert:.2f})"

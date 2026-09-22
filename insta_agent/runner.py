@@ -561,6 +561,10 @@ class Agent:
             weitere, karten_nachweise, ersatz = self._baue_karussell(
                 draft, basis, identity, report, erstes_roh=rohbild
             )
+            # Was aus der Quelle uebrig ist, gehoert zu diesem Beitrag und
+            # zu keinem anderen. Liegen gelassen, taucht es sonst beim
+            # naechsten "Bild neu" in einem fremden Beitrag auf.
+            self._quellbilder = []
             if ersatz is not None:
                 # Ein zerschnittenes Panorama: Das Hauptbild ist jetzt das
                 # linke Stueck, nicht die ganze Aufnahme.
@@ -1305,6 +1309,13 @@ class Agent:
         """
         from .imaging.echtbild import finde_und_hole, suchworte_fuer
 
+        # Die Aufnahmen vom Fund selbst zuerst - aus der Studie, von der
+        # Behoerde. Ein Archivbild passt zum Thema; dieses zeigt die Sache.
+        self._quellbilder = []
+        aus_quelle = self._bild_aus_der_quelle(fund, basis, report)
+        if aus_quelle is not None:
+            return aus_quelle
+
         worte = suchworte_fuer(fund)
         if not worte:
             return None, ""
@@ -1340,6 +1351,73 @@ class Agent:
             f"Echte Aufnahme übernommen: {gefunden.seite} ({gefunden.lizenz})"
         )
         self.store.log("bild_echt", f"{gefunden.seite} - {gefunden.lizenz}")
+        return gefunden.pfad, gefunden.nachweis
+
+    def _bild_aus_der_quelle(self, fund, basis: str, report: CycleReport):
+        """Ein Bild vom Fund selbst, aus der Originalquelle - oder None.
+
+        Die Stoffsuche nennt die Studie oder die Behoerde, von der der Fund
+        stammt. Ist das eine freie Quelle - offene Fachzeitschrift unter
+        CC BY, US-Behoerde -, stehen dort die Aufnahmen, um die es geht:
+        der Schatz, der Fundort, das neue Tier. Genau die will jemand
+        sehen, der von dem Fund liest.
+
+        Die uebrigen brauchbaren Bilder derselben Seite landen in
+        `self._quellbilder` und fuellen danach das Karussell - vor jedem
+        Archivbild, das nur zum Thema passt.
+        """
+        from .imaging.quellbild import aus_der_quelle, quellseiten
+
+        seiten = quellseiten(fund)
+        if not seiten:
+            return None
+
+        # Worueber das Bild sein soll: der englische Suchbegriff und der
+        # Titel des Fundes. Beides zusammen sagt dem Blick genauer als
+        # jedes allein, was zu sehen sein muesste.
+        thema = " - ".join(
+            teil
+            for teil in (getattr(fund, "bildsuche", ""), getattr(fund, "titel", ""))
+            if teil
+        )
+        ziel = self.settings.media_dir / f"{basis}-echt.jpg"
+        befunde: list = []
+        try:
+            gefunden = aus_der_quelle(
+                seiten,
+                ziel,
+                groesse=self._bildformat,
+                blick=self._blick_auf(thema),
+                weitere=self._quellbilder,
+                befunde=befunde,
+            )
+        except Exception as exc:  # noqa: BLE001 - dann eben das Archiv
+            log.info("Bild aus der Quelle fehlgeschlagen: %s", exc)
+            gefunden = None
+
+        if gefunden is None:
+            gruende = "; ".join(
+                f"{b.quelle.name if b.quelle else b.seite}: {b.grund}"
+                for b in befunde
+                if b.grund
+            )
+            report.steps.append(
+                "Kein freies Bild in der Originalquelle"
+                + (f" ({gruende})" if gruende else "")
+                + " - es wird im Archiv gesucht"
+            )
+            return None
+
+        dazu = (
+            f", dazu {len(self._quellbilder)} weitere fürs Karussell"
+            if self._quellbilder
+            else ""
+        )
+        report.steps.append(
+            f"Aufnahme vom Fund selbst übernommen: {gefunden.seite} "
+            f"({gefunden.lizenz}){dazu}"
+        )
+        self.store.log("bild_quelle", f"{gefunden.seite} - {gefunden.lizenz}")
         return gefunden.pfad, gefunden.nachweis
 
     def _panorama_karussell(self, draft, basis: str, identity, erstes_roh):
@@ -1451,6 +1529,15 @@ class Agent:
         den Text mit verschieben.
         """
         stamm = f"{basis}-k{nummer}"
+
+        # Weitere Aufnahmen vom Fund selbst gehen vor jeder Suche. Sie
+        # stammen aus derselben Studie wie das erste Bild und zeigen
+        # dieselbe Sache - ein Archivbild passt nur zum Thema.
+        rest = getattr(self, "_quellbilder", None)
+        while rest:
+            bild = rest.pop(0)
+            if bild.pfad is not None and Path(bild.pfad).exists():
+                return bild.pfad, bild.nachweis
 
         # Eine echte Aufnahme schlaegt jedes gemalte Bild.
         if suchwort := (karte.bildsuche or "").strip():

@@ -106,7 +106,7 @@ def wirkt_wie_foto(pfad: Path) -> tuple[bool, str]:
     rand = _randpunkte(punkte)
     hell_am_rand = sum(1 for punkt in rand if min(punkt) >= WEISSGRENZE)
     if hell_am_rand / len(rand) >= RANDANTEIL:
-        return False, "auf Weiss freigestellt - eine Zeichnung, kein Foto"
+        return False, "auf Weiß freigestellt - eine Zeichnung, kein Foto"
 
     weissanteil = sum(ist_weiss) / len(punkte)
     if weissanteil >= WEISSANTEIL:

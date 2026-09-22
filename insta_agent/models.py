@@ -183,6 +183,19 @@ class Fund(BaseModel):
             "oder die vorhandenen unscheinbar sind."
         ),
     )
+    bildseite: str = Field(
+        default="",
+        description=(
+            "Die Seite der Originalveröffentlichung oder der Behörde, auf der "
+            "Aufnahmen vom Fund selbst zu sehen sind - nur, wenn sie frei "
+            "nutzbar sind: eine offene Fachzeitschrift unter CC BY (PLOS, "
+            "Frontiers, MDPI, Pensoft/ZooKeys, eLife, PeerJ, Scientific "
+            "Reports, Nature Communications, Science Advances) oder eine "
+            "US-Behörde (NASA, NOAA, USGS, National Park Service). Keine "
+            "Nachrichtenseite - deren Bilder sind geschützt. Leer lassen, "
+            "wenn es keine solche Seite gibt."
+        ),
+    )
     bildsuche: str = Field(
         default="",
         description=(
