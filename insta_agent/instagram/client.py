@@ -63,6 +63,15 @@ def kennzahlgrund(exc: Exception) -> str:
             "Das Zugangswort ist abgelaufen. Neu verbinden mit "
             "`insta-agent instagram`."
         )
+    if "100:" in text and "does not exist" in text:
+        # Meta nennt drei Moeglichkeiten auf einmal und sagt nicht,
+        # welche zutrifft. Die fehlende Berechtigung ist es nicht - die
+        # kommt als Code 10. Uebrig bleibt meist: Der Beitrag ist weg.
+        return (
+            "Instagram gibt diesen Beitrag nicht heraus - meist, weil er "
+            "auf Instagram gelöscht wurde. Für den Zyklus spielt das keine "
+            "Rolle, er läuft weiter."
+        )
     return text
 
 
