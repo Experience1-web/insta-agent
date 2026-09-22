@@ -1317,7 +1317,12 @@ class Agent:
         gefunden = None
         for suchwort in worte:
             try:
-                gefunden = finde_und_hole(suchwort, ziel)
+                gefunden = finde_und_hole(
+                    suchwort,
+                    ziel,
+                    groesse=self._bildformat,
+                    blick=self._blick_auf(suchwort),
+                )
             except Exception as exc:  # noqa: BLE001 - ohne Foto wird gemalt
                 log.info("Bildsuche fehlgeschlagen (%r): %s", suchwort, exc)
                 gefunden = None
@@ -1399,7 +1404,43 @@ class Agent:
         auf 9:16, auch bei einem Feed-Beitrag - und wurde dafuer
         hochgerechnet, statt herunter. Genau daher kam die Unschaerfe.
         """
-        return STORY if self.settings.posting.bildformat == "story" else FEED
+        # Ueber getattr, aus demselben Grund wie beim Hinsehen: Der
+        # Ausdruck steht mitten im Aufruf der Bildsuche, und der faengt
+        # jeden Fehler als "nichts gefunden" ab. FEED ist ohnehin die
+        # Voreinstellung - Instagram nimmt im Feed nur 4:5 bis 1.91:1 an.
+        posting = getattr(self.settings, "posting", None)
+        return STORY if getattr(posting, "bildformat", "feed") == "story" else FEED
+
+    def _blick_auf(self, thema: str):
+        """Die Stelle, an der jemand hinsieht - oder None, wenn niemand soll.
+
+        Ein Thema muss dastehen: Ohne das wuesste das Modell nicht, wozu
+        das Bild passen soll, und eine Frage ohne Vergleichsmassstab
+        kostet Geld und bringt nichts.
+        """
+        thema = (thema or "").strip()
+        if not thema:
+            return None
+
+        # Nichts hier darf werfen, und das ist keine Vorsicht, sondern
+        # eine Lehre: Diese Funktion wird mitten im Aufruf der Bildsuche
+        # ausgewertet, und der steht in einem try, das jeden Fehler als
+        # "nichts gefunden" auslegt. Ein fehlendes Feld haette damit
+        # nicht das Hinsehen abgeschaltet, sondern die ganze Bildsuche -
+        # lautlos, und der Beitrag haette wieder ein gemaltes Bild.
+        posting = getattr(self.settings, "posting", None)
+        if not getattr(posting, "bilder_ansehen", False):
+            return None
+        if getattr(self, "_bilder_heute_aus", ""):
+            return None
+        gehirn = getattr(self, "brain", None)
+        if gehirn is None:
+            return None
+
+        def hinsehen(pfad):
+            return gehirn.beurteile_bild(pfad, thema)
+
+        return hinsehen
 
     def _karte_rohbild(self, karte, basis: str, nummer: int):
         """Das nackte Bild einer Karte - echt oder gemalt, noch ohne Schrift.
@@ -1417,7 +1458,12 @@ class Agent:
 
             ziel = self.settings.media_dir / f"{stamm}-echt.jpg"
             try:
-                gefunden = finde_und_hole(suchwort, ziel)
+                gefunden = finde_und_hole(
+                    suchwort,
+                    ziel,
+                    groesse=self._bildformat,
+                    blick=self._blick_auf(suchwort),
+                )
             except Exception as exc:  # noqa: BLE001 - dann wird gemalt
                 log.info("Kartensuche fehlgeschlagen: %s", exc)
                 gefunden = None

@@ -182,6 +182,8 @@ class Fundbild:
     ersatz: list[str] = field(default_factory=list)
     # Warum es nicht geklappt hat, falls es nicht geklappt hat.
     grund: str = ""
+    # Was jemand darauf gesehen hat, falls jemand hingesehen hat.
+    gesehen: str = ""
 
     @property
     def nachweis(self) -> str:
@@ -952,6 +954,7 @@ def finde_und_hole(
     versuche: int = 4,
     beobachter=None,
     groesse: tuple[int, int] = (1080, 1350),
+    blick=None,
 ):
     """Suchen, laden und den besten Fund nehmen. None, wenn keiner taugt.
 
@@ -979,6 +982,11 @@ def finde_und_hole(
     Abgebrochen wird, sobald kein Nachfolger den Besten mehr einholen
     kann - dann werden auch keine Bilder mehr geladen.
 
+    `blick` ist die Stelle, an der jemand hinsieht: eine Funktion, die
+    einen Bildpfad bekommt und 0 bis 10 zurueckgibt, dazu einen Satz.
+    Ohne sie entscheidet die Suche weiter nach messbaren Merkmalen
+    allein - und die wissen nicht, was auf einem Bild zu sehen ist.
+
     `groesse` ist das Format, in dem der Beitrag erscheint. `beobachter`
     wird fuer jeden Treffer aufgerufen, mit dem Bild, ob es genommen
     wurde und warum nicht. Gedacht fuer die Probe: Wer nachsieht, was
@@ -986,6 +994,7 @@ def finde_und_hole(
     """
     import shutil
 
+    from .blick import UNGEPRUEFT, blickfaktor
     from .fotoprobe import wirkt_wie_foto
     from .schaerfe import SCHARF_GENUG, schaerfewert
 
@@ -1016,18 +1025,30 @@ def finde_und_hole(
             continue
 
         wert = schaerfewert(entwurf, groesse=groesse)
+
+        gesehen, was_zu_sehen_ist = UNGEPRUEFT, ""
+        if blick is not None:
+            try:
+                gesehen, was_zu_sehen_ist = blick(entwurf)
+            except Exception as exc:  # noqa: BLE001 - ungeprueft ist kein Urteil
+                log.info("Bild nicht angesehen (%s): %s", bild.seite, exc)
+
         punkte = (
             guete(bild.breite, bild.hoehe, zielverhaeltnis=zielverhaeltnis)
             * rangfaktor(platz)
             * schaerfefaktor(wert, SCHARF_GENUG)
+            * blickfaktor(gesehen)
         )
+        if was_zu_sehen_ist:
+            bild.gesehen = f"{gesehen}/10: {was_zu_sehen_ist}"
         log.info(
-            "Platz %s: %s (%sx%s, Schaerfe %.2f) - %.2f Punkte",
+            "Platz %s: %s (%sx%s, Schaerfe %.2f, Blick %s) - %.2f Punkte",
             platz + 1,
             bild.seite,
             bild.breite,
             bild.hoehe,
             wert,
+            gesehen if gesehen >= 0 else "-",
             punkte,
         )
         if bester is None or punkte > bester[0]:
@@ -1037,7 +1058,10 @@ def finde_und_hole(
                 )
             bester = (punkte, geladen, entwurf)
         else:
-            ausgeschieden.append((bild, f"weniger geeignet ({punkte:.2f} Punkte)"))
+            wieso = f"weniger geeignet ({punkte:.2f} Punkte)"
+            if bild.gesehen:
+                wieso += f" - {bild.gesehen}"
+            ausgeschieden.append((bild, wieso))
 
     if beobachter:
         for bild, grund in ausgeschieden:

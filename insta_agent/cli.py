@@ -1319,6 +1319,11 @@ def bildsuche(
     suchwort: str = typer.Argument(..., help="Wonach gesucht wird, am besten englisch"),
     config: Path = typer.Option(None),
     alle: bool = typer.Option(False, "--alle", help="Jeden Anlauf einzeln zeigen"),
+    ansehen: bool = typer.Option(
+        False,
+        "--ansehen",
+        help="Jedes Bild kurz ansehen lassen - kostet rund 0,05 Cent je Bild",
+    ),
 ) -> None:
     """Sucht eine echte freie Aufnahme - und kostet dabei nichts.
 
@@ -1376,7 +1381,26 @@ def bildsuche(
         if not taugte:
             verworfen.append((bild.seite, grund))
 
-    geladen = finde_und_hole(suchwort, ziel, beobachter=mitschreiben)
+    hinsehen = None
+    if ansehen:
+        from .economy import Treasury
+        from .llm import Brain
+        from .store import Store
+
+        gehirn = Brain(
+            settings.llm, Treasury(Store(settings.db_path), settings.economy)
+        )
+        console.print(
+            "[dim]Jedes Bild wird kurz angesehen. Das kostet rund 0,05 Cent"
+            " je Bild - bei vier Bildern also ein Fuenftel Cent.[/dim]\n"
+        )
+
+        def hinsehen(pfad):  # noqa: F811 - bewusst erst hier definiert
+            return gehirn.beurteile_bild(pfad, suchwort)
+
+    geladen = finde_und_hole(
+        suchwort, ziel, beobachter=mitschreiben, blick=hinsehen
+    )
 
     if verworfen:
         console.print("\n[dim]Angesehen, aber nicht genommen:[/dim]")
@@ -1444,6 +1468,7 @@ def bildsuche(
             + f"Eignung:  [bold]{_eignung(verhaeltnis)}[/bold]\n"
             + f"Zuschnitt: {zuschnitt}\n"
             + f"Schaerfe: {schaerfezeile}\n"
+            + (f"Angesehen: [bold]{gefunden.gesehen}[/bold]\n" if gefunden.gesehen else "")
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n\n"
             f"[dim]Pflichtangabe im Beitrag:\n{gefunden.nachweis}[/dim]",
             title="[green]Gefunden[/green]",

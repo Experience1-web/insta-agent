@@ -138,6 +138,13 @@ class PostingConfig:
     # nimmt im Feed nur Bilder zwischen 4:5 und 1.91:1 an - 9:16 liegt
     # ausserhalb und wuerde beschnitten.
     bildformat: str = "feed"
+    # Jedes gefundene Bild kurz ansehen lassen, bevor es genommen wird.
+    # Kostet rund ein Zwanzigstel Cent je Bild und ist das Einzige, was
+    # beantworten kann, ob ein Bild die Sache zeigt, um die es geht -
+    # alles andere steht neben dem Bild und nicht darin. Zweimal hat ein
+    # Bild nach allen messbaren Merkmalen tadellos ausgesehen und etwas
+    # voellig anderes gezeigt.
+    bilder_ansehen: bool = True
     # Der Account steht fest und wird nicht mehr erfunden: Wer sich eine
     # Nische selbst sucht, waehlt eine enge, weil enge Nischen sich besser
     # begruenden lassen - und genau das war nicht gewollt. Auf True darf

@@ -307,6 +307,80 @@ class Brain:
 
     # -- Freie Antworten, optional mit Websuche ---------------------------
 
+    def beurteile_bild(self, pfad, thema: str) -> tuple[int, str]:
+        """Ein Bild ansehen lassen: Passt es zum Thema? 0 bis 10, dazu ein Satz.
+
+        Der einzige Aufruf in diesem Betrieb, der ein Bild verschickt -
+        und der einzige, der beantworten kann, was auf einem Bild zu
+        sehen ist. Alles andere, was die Bildsuche weiss, steht neben dem
+        Bild: Dateiname, Lizenz, Masse, Platz in der Trefferliste. Zweimal
+        hat ein Bild nach all diesen Merkmalen tadellos ausgesehen und
+        etwas voellig anderes gezeigt.
+
+        Gefragt wird das guenstigste Modell, und das Bild geht auf 512
+        Pixel heruntergerechnet hinaus. Beides zusammen kostet rund ein
+        Zwanzigstel Cent - bei fuenf Bildern im Karussell also ein
+        Viertelcent fuer einen Beitrag, der sonst weit ueber einen Euro
+        kostet.
+
+        Geht etwas schief, kommt `UNGEPRUEFT` zurueck und kein Urteil.
+        Eine Pruefung, die nicht stattgefunden hat, darf kein Bild
+        abwerten - lieber ein unbesehenes Foto als gar keines.
+        """
+        from .imaging.blick import FRAGE, UNGEPRUEFT, lies_antwort
+
+        try:
+            from .imaging.blick import verkleinere_zur_frage
+
+            daten, typ = verkleinere_zur_frage(pfad)
+        except Exception as exc:  # noqa: BLE001 - dann eben ungeprueft
+            log.info("Bild nicht zur Frage vorbereitet (%s): %s", pfad, exc)
+            return UNGEPRUEFT, ""
+
+        modell = self.config.cheap_model
+        try:
+            antwort = self.client.messages.create(
+                model=modell,
+                max_tokens=60,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": typ,
+                                    "data": daten,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": FRAGE.format(
+                                    thema=thema, form="ZAHL|kurze Beschreibung"
+                                ),
+                            },
+                        ],
+                    }
+                ],
+            )
+        except Exception as exc:  # noqa: BLE001 - eine Bildfrage haelt nichts auf
+            log.info("Bild nicht beurteilt: %s", exc)
+            return UNGEPRUEFT, ""
+
+        self._book(modell, antwort, "Bild angesehen")
+
+        if self._refused(antwort):
+            return UNGEPRUEFT, ""
+        text = "".join(
+            getattr(block, "text", "")
+            for block in getattr(antwort, "content", [])
+            if getattr(block, "type", "") == "text"
+        )
+        punkte, beschreibung = lies_antwort(text)
+        log.info("Bild angesehen (%s): %s Punkte - %s", thema, punkte, beschreibung)
+        return punkte, beschreibung
+
     def text(
         self,
         *,
