@@ -85,6 +85,25 @@ def agent_mit_mitschrift(tmp_path, monkeypatch):
     )
     settings.anthropic_api_key = "sk-ant-test"
     agent = Agent(settings)
+
+    # Die Bildsuche bleibt draussen. Sie ginge sonst echt ins Netz - hier
+    # gesperrt, anderswo nicht -, und seit die Stoffsuche nachsetzt, wenn
+    # sich kein Foto findet, haengt sogar die Zahl der Modellaufrufe
+    # davon ab. Hier steht ein Foto vom Fund bereit, wie im guten Fall.
+    from PIL import Image
+
+    from insta_agent.runner import BILD_VOM_FUND
+
+    foto = tmp_path / "fund.jpg"
+    Image.new("RGB", (1600, 2000), (30, 70, 110)).save(foto)
+
+    def echtes_bild(fund, basis, report):
+        agent._letzte_bildstufe = BILD_VOM_FUND
+        agent._quellbilder = []
+        agent._bildthema = getattr(fund, "titel", "")
+        return foto, "Bild: Test · CC BY 4.0"
+
+    monkeypatch.setattr(agent, "_echtes_bild", echtes_bild)
     yield agent, client
     agent.close()
 

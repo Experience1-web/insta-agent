@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -95,6 +96,40 @@ PIVOT_FAKTOR = 2.0
 # Account, der ständig die Nische tauscht, baut nie Publikum auf.
 PIVOT_MINDESTABSTAND = 10
 
+
+
+# Woran sich ein Bild vom Fund selbst erkennen laesst: Es kommt aus der
+# Originalquelle, aus der Studie oder von der Behoerde.
+BILD_VOM_FUND = 10
+
+# Ab so vielen Punkten beim Hinsehen zeigt ein Archivbild die Sache -
+# "eine echte Aufnahme von etwas, das eng dazugehoert".
+ZEIGT_DIE_SACHE_AB = 7
+
+
+def _blickpunkte(gesehen: str) -> int:
+    """Die Punkte aus "7/10: Beschreibung" - -1, wenn nicht hingesehen wurde."""
+    kopf = (gesehen or "").split("/", 1)[0].strip()
+    return int(kopf) if kopf.isdigit() else -1
+
+
+@dataclass(slots=True)
+class Bildprobe:
+    """Was die Bildsuche zu einem Fund ergeben hat, bevor der Text entsteht."""
+
+    echt: Path | None
+    nachweis: str
+    quellbilder: list
+    bildthema: str
+    stufe: int | None
+    """BILD_VOM_FUND, Punkte beim Hinsehen, -1 ungeprueft, None nichts."""
+
+    @property
+    def zeigt_die_sache(self) -> bool:
+        if self.echt is None or self.stufe is None:
+            return False
+        # Ungeprueft laesst sich nicht beurteilen - dann gilt das Foto.
+        return self.stufe < 0 or self.stufe >= ZEIGT_DIE_SACHE_AB
 
 class Agent:
     def __init__(self, settings: Settings) -> None:
@@ -1229,6 +1264,46 @@ class Agent:
                 # der Nachschlag kann schwächer ausfallen.
                 if zweiter.reiz >= fund.reiz:
                     fund = zweiter
+                nachgesetzt = True
+            else:
+                nachgesetzt = False
+
+            # Laesst sich die Sache zeigen? Instagram ist ein Bildmedium,
+            # und ein Fund ohne freies Foto wird ein Beitrag aus fremden
+            # Bildern. Einmal wird nachgesetzt - aber nicht zusaetzlich zu
+            # einem Nachschlag wegen zu wenig Reiz: Jede Runde kostet so
+            # viel wie die erste.
+            if not self._bildprobe(fund, report) and mit_suche and not nachgesetzt:
+                report.steps.append(
+                    f"Kein freies Foto, das die Sache zeigt: {fund.titel} "
+                    "- noch einmal gesucht"
+                )
+                zweiter = finde_stoff(
+                    self.brain,
+                    identity=self.identity,
+                    strategy=self.strategy,
+                    bisherige=bisherige,
+                    gebiete=gebiete,
+                    mit_suche=mit_suche,
+                    modell=self._modell("stoff"),
+                    nachsetzen=fund,
+                    person=self._person("stoff"),
+                    grund=(
+                        "Von dieser Sache ließ sich kein frei nutzbares Foto "
+                        "finden, das sie selbst zeigt - weder in der Studie "
+                        "noch bei einer Behörde noch im Archiv. Instagram ist "
+                        "ein Bildmedium; ein Beitrag aus fremden Bildern wirkt "
+                        "zusammengewürfelt. Such einen Fund, von dem es ein "
+                        "freies Foto gibt, und nenn seine Quelle."
+                    ),
+                )
+                if self._bildprobe(zweiter, report) and zweiter.taugt:
+                    fund = zweiter
+                else:
+                    report.steps.append(
+                        "Auch beim zweiten Fund kein besseres Foto - "
+                        "es bleibt beim ersten"
+                    )
         except (BudgetExhausted, CycleBudgetExceeded):
             raise
         except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
@@ -1253,6 +1328,40 @@ class Agent:
                 f"Achtung: bester Fund nur Reiz {fund.reiz}/5 - der Beitrag trägt womöglich nicht"
             )
         return fund
+
+    def _bildprobe(self, fund, report: CycleReport) -> bool:
+        """Sucht das Bild zum Fund schon jetzt - True, wenn es die Sache zeigt.
+
+        Frueher kam das Bild erst nach dem Text. Bei der leuchtenden
+        Koralle hiess das: Stoffsuche, Text, Bildsprache waren bezahlt,
+        als sich herausstellte, dass es von dieser Art kein freies Foto
+        gibt - und der Beitrag bekam einen Frosch, eine Treppe und einen
+        Krill. Jetzt wird zuerst geschaut, ob sich die Sache zeigen laesst.
+
+        Das Ergebnis wird aufgehoben und spaeter verwendet; gesucht wird
+        also nicht doppelt, und die Bildfragen kosten dasselbe wie vorher.
+
+        "Zeigt die Sache" heisst: ein Bild aus der Originalquelle, oder
+        ein Archivbild, das beim Hinsehen mindestens 7 von 10 bekam - "eine
+        echte Aufnahme von etwas, das eng dazugehoert". Ist Hinsehen
+        abgeschaltet, gilt jedes gefundene Foto; beurteilen laesst es sich
+        dann nicht.
+        """
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        basis = f"{stamp}-stoff-{len(getattr(self, '_bildproben', {})) + 1}"
+        echt, nachweis = self._echtes_bild(fund, basis, report)
+        stufe = getattr(self, "_letzte_bildstufe", None)
+
+        if not hasattr(self, "_bildproben"):
+            self._bildproben = {}
+        self._bildproben[id(fund)] = Bildprobe(
+            echt=echt,
+            nachweis=nachweis,
+            quellbilder=list(getattr(self, "_quellbilder", []) or []),
+            bildthema=getattr(self, "_bildthema", ""),
+            stufe=stufe,
+        )
+        return self._bildproben[id(fund)].zeigt_die_sache
 
     def _gestalte(self, draft, identity, report: CycleReport):
         """Lässt die Bildsprache über den geplanten Beitrag sehen.
@@ -1321,6 +1430,7 @@ class Agent:
         # Die Aufnahmen vom Fund selbst zuerst - aus der Studie, von der
         # Behoerde. Ein Archivbild passt zum Thema; dieses zeigt die Sache.
         self._quellbilder = []
+        self._letzte_bildstufe = None
         aus_quelle = self._bild_aus_der_quelle(fund, basis, report)
         if aus_quelle is not None:
             return aus_quelle
@@ -1358,8 +1468,10 @@ class Agent:
 
         report.steps.append(
             f"Echte Aufnahme übernommen: {gefunden.seite} ({gefunden.lizenz})"
+            + (f" - {gesehen}" if (gesehen := getattr(gefunden, "gesehen", "")) else "")
         )
         self.store.log("bild_echt", f"{gefunden.seite} - {gefunden.lizenz}")
+        self._letzte_bildstufe = _blickpunkte(gesehen)
         return gefunden.pfad, gefunden.nachweis
 
     def _bild_aus_der_quelle(self, fund, basis: str, report: CycleReport):
@@ -1448,6 +1560,7 @@ class Agent:
             f"({gefunden.lizenz}){dazu}"
         )
         self.store.log("bild_quelle", f"{gefunden.seite} - {gefunden.lizenz}")
+        self._letzte_bildstufe = BILD_VOM_FUND
         return gefunden.pfad, gefunden.nachweis
 
     def _panorama_karussell(self, draft, basis: str, identity, erstes_roh):
@@ -1737,7 +1850,21 @@ class Agent:
         # hier lange hinter der Prüfung auf den Bildgenerator: Wer keinen
         # eingerichtet hatte, bekam auch dann kein Foto, wenn eines frei
         # verfügbar dalag.
-        echt, nachweis = self._echtes_bild(fund, basis, report)
+        probe = (
+            getattr(self, "_bildproben", {}).pop(id(fund), None)
+            if fund is not None
+            else None
+        )
+        if probe is not None:
+            # Schon bei der Stoffsuche gesucht - nicht noch einmal.
+            echt, nachweis = probe.echt, probe.nachweis
+            self._quellbilder = list(probe.quellbilder)
+            self._bildthema = probe.bildthema
+        else:
+            echt, nachweis = self._echtes_bild(fund, basis, report)
+        # Proben zu Funden, die nicht genommen wurden, gehoeren zu keinem
+        # Beitrag. Liegen gelassen, faende der naechste Zyklus sie wieder.
+        self._bildproben = {}
         if echt is not None:
             self._letzter_nachweis = nachweis
             fertig = self.settings.media_dir / f"{basis}-fertig.png"

@@ -102,6 +102,15 @@ Diese Note hat ein Vetorecht. Instagram ist ein Bildmedium: Was man nicht
 zeigen kann, geht unter, so neu es auch sein mag. Unter 3 bringst du den
 Fund gar nicht erst.
 
+Und es zählt nur ein Bild, das wir zeigen dürfen. Ein Foto, das in einer
+Zeitung steht und einer Agentur gehört, hilft nicht. Frei sind:
+Abbildungen aus offenen Studien (CC BY), Aufnahmen von NASA, NOAA, USGS
+und anderen US-Behörden, Bilder auf Wikimedia Commons. Sind zwei Funde
+gleich spannend, nimm den, von dem es ein solches freies Foto der Sache
+selbst gibt. Nach dir prüft ein Programm, ob sich dieses Foto
+tatsächlich finden lässt - findet es keines, wird ein anderer Fund
+gesucht, und dein erster war umsonst.
+
 `breite` - Versteht das auch jemand ohne Vorwissen in zwei Sekunden? Ein
 Goldfund in der Wüste ist eine 5. Eine Verbesserung im Messverfahren ist
 eine 2, so bedeutend sie fachlich sein mag.
@@ -256,6 +265,7 @@ def _auftrag(
     gebiete: list[str],
     hinweis_suche: str,
     nachsetzen: Fund | None,
+    grund: str = "",
 ) -> str:
     gehabt = (
         "\n".join(f"- {t}" for t in bisher[:12])
@@ -263,13 +273,17 @@ def _auftrag(
         else "Noch nichts - das hier wird der erste Fund."
     )
 
+    warum = grund or (
+        f"Reiz {nachsetzen.reiz} von 5. Das ist unter der Schwelle, und ein "
+        "Beitrag darüber wäre verschwendet."
+        if nachsetzen is not None
+        else ""
+    )
     zweiter_anlauf = (
         f"""
 # Das reicht noch nicht
 
-Dein erster Vorschlag war: "{nachsetzen.titel}" - Reiz {nachsetzen.reiz}
-von 5. Das ist unter der Schwelle, und ein Beitrag darüber wäre
-verschwendet.
+Dein erster Vorschlag war: "{nachsetzen.titel}". {warum}
 
 Such weiter, in einem anderen Gebiet. Nimm nicht denselben Fund mit einer
 besseren Note, sondern einen anderen."""
@@ -310,6 +324,7 @@ def finde_stoff(
     modell: str | None = None,
     nachsetzen: Fund | None = None,
     person: dict | None = None,
+    grund: str = "",
 ) -> Fund:
     """Sucht den Fund, auf dem der nächste Beitrag steht.
 
@@ -346,6 +361,7 @@ def finde_stoff(
                 gebiete=list(gebiete or []),
                 hinweis_suche=hinweis_suche,
                 nachsetzen=nachsetzen,
+                grund=grund,
             ),
         ),
     )
