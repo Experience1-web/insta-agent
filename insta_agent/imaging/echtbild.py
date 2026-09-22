@@ -446,7 +446,7 @@ def guete(
     return form * (0.75 + 0.25 * min(1.3, mass ** 0.25))
 
 
-def rangfaktor(platz: int) -> float:
+def rangfaktor(platz: int, *, geprueft: bool = False) -> float:
     """Wie stark ein Treffer dadurch verliert, dass er weiter hinten steht.
 
     Der Fehler, den das behebt, war unsichtbar, bis man das Ergebnis las:
@@ -474,8 +474,17 @@ def rangfaktor(platz: int) -> float:
     Mehr ginge nicht mehr gut. Die Rangfolge des Archivs ist ein
     Anhaltspunkt und kein Urteil - wer ihr ganz folgt, nimmt wieder das
     erste, was die Volltextsuche oben hatte.
+
+    `geprueft` heisst: Jemand hat das Bild angesehen. Dann faellt die
+    Steigung auf ein Drittel, und das ist der Punkt, an dem die ganze
+    Rechnung aufgeht. Der Rang war immer nur ein Ersatz dafuer, dass
+    niemand hinsah - eine Vermutung darueber, ob ein Bild zum Thema
+    gehoert, abgeleitet daraus, wie eine Volltextsuche Dateinamen
+    sortiert. Liegt ein wirkliches Urteil vor, ist die Vermutung nur
+    noch dazu gut, einen Gleichstand zu brechen.
     """
-    return 1.0 / (1.0 + 0.30 * max(0, platz))
+    steigung = 0.10 if geprueft else 0.30
+    return 1.0 / (1.0 + steigung * max(0, platz))
 
 
 def _taugt_der_titel(titel: str) -> bool:
@@ -1035,7 +1044,7 @@ def finde_und_hole(
 
         punkte = (
             guete(bild.breite, bild.hoehe, zielverhaeltnis=zielverhaeltnis)
-            * rangfaktor(platz)
+            * rangfaktor(platz, geprueft=gesehen >= 0)
             * schaerfefaktor(wert, SCHARF_GENUG)
             * blickfaktor(gesehen)
         )

@@ -56,21 +56,31 @@ Das Thema ist: {thema}
 
 Sieh dir das Bild an und sage, wie gut es zu diesem Thema passt:
 
-10 = zeigt genau die Sache, um die es geht
-7  = zeigt etwas, das eng dazugehoert
+10 = eine echte Aufnahme genau der Sache, um die es geht
+7  = eine echte Aufnahme von etwas, das eng dazugehoert
 4  = passt nur entfernt, aber nicht falsch
 1  = zeigt etwas anderes
 0  = hat mit dem Thema nichts zu tun
 
-Wichtig: Ein Bild, das die gesuchten Worte nur im Namen traegt, aber
-etwas anderes zeigt, bekommt 0 oder 1. Ein Feuerwerk ist kein Tiefseetier,
-auch wenn es "Deep Sea Legend" heisst.
+Zwei Regeln, die schwerer wiegen als alles andere:
+
+1. Es zaehlt, was zu sehen ist, nicht wie die Datei heisst. Ein Bild,
+   das die gesuchten Worte nur im Namen traegt, bekommt 0 oder 1.
+
+2. Eine Nachbildung ist nicht die Sache selbst. Eine Kunstinstallation,
+   ein Modell, eine Nachbildung im Museum, eine Zeichnung, ein Gemaelde,
+   eine Computergrafik, ein Kostuem, eine Skulptur oder ein Spielzeug
+   bekommen hoechstens 3 - auch dann, wenn sie die Sache taeuschend
+   aehnlich darstellen. Gesucht ist eine Fotografie von der Sache
+   selbst. Eine leuchtende Quallen-Lichtinstallation ist kein
+   Tiefseetier, so schoen sie auch aussieht.
 
 Antworte in genau einer Zeile, in dieser Form:
 {form}
 
 Die Beschreibung auf Deutsch, hoechstens acht Woerter, und sie sagt, was
-wirklich zu sehen ist - nicht, was zu sehen sein sollte."""
+wirklich zu sehen ist - nicht, was zu sehen sein sollte. Wenn es eine
+Nachbildung ist, sage das ausdruecklich dazu."""
 
 # Was zurueckkommt, wenn nicht gefragt werden konnte. Nicht null:
 # Eine Pruefung, die nicht stattgefunden hat, darf kein Bild abwerten.
@@ -117,17 +127,23 @@ def blickfaktor(punkte: int) -> float:
     """Was die Antwort fuer die Auswahl bedeutet.
 
     Ungeprueft heisst 1,0 - kein Abzug fuer etwas, das nicht stattgefunden
-    hat. Sonst laeuft es von 0,25 bei null Punkten bis 1,0 bei zehn.
+    hat. Sonst laeuft es von 0,15 bei null Punkten bis 1,0 bei zehn.
 
-    Unten wird nicht auf null gegangen, und das ist kein Zoegern: Wenn
-    jedes Bild durchfaellt, ist ein schlecht passendes echtes Foto immer
-    noch besser als gar keins. Der Abstand reicht trotzdem - ein
-    Feuerwerk mit einem Punkt kommt auf 0,33 und hat gegen ein
-    Tiefseefoto mit neun (0,93) keine Aussicht mehr.
+    Die Spanne war erst enger, und der erste echte Durchlauf hat
+    gezeigt, warum das zu wenig war: Eine Quallen-Lichtinstallation mit
+    drei Punkten und eine Tiefseeaufnahme mit sieben lagen danach nur
+    knapp auseinander, obwohl das eine eine Nachbildung ist und das
+    andere die Sache selbst. Wenn schon jemand hinsieht, soll sein
+    Urteil auch etwas wiegen.
+
+    Unten wird trotzdem nicht auf null gegangen, und das ist kein
+    Zoegern: Wenn jedes Bild durchfaellt, ist ein schlecht passendes
+    echtes Foto immer noch besser als gar keins - sonst wird gemalt, und
+    gemalt ist derzeit schlechter als jede echte Aufnahme.
     """
     if punkte < 0:
         return 1.0
-    return 0.25 + 0.075 * max(0, min(10, punkte))
+    return 0.15 + 0.085 * max(0, min(10, punkte))
 
 
 __all__ = [

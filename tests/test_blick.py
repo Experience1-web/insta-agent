@@ -87,7 +87,7 @@ def test_ganz_unten_bleibt_ein_rest():
     """Wenn jedes Bild durchfaellt, ist das schlechteste immer noch
     besser als gar keins - dann wird sonst gemalt, und gemalt ist
     derzeit schlechter als jede echte Aufnahme."""
-    assert blickfaktor(0) > 0.2
+    assert blickfaktor(0) > 0.1
 
 
 # --- Was der Blick in der Auswahl bewirkt ---------------------------------
@@ -321,3 +321,73 @@ def test_eine_fehlende_datei_kostet_nichts(tmp_path):
     gehirn, doppel, kasse = _gehirn(_Antwort("9|egal"))
     assert gehirn.beurteile_bild(tmp_path / "gibtsnicht.png", "x") == (UNGEPRUEFT, "")
     assert doppel.gefragt == []
+
+
+# --- Eine Nachbildung ist nicht die Sache selbst --------------------------
+
+
+def test_die_frage_nennt_nachbildungen_ausdruecklich():
+    """Der Fehler, den erst der erste echte Durchlauf gezeigt hat.
+
+    Das Modell sah richtig hin und beschrieb es richtig - "Leuchtende
+    Kunstinstallation einer Qualle mit Tentakeln" - und gab trotzdem
+    9 von 10. Es bewertete "sieht aus wie das Thema" statt "zeigt die
+    Sache selbst".
+
+    Der Beitrag soll zeigen, worum es geht. Eine Lichtinstallation in
+    Quallenform zeigt eine Lichtinstallation.
+    """
+    from insta_agent.imaging.blick import FRAGE
+
+    klein = FRAGE.casefold()
+    for wort in ("kunstinstallation", "nachbildung", "modell", "zeichnung"):
+        assert wort in klein
+    assert "hoechstens 3" in klein
+
+
+def test_eine_nachbildung_verliert_gegen_die_sache_selbst():
+    """Drei Punkte gegen sieben muessen die Entscheidung drehen.
+
+    Nach den ersten Zahlen taten sie das nicht deutlich genug: Die
+    Installation stand vorn im Archiv, war groesser und schaerfer.
+    """
+    from insta_agent.imaging.blick import blickfaktor
+    from insta_agent.imaging.echtbild import guete, rangfaktor, schaerfefaktor
+    from insta_agent.imaging.schaerfe import SCHARF_GENUG
+
+    installation = (
+        guete(1280, 2276)
+        * rangfaktor(1, geprueft=True)
+        * schaerfefaktor(0.66, SCHARF_GENUG)
+        * blickfaktor(3)
+    )
+    echte_aufnahme = (
+        guete(1804, 1176)
+        * rangfaktor(2, geprueft=True)
+        * schaerfefaktor(0.56, SCHARF_GENUG)
+        * blickfaktor(7)
+    )
+    assert echte_aufnahme > installation * 1.4
+
+
+def test_der_rang_zaehlt_weniger_wenn_jemand_hingesehen_hat():
+    """Der Rang war immer nur ein Ersatz dafuer, dass niemand hinsah.
+
+    Liegt ein wirkliches Urteil vor, ist die Vermutung, die eine
+    Volltextsuche aus Dateinamen ableitet, nur noch ein
+    Gleichstandsbrecher.
+    """
+    from insta_agent.imaging.echtbild import rangfaktor
+
+    assert rangfaktor(4, geprueft=True) > rangfaktor(4)
+    # Ganz verschwinden darf er nicht - bei Gleichstand gewinnt das
+    # vordere Bild, weil es wahrscheinlicher zum Thema gehoert.
+    assert rangfaktor(4, geprueft=True) < rangfaktor(0, geprueft=True)
+
+
+def test_ohne_urteil_bleibt_der_rang_so_stark_wie_vorher():
+    """Sonst waere abgeschaltetes Hinsehen zugleich ein schwaecherer Rang -
+    und niemand haette das entschieden."""
+    from insta_agent.imaging.echtbild import rangfaktor
+
+    assert rangfaktor(3) == 1.0 / (1.0 + 0.30 * 3)
