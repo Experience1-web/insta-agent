@@ -183,6 +183,14 @@ class Fund(BaseModel):
             "oder die vorhandenen unscheinbar sind."
         ),
     )
+    doi: str = Field(
+        default="",
+        description=(
+            "Die DOI der Originalveröffentlichung, zum Beispiel "
+            "10.1098/rsos.250890 - nur die Kennung, ohne https://doi.org/. "
+            "Leer lassen, wenn es keine Fachveröffentlichung gibt."
+        ),
+    )
     bildseite: str = Field(
         default="",
         description=(
@@ -252,29 +260,34 @@ class VisualSpec(BaseModel):
 
 
 class Karte(BaseModel):
-    """Eine Seite eines Karussells: ein Bild, eine Tatsache.
+    """Eine Seite eines Karussells: ein Bild, ein Schritt der Geschichte.
 
     Der Grund, warum ein Beitrag mehrere Bilder bekommt, ist nicht die
     Menge, sondern die Bewegung: Wer wischt, bleibt. Jede Karte muss
-    deshalb fuer sich stehen und trotzdem zur naechsten ziehen.
+    deshalb fuer sich verstaendlich sein und trotzdem zur naechsten
+    ziehen.
 
-    Und sie muss eine Tatsache tragen, keine Fortsetzung eines Satzes.
-    "59,35 Lichtjahre entfernt" ist eine Karte. "und ausserdem" ist
-    keine.
+    Frueher stand hier: eine Tatsache - eine Zahl, ein Jahr, ein Name.
+    Das Ergebnis war ein Datenblatt. "Corallizoanthus aureus, 2025
+    beschrieben" erfuellt die Regel und sagt niemandem etwas; "Licht nur
+    auf Reiz, nicht dauerhaft" auch. Eine Tatsache traegt eine Karte nur,
+    wenn jemand ohne Vorwissen versteht, was sie bedeutet.
     """
 
     text: str = Field(
         description=(
-            "Was auf diesem Bild steht. Eine einzelne Tatsache, hoechstens "
-            "acht Woerter, ohne Punkt am Ende. Konkret: eine Zahl, eine "
-            "Entfernung, ein Jahr, ein Name - nicht 'faszinierend'."
+            "Was auf diesem Bild steht: genau eine der wichtigen Tatsachen "
+            "des Fundes, als Schritt der Geschichte - hoechstens zehn "
+            "Woerter, ohne Punkt am Ende. In Alltagsworten, "
+            "die jeder ohne Vorwissen versteht - kein Fachwort, kein "
+            "lateinischer Name, keine Zahl, die man erst nachschlagen muss."
         )
     )
     akzentwort: str = Field(
         default="",
         description=(
             "Das eine Wort oder die eine Zahl aus dem Text, die farbig "
-            "gesetzt wird. Meist die Zahl."
+            "gesetzt wird - das, worauf es ankommt."
         ),
     )
     bildwunsch: str = Field(
@@ -289,9 +302,10 @@ class Karte(BaseModel):
     bildsuche: str = Field(
         default="",
         description=(
-            "Zwei bis vier Woerter fuer die Suche nach einer echten "
-            "Aufnahme zu dieser Karte, auf Englisch. Leer lassen, wenn es "
-            "davon kein Foto geben kann."
+            "Zwei bis vier Woerter auf Englisch, mit denen sich eine echte "
+            "Aufnahme der Sache des Beitrags finden laesst - dasselbe Tier, "
+            "derselbe Fund, derselbe Ort, nicht ein Wort aus dem Kartentext. "
+            "Leer lassen, wenn es davon kein Foto geben kann."
         ),
     )
 

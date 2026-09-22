@@ -396,3 +396,183 @@ def test_die_quelle_steht_nicht_zweimal_in_der_pflichtangabe():
         quelle="NASA",
     )
     assert bild.nachweis == "Bild: NASA · Public domain"
+
+
+# --- Nur Artikelseiten, keine Startseiten ----------------------------------
+
+
+def test_startseiten_und_uebersichten_sind_keine_quelle():
+    """Aus dem ersten echten Zyklus: das Titelbild von ZooKeys mit Frosch.
+
+    Die Stoffsuche nannte die Startseite der Zeitschrift. Dort steht die
+    Lizenz im Fuss, also galt die Seite als frei - und ihr Titelbild
+    landete in einem Beitrag ueber eine Koralle.
+    """
+    from insta_agent.imaging.quellbild import ist_artikelseite
+
+    for adresse in (
+        "https://zookeys.pensoft.net/",
+        "https://zookeys.pensoft.net/browse_articles",
+        "https://www.frontiersin.org/journals/marine-science",
+        "https://peerj.com/articles/?q=coral",
+    ):
+        assert not ist_artikelseite(adresse), adresse
+    for adresse in (
+        "https://zookeys.pensoft.net/article/123456/",
+        "https://royalsocietypublishing.org/rsos/article/12/11/250890/234126/Glow",
+        "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.1",
+        "https://www.mdpi.com/1424-2818/16/5/250",
+        "https://www.science.org/doi/10.1126/sciadv.abc",
+    ):
+        assert ist_artikelseite(adresse), adresse
+
+    class Fund:
+        bildseite = "https://zookeys.pensoft.net/browse_articles"
+        echtes_bild = ""
+        quellen = ["ZooKeys, https://zookeys.pensoft.net/"]
+
+    assert quellseiten(Fund()) == []
+
+
+# --- Ein Bild, das etwas anderes zeigt, wird nicht genommen ---------------
+
+
+def test_ein_bild_mit_null_punkten_wird_auch_allein_nicht_genommen(tmp_path):
+    """"0 Punkte - Zeitschriftentitel und gruener Frosch, keine Koralle".
+
+    Der Blick hatte es richtig gesehen. Genommen wurde es trotzdem, weil
+    es das einzige war. Eine Karte nur mit Schrift ist besser.
+    """
+    with _netz(_studienseite(), {"g001": _foto(seed=1), "g002-large": _foto(seed=2)}) as client:
+        gefunden = aus_der_quelle(
+            [STUDIE],
+            tmp_path / "z.jpg",
+            client=client,
+            blick=lambda _pfad: (0, "Zeitschriftentitel und grüner Frosch"),
+        )
+    assert gefunden is None
+
+
+# --- Europe PMC ----------------------------------------------------------
+
+
+def _epmc_netz(lizenz="cc by", pmcid="PMC1234567", abbildungen=("rsos250890f01", "rsos250890f02")):
+    xml = "<article><body>" + "".join(
+        f'<fig id="f{i}"><caption><p>Abbildung {i}: die Koralle</p></caption>'
+        f'<graphic xlink:href="{name}"/></fig>'
+        for i, name in enumerate(abbildungen, start=1)
+    ) + "</body></article>"
+    gefragt: list[str] = []
+
+    def antworte(anfrage: httpx.Request) -> httpx.Response:
+        ziel = str(anfrage.url)
+        gefragt.append(ziel)
+        if "/search" in ziel:
+            return httpx.Response(
+                200,
+                json={
+                    "resultList": {
+                        "result": [
+                            {
+                                "pmcid": pmcid,
+                                "license": lizenz,
+                                "authorString": "Kise H, Reimer JD, Fujii T.",
+                                "journalInfo": {"journal": {"title": "Royal Society Open Science"}},
+                                "title": "Glow in the D-ARK",
+                            }
+                        ]
+                    }
+                },
+            )
+        if "fullTextXML" in ziel:
+            return httpx.Response(200, text=xml)
+        if "/bin/" in ziel:
+            return httpx.Response(200, content=_foto(seed=len(gefragt)))
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(antworte)
+    return httpx.Client(transport=transport), gefragt, transport
+
+
+def test_die_doi_steht_oft_schon_in_den_quellen():
+    from insta_agent.imaging.europepmc import doi_des_fundes, finde_doi
+
+    assert finde_doi("DOI: 10.1098/rsos.250890.") == "10.1098/rsos.250890"
+    assert (
+        finde_doi("https://www.frontiersin.org/articles/10.3389/fmars.2025.1234/full")
+        == "10.3389/fmars.2025.1234/full"
+    )
+
+    class Fund:
+        doi = ""
+        bildseite = ""
+        quellen = ["Kise et al. 2025, Royal Society Open Science, doi:10.1098/rsos.250890"]
+
+    assert doi_des_fundes(Fund()) == "10.1098/rsos.250890"
+
+
+def test_ueber_europe_pmc_kommen_die_abbildungen_der_studie(tmp_path):
+    """Der Weg an Verlagen vorbei, die Programme aussperren.
+
+    Die Studie zur Koralle war frei - der Verlag antwortete trotzdem mit
+    403. Europe PMC ist fuer genau diese Abrufe gebaut.
+    """
+    from insta_agent.imaging.quellbild import aus_der_studie
+
+    client, gefragt, _ = _epmc_netz()
+    weitere: list = []
+    with client:
+        gefunden = aus_der_studie(
+            "10.1098/rsos.250890", tmp_path / "z.jpg", client=client, weitere=weitere
+        )
+
+    assert gefunden is not None and gefunden.pfad.exists()
+    assert gefunden.nachweis == "Bild: Kise H et al. (Royal Society Open Science) · CC BY · via Europe PMC"
+    assert any("europepmc.org/articles/PMC1234567/bin/rsos250890f0" in a for a in gefragt)
+    assert len(weitere) == 1
+
+
+def test_eine_nicht_kommerzielle_studie_liefert_kein_bild(tmp_path):
+    from insta_agent.imaging.quellbild import aus_der_studie
+
+    client, gefragt, _ = _epmc_netz(lizenz="cc by-nc")
+    befunde: list = []
+    with client:
+        gefunden = aus_der_studie(
+            "10.1/x", tmp_path / "z.jpg", client=client, befunde=befunde
+        )
+    assert gefunden is None
+    # Nicht einmal der Volltext wird geholt, geschweige denn ein Bild.
+    assert not any("fullTextXML" in a or "/bin/" in a for a in gefragt)
+    assert "gewerbliche" in befunde[0].grund
+
+
+def test_eine_studie_ohne_volltext_im_archiv_wird_sauber_gemeldet(tmp_path):
+    from insta_agent.imaging.quellbild import aus_der_studie
+
+    client, _, _ = _epmc_netz(pmcid="")
+    befunde: list = []
+    with client:
+        assert aus_der_studie("10.1/x", tmp_path / "z.jpg", client=client, befunde=befunde) is None
+    assert "ohne vollen Text" in befunde[0].grund
+
+
+def test_im_zyklus_geht_europe_pmc_vor_der_verlagsseite(tmp_path, monkeypatch):
+    """Die Verlagsseite wird gar nicht erst gefragt, wenn das Archiv liefert."""
+    _, gefragt, transport = _epmc_netz()
+    echtes = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client", lambda *a, **k: echtes(transport=transport, follow_redirects=True)
+    )
+
+    class Fund(_Fund):
+        doi = "10.1098/rsos.250890"
+        bildseite = "https://royalsocietypublishing.org/rsos/article/12/11/250890/1/x"
+
+    agent = _agent(tmp_path)
+    pfad, nachweis = agent._echtes_bild(Fund(), "test", _Bericht())
+    monkeypatch.setattr(httpx, "Client", echtes)
+
+    assert pfad is not None
+    assert "Europe PMC" in nachweis
+    assert not any("royalsocietypublishing" in a for a in gefragt)

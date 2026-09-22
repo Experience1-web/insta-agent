@@ -63,6 +63,9 @@ class Quelle:
     """True: Behoerde, gemeinfrei von Gesetzes wegen, kein Vermerk noetig.
     False: Zeitschrift, der Lizenzvermerk muss auf der Seite stehen."""
 
+    zeitschrift: bool = False
+    """True: Dann kommt nur eine Artikelseite infrage, keine Startseite."""
+
 
 FREIE_QUELLEN: tuple[Quelle, ...] = (
     # US-Bundesbehoerden. Was ihre Angestellten im Dienst aufnehmen, ist
@@ -79,19 +82,19 @@ FREIE_QUELLEN: tuple[Quelle, ...] = (
     # Offene Fachzeitschriften. Dort werden neue Arten beschrieben,
     # Grabungen dokumentiert, Funde vorgestellt - mit den Aufnahmen, um
     # die es geht.
-    Quelle("plos.org", "PLOS", gemeinfrei=False),
-    Quelle("pensoft.net", "Pensoft", gemeinfrei=False),
-    Quelle("frontiersin.org", "Frontiers", gemeinfrei=False),
-    Quelle("mdpi.com", "MDPI", gemeinfrei=False),
-    Quelle("elifesciences.org", "eLife", gemeinfrei=False),
-    Quelle("peerj.com", "PeerJ", gemeinfrei=False),
-    Quelle("biomedcentral.com", "BMC", gemeinfrei=False),
-    Quelle("springeropen.com", "SpringerOpen", gemeinfrei=False),
-    Quelle("royalsocietypublishing.org", "Royal Society", gemeinfrei=False),
+    Quelle("plos.org", "PLOS", gemeinfrei=False, zeitschrift=True),
+    Quelle("pensoft.net", "Pensoft", gemeinfrei=False, zeitschrift=True),
+    Quelle("frontiersin.org", "Frontiers", gemeinfrei=False, zeitschrift=True),
+    Quelle("mdpi.com", "MDPI", gemeinfrei=False, zeitschrift=True),
+    Quelle("elifesciences.org", "eLife", gemeinfrei=False, zeitschrift=True),
+    Quelle("peerj.com", "PeerJ", gemeinfrei=False, zeitschrift=True),
+    Quelle("biomedcentral.com", "BMC", gemeinfrei=False, zeitschrift=True),
+    Quelle("springeropen.com", "SpringerOpen", gemeinfrei=False, zeitschrift=True),
+    Quelle("royalsocietypublishing.org", "Royal Society", gemeinfrei=False, zeitschrift=True),
     # Bei Nature und Science ist nur ein Teil offen - Scientific Reports,
     # Nature Communications, Science Advances. Der Vermerk entscheidet.
-    Quelle("nature.com", "Nature", gemeinfrei=False),
-    Quelle("science.org", "Science", gemeinfrei=False),
+    Quelle("nature.com", "Nature", gemeinfrei=False, zeitschrift=True),
+    Quelle("science.org", "Science", gemeinfrei=False, zeitschrift=True),
 )
 
 # Groesser wird keine Seite geladen. Eine Fachartikelseite hat selten
@@ -124,6 +127,55 @@ BEIWERK = (
     ".svg",
     ".gif",
 )
+
+
+# Woran eine Uebersichtsseite zu erkennen ist - auch wenn "article" drin steht.
+UEBERSICHT = (
+    "browse",
+    "search",
+    "issue",
+    "archive",
+    "latest",
+    "about",
+    "subscribe",
+    "authors",
+    "toc",
+    "collections",
+)
+
+
+def ist_artikelseite(adresse: str) -> bool:
+    """Ob eine Adresse auf einen einzelnen Artikel zeigt und nicht auf eine Uebersicht.
+
+    Aus dem ersten echten Zyklus: Die Stoffsuche nannte
+    "zookeys.pensoft.net/" und "zookeys.pensoft.net/browse_articles".
+    Auf der Startseite steht die Lizenz im Fuss, also galt sie als frei -
+    und ihr Titelbild, eine Zeitschrift mit einem gruenen Frosch, stand
+    danach in einem Beitrag ueber eine Koralle.
+
+    Eine Artikelseite erkennt man an der Adresse: "/article/12345",
+    "/articles/10.3389/...", "/doi/10.1126/...", oder an einer langen
+    Nummer wie bei MDPI. Eine Uebersicht an ihren Woertern, selbst wenn
+    "article" darin vorkommt wie in "browse_articles".
+    """
+    teile = urlparse(adresse or "")
+    pfad = (teile.path or "").casefold()
+    abfrage = (teile.query or "").casefold()
+    if not pfad.strip("/"):
+        return False
+    if any(wort in pfad for wort in UEBERSICHT):
+        return False
+    # Eine Suche ist keine Seite ueber einen Fund, auch unter /articles/.
+    if re.search(r"(^|&)(q|query|search|keywords?)=", abfrage):
+        return False
+    return bool(
+        # /article/12345, /articles/10.3389/... - es folgt etwas
+        re.search(r"/articles?/[^/]+", pfad)
+        # PLOS: /plosone/article?id=10.1371/...
+        or (re.search(r"/articles?/?$", pfad) and "id=" in abfrage)
+        or "/doi/" in pfad
+        or re.search(r"\d{4,}", pfad)
+    )
 
 
 def erkenne_quelle(adresse: str) -> Quelle | None:
@@ -396,6 +448,56 @@ def aus_der_quelle(
     return None
 
 
+def aus_der_studie(
+    doi: str,
+    ziel: Path,
+    *,
+    client: httpx.Client | None = None,
+    blick=None,
+    groesse: tuple[int, int] = (1080, 1350),
+    beobachter=None,
+    weitere: list[Fundbild] | None = None,
+    befunde: list[Seitenbefund] | None = None,
+) -> Fundbild | None:
+    """Das beste Bild aus den Abbildungen einer Studie, ueber Europe PMC.
+
+    Der Weg an Verlagen vorbei, die Programme aussperren. Siehe
+    `europepmc` - dort steht auch, warum das kein Umweg ist, sondern der
+    vorgesehene Zugang.
+    """
+    from .europepmc import finde_studie, kandidaten_der_studie
+
+    studie = finde_studie(doi, client=client)
+    befund = Seitenbefund(
+        seite=f"Europe PMC (DOI {doi})",
+        lizenz=studie.lizenz,
+        urheber=studie.urheber,
+        kandidaten=[adresse for adresse, _ in studie.abbildungen] or None,
+        grund=studie.grund,
+    )
+    if befunde is not None:
+        befunde.append(befund)
+
+    kandidaten = kandidaten_der_studie(studie)
+    if not kandidaten:
+        log.info("Keine Abbildungen ueber Europe PMC (%s): %s", doi, studie.grund)
+        return None
+
+    gefunden = waehle_bestes(
+        kandidaten,
+        ziel,
+        client=client,
+        versuche=len(kandidaten),
+        beobachter=beobachter,
+        groesse=groesse,
+        blick=blick,
+        weitere=weitere,
+    )
+    if gefunden is None:
+        befund.grund = "keine Abbildung der Studie hat die Prüfung bestanden"
+    return gefunden
+
+
 def quellseiten(fund) -> list[str]:
     """Die Adressen eines Fundes, an denen Bilder vom Fund selbst stehen koennten.
 
@@ -414,8 +516,17 @@ def quellseiten(fund) -> list[str]:
     for eintrag in roh:
         for adresse in re.findall(r"https?://[^\s<>\"')\]]+", str(eintrag)):
             adresse = adresse.rstrip(".,;")
-            if erkenne_quelle(adresse) and adresse not in seiten:
-                seiten.append(adresse)
+            quelle = erkenne_quelle(adresse)
+            if quelle is None or adresse in seiten:
+                continue
+            # Eine Behoerdenseite braucht wenigstens einen Pfad, eine
+            # Zeitschrift einen Artikel - Startseiten zeigen Werbung fuer
+            # sich selbst, nicht den Fund.
+            if quelle.zeitschrift and not ist_artikelseite(adresse):
+                continue
+            if not (urlparse(adresse).path or "").strip("/"):
+                continue
+            seiten.append(adresse)
     return seiten[:3]
 
 
@@ -424,8 +535,10 @@ __all__ = [
     "Quelle",
     "Seitenbefund",
     "aus_der_quelle",
+    "aus_der_studie",
     "bildkandidaten",
     "erkenne_quelle",
+    "ist_artikelseite",
     "lizenz_der_seite",
     "pruefe_seite",
     "quellseiten",

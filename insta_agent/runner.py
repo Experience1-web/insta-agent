@@ -1309,6 +1309,15 @@ class Agent:
         """
         from .imaging.echtbild import finde_und_hole, suchworte_fuer
 
+        # Worum es auf allen Bildern gehen muss - auch auf den Karten. Ohne
+        # das wurde jedes Kartenbild gegen sein eigenes Suchwort beurteilt,
+        # und eine Treppe in einer Hoehle passte bestens zu "cave".
+        self._bildthema = " - ".join(
+            teil
+            for teil in (getattr(fund, "bildsuche", ""), getattr(fund, "titel", ""))
+            if teil
+        )
+
         # Die Aufnahmen vom Fund selbst zuerst - aus der Studie, von der
         # Behoerde. Ein Archivbild passt zum Thema; dieses zeigt die Sache.
         self._quellbilder = []
@@ -1366,10 +1375,12 @@ class Agent:
         `self._quellbilder` und fuellen danach das Karussell - vor jedem
         Archivbild, das nur zum Thema passt.
         """
-        from .imaging.quellbild import aus_der_quelle, quellseiten
+        from .imaging.europepmc import doi_des_fundes
+        from .imaging.quellbild import aus_der_quelle, aus_der_studie, quellseiten
 
+        doi = doi_des_fundes(fund)
         seiten = quellseiten(fund)
-        if not seiten:
+        if not doi and not seiten:
             return None
 
         # Worueber das Bild sein soll: der englische Suchbegriff und der
@@ -1382,18 +1393,37 @@ class Agent:
         )
         ziel = self.settings.media_dir / f"{basis}-echt.jpg"
         befunde: list = []
-        try:
-            gefunden = aus_der_quelle(
-                seiten,
-                ziel,
-                groesse=self._bildformat,
-                blick=self._blick_auf(thema),
-                weitere=self._quellbilder,
-                befunde=befunde,
-            )
-        except Exception as exc:  # noqa: BLE001 - dann eben das Archiv
-            log.info("Bild aus der Quelle fehlgeschlagen: %s", exc)
-            gefunden = None
+        blick = self._blick_auf(thema)
+        gefunden = None
+
+        # Zuerst ueber Europe PMC: Viele Verlage sperren Programme aus -
+        # beim ersten echten Versuch antwortete die Royal Society mit 403,
+        # obwohl die Studie frei war. Das Archiv ist fuer solche Abrufe da.
+        if doi:
+            try:
+                gefunden = aus_der_studie(
+                    doi,
+                    ziel,
+                    groesse=self._bildformat,
+                    blick=blick,
+                    weitere=self._quellbilder,
+                    befunde=befunde,
+                )
+            except Exception as exc:  # noqa: BLE001 - dann die Verlagsseite
+                log.info("Bild aus der Studie fehlgeschlagen: %s", exc)
+
+        if gefunden is None and seiten:
+            try:
+                gefunden = aus_der_quelle(
+                    seiten,
+                    ziel,
+                    groesse=self._bildformat,
+                    blick=blick,
+                    weitere=self._quellbilder,
+                    befunde=befunde,
+                )
+            except Exception as exc:  # noqa: BLE001 - dann eben das Archiv
+                log.info("Bild aus der Quelle fehlgeschlagen: %s", exc)
 
         if gefunden is None:
             gruende = "; ".join(
@@ -1539,17 +1569,21 @@ class Agent:
             if bild.pfad is not None and Path(bild.pfad).exists():
                 return bild.pfad, bild.nachweis
 
-        # Eine echte Aufnahme schlaegt jedes gemalte Bild.
+        # Eine echte Aufnahme schlaegt jedes gemalte Bild - wenn sie die
+        # Sache des Beitrags zeigt. Beurteilt wird deshalb gegen den Fund,
+        # nicht gegen das Suchwort der Karte, und mit hoeherer Latte.
         if suchwort := (karte.bildsuche or "").strip():
-            from .imaging.echtbild import finde_und_hole
+            from .imaging.echtbild import KARTENBLICK, finde_und_hole
 
+            thema = getattr(self, "_bildthema", "") or suchwort
             ziel = self.settings.media_dir / f"{stamm}-echt.jpg"
             try:
                 gefunden = finde_und_hole(
                     suchwort,
                     ziel,
                     groesse=self._bildformat,
-                    blick=self._blick_auf(suchwort),
+                    blick=self._blick_auf(thema),
+                    mindestblick=KARTENBLICK,
                 )
             except Exception as exc:  # noqa: BLE001 - dann wird gemalt
                 log.info("Kartensuche fehlgeschlagen: %s", exc)

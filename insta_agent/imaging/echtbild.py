@@ -147,6 +147,9 @@ ERLAUBT = (
     "cc by-sa 4.0",
     "cc-by-sa",
     "cc-by-",
+    # Ohne Fassung, so schreibt Europe PMC es hin: "cc by", "cc by-sa".
+    # NC und ND fallen vorher an VERBOTEN heraus, egal wie sie beginnen.
+    "cc by",
 )
 
 # Was auf jeden Fall ausscheidet, auch wenn oben etwas zu passen scheint.
@@ -867,7 +870,10 @@ def _uebernimm_echte_masse(bild: Fundbild, ziel: Path) -> None:
         return
     if breite <= 0 or hoehe <= 0:
         return
-    if (breite, hoehe) != (bild.breite, bild.hoehe):
+    # "Gemeldet 0x0" sagt nichts - bei Bildern von einer Seite war
+    # vorher schlicht nichts gemeldet. Das stand im Protokoll achtmal
+    # hintereinander und sah aus wie ein Fehler.
+    if bild.breite and bild.hoehe and (breite, hoehe) != (bild.breite, bild.hoehe):
         log.info(
             "Gemeldet %sx%s, geladen %sx%s (%s)",
             bild.breite,
@@ -989,6 +995,7 @@ def finde_und_hole(
     beobachter=None,
     groesse: tuple[int, int] = (1080, 1350),
     blick=None,
+    mindestblick: int | None = None,
 ):
     """Suchen, laden und den besten Fund nehmen. None, wenn keiner taugt.
 
@@ -1036,6 +1043,7 @@ def finde_und_hole(
         beobachter=beobachter,
         groesse=groesse,
         blick=blick,
+        mindestblick=MINDESTBLICK if mindestblick is None else mindestblick,
     )
 
 
@@ -1051,6 +1059,32 @@ WEITERE_AB = 5
 # Vorschaubildchen von 300 Pixeln dabei.
 ZU_KLEIN = 0.45
 
+# Wer hingesehen und weniger vergeben hat, hat etwas anderes gesehen.
+# Solche Bilder werden gar nicht genommen, auch wenn sonst keines da ist.
+#
+# Frueher galt: lieber ein schlechtes echtes Foto als gar keines. Der
+# erste Zyklus mit Bildern aus der Quelle hat gezeigt, wohin das fuehrt -
+# bei einem Beitrag ueber eine leuchtende Koralle stand das Titelbild
+# einer Zeitschrift mit einem gruenen Frosch im Feed. Der Blick hatte es
+# richtig beurteilt: "0 Punkte, Zeitschriftentitel und gruener Frosch,
+# keine Koralle". Genommen wurde es trotzdem, weil es das einzige war.
+#
+# Drei ist die Grenze, weil darunter nichts mehr zum Thema gehoert: Die
+# Lichtinstallation einer Qualle bekam 2, ein Felsen namens "Sea Lion" 0.
+# Die echte Tiefseeaufnahme, die einmal faelschlich fuer eine
+# Installation gehalten wurde, bekam 3 - sie waere noch dabei.
+MINDESTBLICK = 3
+
+# Fuer die weiteren Karten eines Karussells liegt die Latte hoeher. Das
+# erste Bild steht allein; ist es nur entfernt passend, ist das immer
+# noch ein Bild. Eine Karte dagegen steht neben den anderen, und ein
+# Bild von etwas anderem macht aus der Reihe ein Sammelsurium: Im
+# Beitrag ueber eine leuchtende Koralle standen nacheinander ein Frosch,
+# eine Treppe in einer Tropfsteinhoehle und ein Krill. Fuenf heisst:
+# mindestens "gehoert eng dazu" - sonst lieber eine Schriftkarte in den
+# Farben des Beitrags.
+KARTENBLICK = 5
+
 
 def waehle_bestes(
     kandidaten: list[Fundbild],
@@ -1062,6 +1096,7 @@ def waehle_bestes(
     groesse: tuple[int, int] = (1080, 1350),
     blick=None,
     weitere: list[Fundbild] | None = None,
+    mindestblick: int = MINDESTBLICK,
 ):
     """Aus einer Reihe von Kandidaten den besten laden und nehmen.
 
@@ -1129,6 +1164,13 @@ def waehle_bestes(
                 gesehen, was_zu_sehen_ist = blick(entwurf)
             except Exception as exc:  # noqa: BLE001 - ungeprueft ist kein Urteil
                 log.info("Bild nicht angesehen (%s): %s", bild.seite, exc)
+
+        if 0 <= gesehen < mindestblick:
+            grund = f"zeigt etwas anderes - {gesehen}/10: {was_zu_sehen_ist}"
+            bild.grund = grund
+            bild.gesehen = f"{gesehen}/10: {was_zu_sehen_ist}"
+            ausgeschieden.append((bild, grund))
+            continue
 
         punkte = (
             guete(bild.breite, bild.hoehe, zielverhaeltnis=zielverhaeltnis)

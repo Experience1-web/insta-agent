@@ -141,8 +141,14 @@ ein, wenn sie frei nutzbar ist:
 - eine US-Bundesbehörde: NASA, NOAA, USGS, National Park Service
 - die ESA, wenn die Bilder dort unter CC BY-SA stehen
 
-Die Adresse des Artikels selbst, nicht die einer Nachrichtenseite, die
-darüber berichtet. Die Lizenz prüft danach ein Programm auf der Seite -
+Die Adresse des Artikels selbst - nicht die Startseite der Zeitschrift,
+keine Übersicht, und nicht die einer Nachrichtenseite, die darüber
+berichtet.
+
+Trag außerdem unter `doi` die DOI der Veröffentlichung ein, wenn es
+eine gibt, zum Beispiel 10.1098/rsos.250890. Viele Verlage sperren
+Programme von ihren Seiten aus; über die DOI finden sich die Abbildungen
+trotzdem, im öffentlichen Archiv Europe PMC. Die Lizenz prüft danach ein Programm auf der Seite -
 du musst sie nicht angeben, aber schreib keine Seite hin, von der du
 weißt, dass sie nicht frei ist.
 
@@ -373,6 +379,7 @@ Reiz: {fund.reiz} von 5 (Hook {fund.hookkraft}, Bild {fund.bildkraft}, verständ
 Bildidee: {fund.bildidee}
 Echte Aufnahme: {fund.echtes_bild or "keine gefunden"}
 Originalquelle mit freien Bildern: {fund.bildseite or "keine genannt"}
+DOI: {fund.doi or "keine genannt"}
 Suchbegriffe fürs Bildarchiv: {fund.bildsuche or "keine genannt"}
 Quellen:
 {quellen}"""

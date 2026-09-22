@@ -20,46 +20,90 @@ from .stoff import fund_block
 # einzelne Abschnitt ist - und weil er der ist, an dem sich entscheidet,
 # ob jemand wischt oder weiterzieht.
 KARUSSELL = """\
-Ein Beitrag darf mehrere Bilder haben, durch die man wischt. Jede Karte
-traegt eine eigene Tatsache. Der Grund ist nicht die Menge, sondern die
-Bewegung: Wer wischt, bleibt - und wer bleibt, zaehlt bei Instagram
-mehr als zehn, die vorbeiziehen.
+Ein Beitrag darf mehrere Bilder haben, durch die man wischt. Der Grund
+ist die Bewegung: Wer wischt, bleibt - und wer bleibt, zaehlt bei
+Instagram mehr als zehn, die vorbeiziehen. Aber man wischt nur weiter,
+wenn man wissen will, wie es weitergeht.
 
-**Wie viele, entscheidest du am Ereignis.** Nicht an einer Regel:
+**Die wichtigen Tatsachen werden auf die Bilder verteilt: eine je
+Karte.** So will es der Betreiber, und das ist der Kern des Karussells.
+Jede Karte traegt genau eine der wichtigen Tatsachen des Fundes - nicht
+zwei, und keine Karte ohne eine.
 
-- Ein umfangreicher Fund mit vielen belegten Zahlen: bis zu vier
-  Karten zusaetzlich zum ersten Bild, also funf insgesamt.
-- Ein Fund mit zwei, drei harten Tatsachen: ein bis drei Karten.
-- Ein Fund, bei dem alles Wesentliche in einem Satz steht: gar keine.
-  Ein starkes Bild schlaegt funf, von denen drei nichts sagen.
+**Aber nur die Tatsachen, die sich interessant anhoeren.** Nicht jede
+belegte Tatsache verdient eine Karte. Such aus allem, was im Fund steht,
+die heraus, bei denen jemand "echt jetzt?" sagt - und lass den Rest in
+der Bildunterschrift. Die Probe fuer jede Karte: Wuerde jemand genau
+diesen Satz beim Abendessen weitererzaehlen? "Die Koralle leuchtet nur,
+wenn man sie beruehrt" - ja. "2025 wissenschaftlich beschrieben" - nein,
+das ist ein Aktenvermerk. Wann etwas veroeffentlicht wurde, wie es
+heisst und wer es beschrieben hat, ist fast nie die interessante
+Tatsache, sondern der Beleg dafuer.
 
-Der Fehler, den du nicht machen darfst: Karten erfinden, um auf eine
-Zahl zu kommen. Lieber eine Karte weniger als eine, auf der
-"faszinierend" steht. Jede Karte muss eine Tatsache tragen, die im Fund
-belegt ist - eine Entfernung, ein Jahr, ein Gewicht, eine Temperatur,
-einen Namen. "59,35 Lichtjahre entfernt" ist eine Karte. "Und es kommt
-noch besser" ist keine.
+**Und die Reihenfolge erzaehlt eine Geschichte.** Dieselben Tatsachen in
+beliebiger Reihenfolge sind ein Datenblatt; niemand wischt durch ein
+Datenblatt. In der richtigen Reihenfolge ist jede Karte ein Schritt, und
+jede macht Lust auf die naechste. Wer nur die Karten liest, ohne die
+Bildunterschrift, muss am Ende die ganze Sache verstanden haben.
 
-Und keine darf wiederholen, was schon auf dem ersten Bild steht.
+Die Reihenfolge, an der du dich orientierst - nicht jede Stufe braucht
+eine Karte, aber keine steht an der falschen Stelle:
 
-**Die Karten muessen zusammen aussehen.** Das ist die zweite harte
-Bedingung: Wer wischt, soll merken, dass er noch im selben Beitrag ist.
-Also in jedem `bildwunsch` dieselbe Lichtstimmung, dieselbe Farbwelt,
-dasselbe Objektiv und dieselbe Anmutung wie im ersten Bild. Was sich
-aendert, ist das Motiv, nicht der Stil. Fuenf Bilder aus fuenf Welten
-sind ein Sammelsurium, kein Karussell.
+1. Das erste Bild: das Erstaunliche, in einem Satz (der Hook).
+2. Was ist das ueberhaupt? In Alltagsworten - "eine neue Korallenart,
+   so gross wie ein Fingernagel", nicht der lateinische Name.
+3. Wo und wie wurde es gefunden? Ein Ort, den man sich vorstellen kann.
+4. Das eine Detail, das es besonders macht - mit einem Vergleich, den
+   jeder fuehlt.
+5. Warum das wichtig ist oder was es veraendert. Oder die offene Frage,
+   die bleibt.
 
-Schreib den `bildwunsch` genauso sorgfaeltig wie den ersten Prompt -
-dieselben sieben Punkte, dasselbe "no text, no logos, no watermark",
-dieselbe ruhige Flaeche fuer die Schrift.
+**Jede Karte muss jemand verstehen, der nichts darueber weiss.** Dieselbe
+Regel wie beim Hook, und sie gilt fuer jede Karte:
+- Kein Fachwort ohne Uebersetzung. "Auf Reiz" versteht niemand, "wenn
+  man sie beruehrt" jeder. "Zoantharie" gar nicht, "Krustenanemone"
+  vielleicht, "eine Art Koralle" immer.
+- Keine Zahl ohne Gefuehl dafuer. "515 Nanometer" ist fuer fast alle
+  bedeutungslos - schreib "gruen". Eine Zahl bleibt, wenn sie ohne
+  Erklaerung wirkt: "1.800 Jahre", "so tief wie der Mount Everest hoch".
+- Ein lateinischer Name steht nie allein auf einer Karte. Er gehoert in
+  die Bildunterschrift. "Corallizoanthus aureus, 2025 beschrieben" ist
+  keine Karte, sondern eine Karteikarte.
 
-`bildsuche` gibst du an, wenn es von dieser Karte eine echte Aufnahme
-geben koennte: zwei bis vier Woerter auf Englisch. Eine echte Aufnahme
-schlaegt jedes gemalte Bild. Gibt es davon keines - von einem
-Exoplaneten hat niemand ein Foto -, laesst du es leer.
+**Wie viele, entscheidest du an der Geschichte.** Eine Karte gibt es
+nur, wenn sie einen Schritt erzaehlt, den die anderen nicht erzaehlen.
+Zwei bis vier sind ueblich; bei einer Sache, die in einem Satz gesagt
+ist, gar keine. Lieber eine Karte weniger als eine, die nur da ist, um
+die Zahl vollzumachen.
 
-`text` ist, was auf der Karte steht: hoechstens acht Woerter, ohne Punkt
-am Ende. `akzentwort` ist die Zahl darin."""
+Der Fehler, den du nicht machen darfst: etwas erfinden. Jede Karte
+sagt nur, was im Fund belegt ist - aber sie sagt es so, dass man es
+versteht. Und keine wiederholt, was schon auf dem ersten Bild steht.
+
+**Die Bilder zeigen die Sache, um die es geht.** Nicht ein Wort aus dem
+Kartentext. Steht auf der Karte "aus einer Hoehle", ist das Bild keine
+Treppe in einer Tropfsteinhoehle, sondern wieder die Koralle - oder ihr
+Lebensraum unter Wasser. Ein Bild von etwas anderem macht aus dem
+Beitrag ein Sammelsurium.
+
+Unter `bildsuche` schreibst du deshalb, womit man ein Bild der Sache
+selbst oder ihrer unmittelbaren Umgebung findet: zwei bis vier Woerter
+auf Englisch, fuer jede Karte mit derselben Sache im Mittelpunkt.
+Gibt es davon nichts - von einem Exoplaneten hat niemand ein Foto -,
+laesst du es leer. Dann bekommt die Karte eine ruhige Schriftflaeche in
+den Farben des Beitrags, und das ist besser als ein fremdes Bild.
+
+**Die Karten muessen zusammen aussehen.** Wer wischt, soll merken, dass
+er noch im selben Beitrag ist. In jedem `bildwunsch` also dieselbe
+Lichtstimmung, dieselbe Farbwelt, dasselbe Objektiv und dieselbe
+Anmutung wie im ersten Bild. Was sich aendert, ist der Blickwinkel auf
+dieselbe Sache, nicht der Stil. Dieselben sieben Punkte wie beim ersten
+Prompt, dasselbe "no text, no logos, no watermark", dieselbe ruhige
+Flaeche fuer die Schrift.
+
+`text` ist, was auf der Karte steht: hoechstens zehn Woerter, ohne
+Punkt am Ende. `akzentwort` ist das Wort darin, auf das es ankommt -
+eine Zahl, wenn eine da ist, sonst das tragende Wort."""
 
 
 MAX_CAPTION = 2200
@@ -182,6 +226,22 @@ Die Zeile, die über dem Bild liegt. Höchstens {MAX_HOOK_WOERTER} Wörter.
 Sie kämpft nicht mit dem Bild, sie dreht es: Sie sagt, was man beim
 Hinsehen nicht sieht. Keine Bildunterschrift, keine Ankündigung ("So geht
 X"), keine Frage, die man mit ja oder nein abnickt.
+
+Und sie muss ohne jedes Vorwissen sofort verständlich sein. Wer die
+Zeile im Vorbeiwischen liest, weiß nichts über das Thema - er hat eine
+Sekunde. Deshalb:
+- Nenn die Sache beim Namen, den jeder kennt: "Diese Koralle", "Ein
+  Goldschatz", "Ein Stern". Kein "sie" oder "er", solange niemand weiß,
+  wer gemeint ist.
+- Kein Fachwort und keine Maßeinheit, die man erst nachschlagen muss.
+  "515 Nanometer" sagt niemandem etwas, "leuchtet grün" jedem. Eine Zahl
+  bleibt nur, wenn man sie ohne Erklärung fühlt: "1.800 Jahre", "7.902
+  Meter tief".
+- Gegenprobe: Würde jemand, der mit Wissenschaft nichts zu tun hat, den
+  Satz jemandem weitererzählen können? Wenn nicht, ist er falsch.
+
+Schlecht: "Bei Berührung antwortet sie mit 515 Nanometern".
+Gut: "Diese Koralle leuchtet nur, wenn man sie berührt".
 
 ## hook (erste Caption-Zeile)
 Die ersten rund 80 Zeichen der Bildunterschrift - mehr sieht niemand,
