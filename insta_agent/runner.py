@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,6 +112,55 @@ def _blickpunkte(gesehen: str) -> int:
     """Die Punkte aus "7/10: Beschreibung" - -1, wenn nicht hingesehen wurde."""
     kopf = (gesehen or "").split("/", 1)[0].strip()
     return int(kopf) if kopf.isdigit() else -1
+
+
+# Woerter, die in jedem zweiten Satz stehen und nichts ueber ein Bild sagen.
+FUELLWOERTER = {
+    "diese", "dieser", "dieses", "wenn", "einer", "eine", "einen", "eines",
+    "sich", "nicht", "sind", "wird", "wurde", "auch", "noch", "oder",
+    "aber", "weil", "dass", "beim", "nach", "ueber", "über", "mit", "ihre",
+    "seine", "sein", "hat", "haben", "kein", "keine", "mehr", "nur", "schon",
+}
+
+
+def _wortstaemme(text: str) -> set[str]:
+    """Grob die Staemme der tragenden Woerter: "leuchtet" und "leuchten"
+    werden beide "leuch". Kurze und Fuellwoerter tragen nichts."""
+    return {
+        wort[:5]
+        for wort in re.findall(r"[a-zäöüß]+", (text or "").casefold())
+        if len(wort) >= 4 and wort not in FUELLWOERTER
+    }
+
+
+def _passendstes_bild(bilder: list, kartentext: str, thema: str = "") -> int:
+    """Welches der uebrigen Bilder am besten zu diesem Kartentext passt.
+
+    Frueher kamen sie der Reihe nach auf die Karten, und eine Karte "Sie
+    leuchtet nur, wenn man sie beruehrt" bekam womoeglich den Meeresgrund,
+    waehrend das Bild vom gruenen Leuchten auf der naechsten landete.
+    Verglichen wird mit dem, was beim Hinsehen beschrieben wurde.
+
+    Woerter, die schon im Thema stehen, zaehlen wenig: "Koralle" steht in
+    fast jeder Beschreibung und entscheidet nichts. "Leuchtet" auf der
+    Karte und "leuchten" in der Beschreibung dagegen schon.
+
+    Ohne Beschreibung, oder wenn nichts uebereinstimmt, bleibt es bei der
+    Reihenfolge - das beste Bild zuerst.
+    """
+    gesucht = _wortstaemme(kartentext)
+    if not gesucht:
+        return 0
+    allgemein = _wortstaemme(thema)
+    punkte = [
+        sum(
+            0.3 if stamm in allgemein else 1.0
+            for stamm in gesucht & _wortstaemme(getattr(bild, "gesehen", ""))
+        )
+        for bild in bilder
+    ]
+    beste = max(punkte, default=0)
+    return punkte.index(beste) if beste > 0 else 0
 
 
 @dataclass(slots=True)
@@ -1678,7 +1728,11 @@ class Agent:
         # dieselbe Sache - ein Archivbild passt nur zum Thema.
         rest = getattr(self, "_quellbilder", None)
         while rest:
-            bild = rest.pop(0)
+            bild = rest.pop(
+                _passendstes_bild(
+                    rest, getattr(karte, "text", ""), getattr(self, "_bildthema", "")
+                )
+            )
             if bild.pfad is not None and Path(bild.pfad).exists():
                 return bild.pfad, bild.nachweis
 

@@ -1097,6 +1097,7 @@ def waehle_bestes(
     blick=None,
     weitere: list[Fundbild] | None = None,
     mindestblick: int = MINDESTBLICK,
+    alle_ansehen: bool = False,
 ):
     """Aus einer Reihe von Kandidaten den besten laden und nehmen.
 
@@ -1111,6 +1112,12 @@ def waehle_bestes(
     zum Thema passen - jeweils als eigene Datei. Aus einer Studie kommen
     oft mehrere Aufnahmen vom selben Fund, und jede davon schlaegt ein
     Archivbild, das nur zum Thema passt.
+
+    `alle_ansehen` schaltet den fruehen Abbruch ab. Der lohnt sich bei
+    einer Archivsuche, wo hintere Treffer meist schlechter passen. Bei den
+    Bildern einer Studie nicht: Die zeigen alle den Fund, und das beste
+    fuers Karussell - die Koralle, wie sie gruen leuchtet - stand im PDF
+    an sechster Stelle und wurde nie angesehen.
     """
     import shutil
 
@@ -1132,13 +1139,24 @@ def waehle_bestes(
         # Kurve ihm zutraut. Mit der falschen Kurve bricht die Suche ab,
         # bevor ein Bild angesehen wurde, das gewonnen haette.
         obergrenze = BESTMOEGLICHE_PUNKTE * rangfaktor(platz, geprueft=blick is not None)
-        if bester is not None and obergrenze <= bester[0]:
+        if not alle_ansehen and bester is not None and obergrenze <= bester[0]:
             log.info("Suche abgebrochen: Platz %s kann nicht mehr gewinnen", platz + 1)
             break
 
         entwurf = ziel.with_name(f"{ziel.stem}-v{platz}{ziel.suffix}")
         zwischendateien.append(entwurf)
-        geladen = hole_bild(bild, entwurf, client=client)
+        if bild.pfad is not None and not bild.url.startswith("http") and Path(bild.pfad).exists():
+            # Schon da - aus dem PDF einer Studie ausgelesen, nicht geladen.
+            try:
+                shutil.copyfile(bild.pfad, entwurf)
+                bild.pfad = entwurf
+                _uebernimm_echte_masse(bild, entwurf)
+                geladen = bild
+            except OSError as exc:
+                bild.grund = f"nicht lesbar ({exc})"
+                geladen = None
+        else:
+            geladen = hole_bild(bild, entwurf, client=client)
         if geladen is None:
             ausgeschieden.append((bild, bild.grund or "nicht ladbar"))
             continue

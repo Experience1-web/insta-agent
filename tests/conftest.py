@@ -53,3 +53,25 @@ def draft():
         best_time_hint="Montag 8 Uhr, Wochenstart",
         expected_outcome="Speicherungen über dem Schnitt",
     )
+
+
+@pytest.fixture(autouse=True)
+def kein_echtes_netz(monkeypatch):
+    """Kein Test geht ins echte Netz - egal, wo er laeuft.
+
+    Lange war das zufaellig so: Die Umgebung, in der die Tests liefen,
+    sperrte Wikimedia, Openverse und die Studienarchive, und jeder Abruf
+    scheiterte in Millisekunden. Kaum war das Netz frei, dauerte die
+    Suite doppelt so lange - Tests, die einen ganzen Zyklus spielen,
+    luden echte Bilder aus echten Archiven, und ob sie bestanden, hing
+    davon ab, was dort gerade lag.
+
+    Tests mit nachgebauten Antworten (httpx.MockTransport) sind davon
+    nicht betroffen; sie laufen gar nicht ueber das echte Netz.
+    """
+    import httpx
+
+    def gesperrt(self, anfrage):
+        raise httpx.ConnectError(f"Tests gehen nicht ins Netz: {anfrage.url}", request=anfrage)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", gesperrt)

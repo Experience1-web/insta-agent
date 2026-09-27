@@ -441,11 +441,17 @@ def aus_der_quelle(
             groesse=groesse,
             blick=blick,
             weitere=weitere,
+            alle_ansehen=True,
         )
         if gefunden is not None:
             return gefunden
         befund.grund = "kein Bild der Seite hat die Prüfung bestanden"
     return None
+
+
+# Groesser wird kein PDF geladen. Die Korallenstudie hatte 28 MB und kam
+# in gut einer Sekunde; was ueber 80 MB liegt, ist meist ein Buch.
+PDF_GRENZE = 80_000_000
 
 
 def aus_der_studie(
@@ -459,40 +465,84 @@ def aus_der_studie(
     weitere: list[Fundbild] | None = None,
     befunde: list[Seitenbefund] | None = None,
 ) -> Fundbild | None:
-    """Das beste Bild aus den Abbildungen einer Studie, ueber Europe PMC.
+    """Das beste Bild aus den Abbildungen einer Studie, ueber die offenen Archive.
 
-    Der Weg an Verlagen vorbei, die Programme aussperren. Siehe
-    `europepmc` - dort steht auch, warum das kein Umweg ist, sondern der
-    vorgesehene Zugang.
+    Der Weg an Verlagen vorbei, die Programme aussperren - siehe
+    `europepmc`. Zuerst die Aufnahmen aus dem PDF, einzeln und in voller
+    Groesse; danach die Vorschaufassungen aus dem Archiv, falls das PDF
+    nichts Lesbares hergibt.
     """
-    from .europepmc import finde_studie, kandidaten_der_studie
+    from .europepmc import finde_studie
+    from .pdfbilder import bilder_aus_pdf
 
     studie = finde_studie(doi, client=client)
     befund = Seitenbefund(
         seite=f"Europe PMC (DOI {doi})",
         lizenz=studie.lizenz,
         urheber=studie.urheber,
-        kandidaten=[adresse for adresse, _ in studie.abbildungen] or None,
         grund=studie.grund,
     )
     if befunde is not None:
         befunde.append(befund)
-
-    kandidaten = kandidaten_der_studie(studie)
-    if not kandidaten:
-        log.info("Keine Abbildungen ueber Europe PMC (%s): %s", doi, studie.grund)
+    if studie.grund:
+        log.info("Keine Abbildungen ueber die Archive (%s): %s", doi, studie.grund)
         return None
 
-    gefunden = waehle_bestes(
-        kandidaten,
-        ziel,
-        client=client,
-        versuche=len(kandidaten),
-        beobachter=beobachter,
-        groesse=groesse,
-        blick=blick,
-        weitere=weitere,
-    )
+    def kandidat(url: str, pfad: Path | None = None) -> Fundbild:
+        return Fundbild(
+            url=url,
+            pfad=pfad,
+            lizenz=studie.lizenz,
+            urheber=studie.urheber,
+            seite=studie.seite,
+            breite=0,
+            hoehe=0,
+            quelle="Europe PMC",
+        )
+
+    kandidaten: list[Fundbild] = []
+    ausgelesen: list[Path] = []
+    if studie.pdf and studie.pdf_groesse <= PDF_GRENZE:
+        eigener = client is None
+        verbindung = client or httpx.Client(timeout=120.0, follow_redirects=True)
+        try:
+            antwort = verbindung.get(studie.pdf, headers={"User-Agent": kennung()})
+            if antwort.status_code < 400 and len(antwort.content) <= PDF_GRENZE:
+                ausgelesen = bilder_aus_pdf(antwort.content, ziel.parent, f"{ziel.stem}-studie")
+        except Exception as exc:  # noqa: BLE001 - dann die Vorschaufassungen
+            log.info("PDF der Studie nicht geladen: %s", exc)
+        finally:
+            if eigener:
+                verbindung.close()
+    kandidaten += [
+        kandidat(f"PDF der Studie, Bild {nummer}", pfad)
+        for nummer, pfad in enumerate(ausgelesen, start=1)
+    ]
+    # Die Vorschaufassungen sind dieselben Aufnahmen noch einmal, klein und
+    # als Tafel. Gebraucht werden sie nur, wenn das PDF nichts hergibt.
+    if not ausgelesen:
+        kandidaten += [kandidat(adresse) for adresse in studie.abbildungen]
+    befund.kandidaten = [k.url for k in kandidaten] or None
+
+    if not kandidaten:
+        befund.grund = "keine Abbildungen in der Studie"
+        return None
+    try:
+        gefunden = waehle_bestes(
+            kandidaten,
+            ziel,
+            client=client,
+            versuche=len(kandidaten),
+            beobachter=beobachter,
+            groesse=groesse,
+            blick=blick,
+            weitere=weitere,
+            alle_ansehen=True,
+        )
+    finally:
+        # Die ausgelesenen Dateien sind kopiert, wo sie gebraucht werden.
+        for pfad in ausgelesen:
+            pfad.unlink(missing_ok=True)
     if gefunden is None:
         befund.grund = "keine Abbildung der Studie hat die Prüfung bestanden"
     return gefunden

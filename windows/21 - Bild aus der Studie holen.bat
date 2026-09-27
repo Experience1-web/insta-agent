@@ -9,13 +9,16 @@ echo.
 echo   Holt Bilder vom Fund selbst - aus der Originalstudie oder von
 echo   einer Behörde wie der NASA. Kostet nichts.
 echo.
-echo   Funktioniert mit Seiten von PLOS, Frontiers, MDPI, Pensoft (ZooKeys),
-echo   eLife, PeerJ, Scientific Reports, Nature Communications, NASA, NOAA,
-echo   USGS. Nachrichtenseiten gehen nicht - deren Bilder gehören Agenturen.
+echo   Am besten die DOI der Studie, zum Beispiel:  10.1098/rsos.250890
+echo   Sie steht im Dashboard beim Fund unter "Quellen". Dann kommen die
+echo   Aufnahmen in voller Größe aus dem PDF - auch bei Verlagen, die
+echo   Programme aussperren.
 echo.
-echo   Tipp: Die Adresse steht im Dashboard beim Fund unter "Quellen".
+echo   Es geht auch die Adresse einer Artikelseite (PLOS, Pensoft, Frontiers)
+echo   oder einer NASA-Seite. Nachrichtenseiten nicht - deren Bilder
+echo   gehören Agenturen.
 echo.
-set /p ADRESSE=Adresse der Seite einfügen (Rechtsklick fügt ein): 
+set /p ADRESSE=DOI oder Adresse einfügen (Rechtsklick fügt ein): 
 echo.
 %PY% -m insta_agent.cli quellprobe "%ADRESSE%"
 echo.

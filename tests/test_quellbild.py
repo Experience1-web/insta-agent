@@ -456,12 +456,36 @@ def test_ein_bild_mit_null_punkten_wird_auch_allein_nicht_genommen(tmp_path):
 # --- Europe PMC ----------------------------------------------------------
 
 
-def _epmc_netz(lizenz="cc by", pmcid="PMC1234567", abbildungen=("rsos250890f01", "rsos250890f02")):
-    xml = "<article><body>" + "".join(
-        f'<fig id="f{i}"><caption><p>Abbildung {i}: die Koralle</p></caption>'
-        f'<graphic xlink:href="{name}"/></fig>'
-        for i, name in enumerate(abbildungen, start=1)
-    ) + "</body></article>"
+def _pdf_mit_fotos(*groessen) -> bytes:
+    """Ein PDF mit echten Fotoseiten - so, wie Pillow es schreibt (JPEG darin)."""
+    seiten = [Image.open(io.BytesIO(_foto(b, h, seed=i))).convert("RGB") for i, (b, h) in enumerate(groessen)]
+    puffer = io.BytesIO()
+    seiten[0].save(puffer, "PDF", save_all=True, append_images=seiten[1:])
+    return puffer.getvalue()
+
+
+def _epmc_netz(
+    lizenz="cc by",
+    pmcid="PMC1234567",
+    archivlizenz="CC BY",
+    mit_pdf=True,
+    fassungen=(1, 2),
+):
+    """Die drei Stellen, die gefragt werden: Suche, Verzeichnis, Beschreibung.
+
+    Dazu das PDF und die Vorschaufassungen. Zwei Fassungen im Archiv, damit
+    sich zeigt, dass die neueste genommen wird.
+    """
+    neueste = f"{pmcid}.{max(fassungen)}"
+    schluessel = [
+        f"{pmcid}.{f}/{name}"
+        for f in fassungen
+        for name in (f"{pmcid}.{f}.json", f"{pmcid}.{f}.pdf", "f001.jpg", "f002.jpg")
+    ]
+    verzeichnis = "<ListBucketResult>" + "".join(
+        f"<Contents><Key>{k}</Key><Size>{1000 if k.endswith('.pdf') else 10}</Size></Contents>"
+        for k in schluessel
+    ) + "</ListBucketResult>"
     gefragt: list[str] = []
 
     def antworte(anfrage: httpx.Request) -> httpx.Response:
@@ -478,15 +502,32 @@ def _epmc_netz(lizenz="cc by", pmcid="PMC1234567", abbildungen=("rsos250890f01",
                                 "license": lizenz,
                                 "authorString": "Kise H, Reimer JD, Fujii T.",
                                 "journalInfo": {"journal": {"title": "Royal Society Open Science"}},
-                                "title": "Glow in the D-ARK",
+                                "title": "Glow in the D-ARK: a new <i>Corallizoanthus</i>",
                             }
                         ]
                     }
                 },
             )
-        if "fullTextXML" in ziel:
-            return httpx.Response(200, text=xml)
-        if "/bin/" in ziel:
+        if "list-type=2" in ziel:
+            return httpx.Response(200, text=verzeichnis)
+        if ziel.endswith(".json"):
+            return httpx.Response(
+                200,
+                json={
+                    "pmcid": pmcid,
+                    "license_code": archivlizenz,
+                    "pdf_url": f"s3://pmc-oa-opendata/{neueste}/{neueste}.pdf?md5=x"
+                    if mit_pdf
+                    else None,
+                    "media_urls": [
+                        f"s3://pmc-oa-opendata/{neueste}/f001.jpg?md5=x",
+                        f"s3://pmc-oa-opendata/{neueste}/f002.jpg?md5=x",
+                    ],
+                },
+            )
+        if ziel.endswith(".pdf"):
+            return httpx.Response(200, content=_pdf_mit_fotos((2000, 1500), (1800, 2200)))
+        if ziel.endswith(".jpg"):
             return httpx.Response(200, content=_foto(seed=len(gefragt)))
         return httpx.Response(404)
 
@@ -511,11 +552,12 @@ def test_die_doi_steht_oft_schon_in_den_quellen():
     assert doi_des_fundes(Fund()) == "10.1098/rsos.250890"
 
 
-def test_ueber_europe_pmc_kommen_die_abbildungen_der_studie(tmp_path):
+def test_die_abbildungen_kommen_aus_dem_pdf_in_voller_groesse(tmp_path):
     """Der Weg an Verlagen vorbei, die Programme aussperren.
 
     Die Studie zur Koralle war frei - der Verlag antwortete trotzdem mit
-    403. Europe PMC ist fuer genau diese Abrufe gebaut.
+    403, und die Bildadressen auf europepmc.org auch. Das Datenarchiv
+    liefert das PDF, und darin stecken die Aufnahmen einzeln und gross.
     """
     from insta_agent.imaging.quellbild import aus_der_studie
 
@@ -527,24 +569,49 @@ def test_ueber_europe_pmc_kommen_die_abbildungen_der_studie(tmp_path):
         )
 
     assert gefunden is not None and gefunden.pfad.exists()
+    assert (gefunden.breite, gefunden.hoehe) in {(2000, 1500), (1800, 2200)}
     assert gefunden.nachweis == "Bild: Kise H et al. (Royal Society Open Science) · CC BY · via Europe PMC"
-    assert any("europepmc.org/articles/PMC1234567/bin/rsos250890f0" in a for a in gefragt)
     assert len(weitere) == 1
+    # Die neueste Fassung, und die Vorschaufassungen gar nicht erst - das
+    # PDF hat geliefert.
+    assert any(a.endswith("PMC1234567.2/PMC1234567.2.pdf") for a in gefragt)
+    assert not any(a.endswith(".jpg") for a in gefragt)
+    # Die ausgelesenen Zwischendateien bleiben nicht liegen.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["z-weiteres1.jpg", "z.jpg"]
+
+
+def test_ohne_pdf_kommen_die_vorschaufassungen(tmp_path):
+    from insta_agent.imaging.quellbild import aus_der_studie
+
+    client, gefragt, _ = _epmc_netz(mit_pdf=False)
+    with client:
+        gefunden = aus_der_studie("10.1/x", tmp_path / "z.jpg", client=client)
+    assert gefunden is not None
+    assert any(a.endswith("/f001.jpg") for a in gefragt)
 
 
 def test_eine_nicht_kommerzielle_studie_liefert_kein_bild(tmp_path):
     from insta_agent.imaging.quellbild import aus_der_studie
 
-    client, gefragt, _ = _epmc_netz(lizenz="cc by-nc")
+    client, gefragt, _ = _epmc_netz(lizenz="cc by-nc", archivlizenz="CC BY-NC")
     befunde: list = []
     with client:
         gefunden = aus_der_studie(
             "10.1/x", tmp_path / "z.jpg", client=client, befunde=befunde
         )
     assert gefunden is None
-    # Nicht einmal der Volltext wird geholt, geschweige denn ein Bild.
-    assert not any("fullTextXML" in a or "/bin/" in a for a in gefragt)
+    # Weder PDF noch Bild wird geholt.
+    assert not any(a.endswith((".pdf", ".jpg")) for a in gefragt)
     assert "gewerbliche" in befunde[0].grund
+
+
+def test_die_lizenz_im_archiv_gilt_vor_der_aus_der_suche(tmp_path):
+    """Sie steht an der Datei, die wir tatsaechlich nehmen."""
+    from insta_agent.imaging.quellbild import aus_der_studie
+
+    client, _, _ = _epmc_netz(lizenz="cc by", archivlizenz="CC BY-NC-ND")
+    with client:
+        assert aus_der_studie("10.1/x", tmp_path / "z.jpg", client=client) is None
 
 
 def test_eine_studie_ohne_volltext_im_archiv_wird_sauber_gemeldet(tmp_path):

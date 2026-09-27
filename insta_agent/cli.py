@@ -1483,7 +1483,9 @@ def bildsuche(
 @app.command()
 def quellprobe(
     adresse: str = typer.Argument(
-        ..., help="Die Seite einer Studie oder Behörde, z. B. ein PLOS- oder NASA-Artikel"
+        ...,
+        help="Die DOI einer Studie (z. B. 10.1098/rsos.250890) oder die Seite "
+        "einer Studie oder Behörde",
     ),
     config: Path = typer.Option(None),
     ansehen: bool = typer.Option(
@@ -1501,35 +1503,47 @@ def quellprobe(
     Geld ausgibt.
     """
     from .imaging.echtbild import massfaktor
-    from .imaging.quellbild import aus_der_quelle, erkenne_quelle
+    from .imaging.europepmc import finde_doi
+    from .imaging.quellbild import aus_der_quelle, aus_der_studie, erkenne_quelle
 
     settings = load_settings(config)
     ziel_ordner = settings.media_dir
     ziel_ordner.mkdir(parents=True, exist_ok=True)
 
+    doi = finde_doi(adresse)
     quelle = erkenne_quelle(adresse)
-    console.print(
-        Panel(
-            f"Seite: [bold]{adresse}[/bold]\n"
-            + (
-                f"Quelle: [green]{quelle.name}[/green] - "
-                + (
-                    "Behörde, gemeinfrei von Gesetzes wegen"
-                    if quelle.gemeinfrei
-                    else "Zeitschrift, der Lizenzvermerk muss auf der Seite stehen"
-                )
-                if quelle
-                else "Quelle: [yellow]keine freie Quelle[/yellow] - "
-                "die Seite wird gar nicht erst aufgerufen"
-            ),
-            title="Bild aus der Quelle",
+    if doi:
+        console.print(
+            Panel(
+                f"DOI: [bold]{doi}[/bold]\n"
+                "Weg: Europe PMC findet die Studie, das offene Datenarchiv liefert\n"
+                "ihr PDF, daraus kommen die Aufnahmen in voller Größe.",
+                title="Bild aus der Studie",
+            )
         )
-    )
-    if quelle is None:
+    else:
+        console.print(
+            Panel(
+                f"Seite: [bold]{adresse}[/bold]\n"
+                + (
+                    f"Quelle: [green]{quelle.name}[/green] - "
+                    + (
+                        "Behörde, gemeinfrei von Gesetzes wegen"
+                        if quelle.gemeinfrei
+                        else "Zeitschrift, der Lizenzvermerk muss auf der Seite stehen"
+                    )
+                    if quelle
+                    else "Quelle: [yellow]keine freie Quelle[/yellow] - "
+                    "die Seite wird gar nicht erst aufgerufen"
+                ),
+                title="Bild aus der Quelle",
+            )
+        )
+    if quelle is None and not doi:
         console.print(
             "\nBilder von Nachrichtenseiten gehören fast immer einer Agentur.\n"
-            "Gib die Adresse der Studie selbst ein - PLOS, Frontiers, Pensoft,\n"
-            "Scientific Reports - oder die einer Behörde wie der NASA."
+            "Gib die DOI der Studie ein - sie steht im Dashboard bei den Quellen -\n"
+            "oder die Adresse einer Behörde wie der NASA."
         )
         raise typer.Exit(1)
 
@@ -1555,23 +1569,35 @@ def quellprobe(
         if not taugte:
             verworfen.append((bild.url, grund))
 
-    console.print("\n[dim]Seite wird geladen ...[/dim]")
-    gefunden = aus_der_quelle(
-        [adresse],
-        ziel,
-        blick=hinsehen,
-        beobachter=mitschreiben,
-        weitere=weitere,
-        befunde=befunde,
-    )
+    gefunden = None
+    if doi:
+        console.print("\n[dim]Studie wird gesucht, PDF geladen ...[/dim]")
+        gefunden = aus_der_studie(
+            doi,
+            ziel,
+            blick=hinsehen,
+            beobachter=mitschreiben,
+            weitere=weitere,
+            befunde=befunde,
+        )
+    if gefunden is None and quelle is not None:
+        console.print("\n[dim]Seite wird geladen ...[/dim]")
+        gefunden = aus_der_quelle(
+            [adresse],
+            ziel,
+            blick=hinsehen,
+            beobachter=mitschreiben,
+            weitere=weitere,
+            befunde=befunde,
+        )
 
     for befund in befunde:
         if befund.lizenz:
-            console.print(f"Lizenz auf der Seite: [green]{befund.lizenz}[/green]")
+            console.print(f"Lizenz:     [green]{befund.lizenz}[/green]")
         if befund.urheber:
-            console.print(f"Zu nennen:            {befund.urheber}")
+            console.print(f"Zu nennen:  {befund.urheber}")
         if befund.kandidaten is not None:
-            console.print(f"Bilder auf der Seite: {len(befund.kandidaten)}")
+            console.print(f"Bilder:     {len(befund.kandidaten)}")
 
     fuers_karussell = {bild.url for bild in weitere}
     if verworfen:
@@ -1608,9 +1634,9 @@ def quellprobe(
             + (f"Angesehen: [bold]{gefunden.gesehen}[/bold]\n" if gefunden.gesehen else "")
             + f"\nLiegt hier: [bold]{ziel}[/bold]\n"
             + (
-                "Dazu ein weiteres Bild von derselben Seite fürs Karussell\n"
+                "Dazu ein weiteres Bild aus derselben Quelle fürs Karussell\n"
                 if len(weitere) == 1
-                else f"Dazu {len(weitere)} weitere Bilder von derselben Seite fürs Karussell\n"
+                else f"Dazu {len(weitere)} weitere Bilder aus derselben Quelle fürs Karussell\n"
                 if weitere
                 else ""
             )
