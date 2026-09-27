@@ -448,7 +448,7 @@ def test_ein_bild_mit_null_punkten_wird_auch_allein_nicht_genommen(tmp_path):
             [STUDIE],
             tmp_path / "z.jpg",
             client=client,
-            blick=lambda _pfad: (0, "Zeitschriftentitel und grüner Frosch"),
+            blick=lambda _pfad, **_: (0, "Zeitschriftentitel und grüner Frosch"),
         )
     assert gefunden is None
 

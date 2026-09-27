@@ -54,6 +54,8 @@ FRAGE = """Du pruefst Bilder fuer einen Instagram-Beitrag.
 
 Das Thema ist: {thema}
 
+Woher das Bild laut Archiv stammt: {herkunft}
+
 Sieh dir das Bild an und sage, wie gut es zu diesem Thema passt:
 
 10 = eine echte Aufnahme genau der Sache, um die es geht
@@ -66,6 +68,14 @@ Zwei Regeln, die schwerer wiegen als alles andere:
 
 1. Es zaehlt, was zu sehen ist, nicht wie die Datei heisst. Ein Bild,
    das die gesuchten Worte nur im Namen traegt, bekommt 0 oder 1.
+
+   Die Herkunft zaehlt aber sehr wohl, wenn sie widerspricht. Nennt sie
+   einen anderen Ort, ein anderes Museum oder einen anderen Fund als das
+   Thema, dann zeigt das Bild nicht diese Sache, sondern eine aehnliche -
+   hoechstens 2, so passend es aussieht. Ein Tonkrug aus einem Museum in
+   der Tuerkei ist nicht der Tonkrug aus einem Muenzfund in Russland,
+   eine Grabung auf Kreta nicht der Fundort in Torschok. Wer das Bild
+   sieht, glaubt sonst, es zeige den Fund.
 
 2. Eine Nachbildung ist nicht die Sache selbst. Eine Kunstinstallation,
    ein Modell, eine Nachbildung im Museum, eine Zeichnung, ein Gemaelde,

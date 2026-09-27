@@ -90,7 +90,7 @@ def test_kartenbilder_werden_gegen_den_fund_beurteilt(tmp_path, monkeypatch):
     gefragt = []
 
     class Gehirn:
-        def beurteile_bild(self, pfad, thema):
+        def beurteile_bild(self, pfad, thema, herkunft=""):
             gefragt.append(thema)
             return 8, "passt"
 

@@ -1395,8 +1395,8 @@ def bildsuche(
             " je Bild - bei vier Bildern also ein Fünftel Cent.[/dim]\n"
         )
 
-        def hinsehen(pfad):  # noqa: F811 - bewusst erst hier definiert
-            return gehirn.beurteile_bild(pfad, suchwort)
+        def hinsehen(pfad, herkunft=""):  # noqa: F811 - bewusst erst hier definiert
+            return gehirn.beurteile_bild(pfad, suchwort, herkunft)
 
     geladen = finde_und_hole(
         suchwort, ziel, beobachter=mitschreiben, blick=hinsehen
@@ -1557,8 +1557,8 @@ def quellprobe(
             settings.llm, Treasury(Store(settings.db_path), settings.economy)
         )
 
-        def hinsehen(pfad):  # noqa: F811 - bewusst erst hier definiert
-            return gehirn.beurteile_bild(pfad, adresse)
+        def hinsehen(pfad, herkunft=""):  # noqa: F811 - bewusst erst hier definiert
+            return gehirn.beurteile_bild(pfad, adresse, herkunft)
 
     ziel = ziel_ordner / "quellprobe.jpg"
     verworfen: list[tuple[str, str]] = []

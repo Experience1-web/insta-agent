@@ -151,10 +151,12 @@ def test_die_websuche_geht_an_das_guenstige_modell(agent_mit_mitschrift):
     agent.run_cycle()
 
     mit_suche = [a for a in client.anfragen if a.get("tools")]
-    # Dreimal wird nachgeschlagen: Stoffsuche, Bildsprache, Endprüfung. Die
-    # Marktrecherche entfällt, seit das Profil vorgegeben ist. Alle drei
-    # gehen an das Recherchemodell, nicht an das teure.
-    assert len(mit_suche) == 3, "Stoff, Bildsprache und Endprüfung suchen je einmal"
+    # Zweimal wird nachgeschlagen: Stoffsuche und Endprüfung. Die
+    # Marktrecherche entfällt, seit das Profil vorgegeben ist, und die
+    # Bildsprache, sobald ein echtes Foto bereitliegt - sie verbessert nur
+    # die Vorlage fürs Malen. Beide gehen an das Recherchemodell, nicht an
+    # das teure.
+    assert len(mit_suche) == 2, "Stoff und Endprüfung suchen je einmal"
     for anfrage in mit_suche:
         assert anfrage["model"] == agent.settings.llm.research_model
         assert anfrage["tools"][0]["type"] == "web_search_20260209"

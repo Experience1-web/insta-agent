@@ -200,3 +200,60 @@ def test_ungeprueft_gilt_ein_gefundenes_foto():
     assert not Bildprobe(None, "", [], "", None).zeigt_die_sache
     assert not Bildprobe(Path("x"), "", [], "", 6).zeigt_die_sache
     assert Bildprobe(Path("x"), "", [], "", 7).zeigt_die_sache
+
+
+# --- Leerlauf kostet nichts mehr ------------------------------------------
+
+
+def test_ohne_neue_zahlen_wird_nicht_reflektiert_und_der_kurs_bleibt(tmp_path, monkeypatch):
+    """Reflexion und Strategie liefen in jedem Zyklus, mit dem teuersten
+    Modell - auch wenn es keine einzige neue Zahl gab. Sie kamen jedes
+    Mal zu denselben Schluessen."""
+    from insta_agent.runner import KEY_STRATEGIE_ZYKLUS, KEY_ZAHLEN_BEI_REFLEXION
+
+    aufrufe = []
+    monkeypatch.setattr(runner_modul, "reflect", lambda *a, **k: aufrufe.append("reflexion"))
+    monkeypatch.setattr(runner_modul, "update_strategy", lambda *a, **k: aufrufe.append("strategie"))
+
+    class Kurs:
+        current_goal = "Wachsen"
+
+    agent = object.__new__(Agent)
+    speicher = {KEY_ZAHLEN_BEI_REFLEXION: "dieselben Zahlen", KEY_STRATEGIE_ZYKLUS: 10}
+
+    class Laden:
+        def get_json(self, k):
+            return speicher.get(k)
+
+        def set_json(self, k, v):
+            speicher[k] = v
+
+        def published_count(self):
+            return 3
+
+        def get_model(self, k, art):
+            return Kurs() if k == "strategy" else object()
+
+    class Kasse:
+        def check(self):
+            return self.state()
+
+        def state(self):
+            class S:
+                mode = runner_modul.Mode.NORMAL
+                balance_usd = 10.0
+            return S()
+
+    agent.store = Laden()
+    agent.treasury = Kasse()
+    agent.bootstrap = lambda **k: type("I", (), {"handle": "x", "motto": "y"})()
+    agent.collect_metrics = lambda cycle: "dieselben Zahlen"
+    agent._veroeffentliche_freigegebenes = lambda report: None
+    agent._produce_posts = lambda *a: None
+    bericht = _Bericht()
+
+    agent._run_cycle_inner(12, bericht, None)
+
+    assert aufrufe == []
+    assert any("Reflexion übersprungen" in s for s in bericht.steps)
+    assert any("Kurs unverändert" in s for s in bericht.steps)

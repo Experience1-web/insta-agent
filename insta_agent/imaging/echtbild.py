@@ -1179,7 +1179,7 @@ def waehle_bestes(
         gesehen, was_zu_sehen_ist = UNGEPRUEFT, ""
         if blick is not None:
             try:
-                gesehen, was_zu_sehen_ist = blick(entwurf)
+                gesehen, was_zu_sehen_ist = blick(entwurf, herkunft=_herkunft(bild))
             except Exception as exc:  # noqa: BLE001 - ungeprueft ist kein Urteil
                 log.info("Bild nicht angesehen (%s): %s", bild.seite, exc)
 
@@ -1267,6 +1267,19 @@ def waehle_bestes(
     if beobachter:
         beobachter(gewinner, True, "")
     return gewinner
+
+
+def _herkunft(bild: Fundbild) -> str:
+    """Woher ein Bild laut Archiv stammt - Dateiname und Fundstelle.
+
+    Dem Bild sieht man es nicht an, dem Namen oft schon: "Isparta museum
+    cemetery of Goendurle Hoeyuek finds" ist ein Museum in der Tuerkei,
+    "Priniatikos Pyrgos" eine Grabung auf Kreta. Beide wurden als Bilder
+    zu einem Muenzschatz aus Russland genommen - der Tonkrug sah aus wie
+    ein Tonkrug, die Grabung wie eine Grabung.
+    """
+    teile = [bild.seite or "", bild.url if not bild.url.startswith("http") else ""]
+    return " | ".join(t for t in teile if t)[:200]
 
 
 def _raeume_auf(

@@ -155,7 +155,7 @@ def test_der_blick_dreht_die_auswahl(tmp_path, monkeypatch):
     mit = echtbild.finde_und_hole(
         "deep sea creature",
         tmp_path / "b.jpg",
-        blick=lambda pfad: urteile[_wessen(pfad, urteile)],
+        blick=lambda pfad, **_: urteile[_wessen(pfad, urteile)],
     )
     assert mit is not None
     assert mit.seite == "Nur04507.jpg"
@@ -180,7 +180,7 @@ def test_ein_ausfall_beim_hinsehen_kostet_kein_bild(tmp_path, monkeypatch):
     """
     echtbild = _suche_vorbereiten(monkeypatch, [_fund("gut.jpg", 2400, 1600)])
 
-    def geht_schief(_pfad):
+    def geht_schief(_pfad, **_):
         raise RuntimeError("Netz weg")
 
     gefunden = echtbild.finde_und_hole(
@@ -455,7 +455,7 @@ def test_mit_hinsehen_bricht_die_suche_nicht_zu_frueh_ab(tmp_path, monkeypatch):
     urteile = {0: (6, "passt ordentlich"), 4: (10, "genau die Sache")}
     angesehen = []
 
-    def hinsehen(pfad):
+    def hinsehen(pfad, **_):
         platz = int(pfad.stem.rsplit("-v", 1)[1])
         angesehen.append(platz)
         return urteile.get(platz, (0, "etwas anderes"))
@@ -465,3 +465,27 @@ def test_mit_hinsehen_bricht_die_suche_nicht_zu_frueh_ab(tmp_path, monkeypatch):
     )
     assert 4 in angesehen
     assert gefunden.seite == "4.jpg"
+
+
+def test_der_blick_erfaehrt_woher_das_bild_stammt(tmp_path, monkeypatch):
+    """Dem Bild sieht man es nicht an, dem Namen schon.
+
+    Zu einem Muenzschatz aus Russland wurden ein Tonkrug aus einem Museum
+    in der Tuerkei und eine Grabung auf Kreta genommen - beide sahen aus
+    wie das, was sie sein sollten.
+    """
+    from insta_agent.imaging.blick import FRAGE
+
+    assert "{herkunft}" in FRAGE
+    assert "hoechstens 2" in FRAGE
+
+    fund = _fund("File:Isparta museum cemetery of Göndürle Höyük finds 2786.jpg", 2400, 1600)
+    echtbild = _suche_vorbereiten(monkeypatch, [fund])
+    gesehen = []
+
+    def hinsehen(pfad, herkunft=""):
+        gesehen.append(herkunft)
+        return 2, "Tonkrug aus einem türkischen Museum"
+
+    assert echtbild.finde_und_hole("x", tmp_path / "z.jpg", blick=hinsehen) is None
+    assert "Isparta museum" in gesehen[0]

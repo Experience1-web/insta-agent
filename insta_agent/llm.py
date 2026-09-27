@@ -307,7 +307,7 @@ class Brain:
 
     # -- Freie Antworten, optional mit Websuche ---------------------------
 
-    def beurteile_bild(self, pfad, thema: str) -> tuple[int, str]:
+    def beurteile_bild(self, pfad, thema: str, herkunft: str = "") -> tuple[int, str]:
         """Ein Bild ansehen lassen: Passt es zum Thema? 0 bis 10, dazu ein Satz.
 
         Der einzige Aufruf in diesem Betrieb, der ein Bild verschickt -
@@ -363,7 +363,9 @@ class Brain:
                             {
                                 "type": "text",
                                 "text": FRAGE.format(
-                                    thema=thema, form="ZAHL|kurze Beschreibung"
+                                    thema=thema,
+                                    herkunft=herkunft or "nicht bekannt",
+                                    form="ZAHL|kurze Beschreibung",
                                 ),
                             },
                         ],

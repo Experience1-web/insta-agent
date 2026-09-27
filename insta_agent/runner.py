@@ -65,6 +65,13 @@ KEY_MONETIZATION = "monetization_plan"
 KEY_ASSESSMENT = "opportunity_assessment"
 KEY_LAST_PIVOT = "last_pivot_cycle"
 KEY_IDENTITY_HISTORY = "identity_history"
+# Mit welchen Zahlen zuletzt reflektiert wurde - sind es dieselben, gibt
+# es nichts Neues zu bedenken.
+KEY_ZAHLEN_BEI_REFLEXION = "zahlen_bei_reflexion"
+KEY_STRATEGIE_ZYKLUS = "strategie_zyklus"
+
+# Wie oft der Kurs ohne neuen Anlass trotzdem ueberprueft wird.
+STRATEGIE_EVERY = 7
 
 # Was sich am Profil über das Dashboard ändern lässt. Handle und
 # Anzeigename gehören dazu, weil sie auf Instagram stehen; `agent_why`
@@ -505,9 +512,15 @@ class Agent:
         performance = self.collect_metrics(cycle)
         report.steps.append("Kennzahlen erfasst")
 
-        # Reflektieren, sobald es überhaupt etwas zu reflektieren gibt.
+        # Reflektieren, wenn es etwas Neues zu bedenken gibt - nicht in
+        # jedem Zyklus. Solange Instagram keine Kennzahlen herausgibt, sind
+        # es jedes Mal dieselben Saetze, und die Reflexion lief trotzdem,
+        # mit dem teuersten Modell, und kam zu denselben Schluessen. Das
+        # war ein gutes Zehntel jedes Beitrags fuer nichts.
         reflection = self.reflection
-        if self.store.published_count() > 0:
+        neue_zahlen = performance != (self.store.get_json(KEY_ZAHLEN_BEI_REFLEXION) or "")
+        reflektiert = False
+        if self.store.published_count() > 0 and (neue_zahlen or reflection is None):
             reflection = reflect(
                 self.brain,
                 identity=identity,
@@ -516,28 +529,47 @@ class Agent:
                 post_history=self._post_history(),
             )
             self.store.set_json(KEY_REFLECTION, reflection)
+            self.store.set_json(KEY_ZAHLEN_BEI_REFLEXION, performance)
             report.steps.append("Reflexion abgeschlossen")
+            reflektiert = True
+        elif self.store.published_count() > 0:
+            report.steps.append("Reflexion übersprungen - keine neuen Zahlen seit der letzten")
 
         # Recherche kostet - nur in festem Takt oder wenn der Kurs wackelt.
+        # Der Kurs wackelt nur, wenn gerade neu reflektiert wurde; eine
+        # alte Reflexion hat ihre Recherche schon bekommen.
         analysis = self.analysis
         due = cycle % RESEARCH_EVERY == 0
-        wants_change = bool(reflection and reflection.strategy_should_change)
+        wants_change = bool(reflektiert and reflection and reflection.strategy_should_change)
+        recherchiert = False
         if (due or wants_change) and state.mode is Mode.NORMAL:
             analysis = run_market_research(self.brain, identity=identity)
             self.store.set_json(KEY_ANALYSIS, analysis)
             report.steps.append(f"Marktrecherche ({len(analysis.sources)} Quellen)")
+            recherchiert = True
 
-        strategy = update_strategy(
-            self.brain,
-            identity=identity,
-            previous=self.strategy,
-            analysis=analysis,
-            reflection=reflection,
-            performance=performance,
-            treasury_state=self.treasury.state(),
-        )
-        self.store.set_json(KEY_STRATEGY, strategy)
-        report.steps.append(f"Ziel: {strategy.current_goal}")
+        # Den Kurs neu bestimmen, wenn es einen Anlass gibt: neue
+        # Reflexion, neue Recherche, noch gar kein Kurs - oder eine Woche
+        # ohne Ueberpruefung. Sonst gilt der bisherige; ihn jedes Mal mit
+        # dem teuersten Modell neu herzuleiten, ergab denselben Kurs.
+        strategy = self.strategy
+        letzte = self.store.get_json(KEY_STRATEGIE_ZYKLUS)
+        faellig = not isinstance(letzte, int) or cycle - letzte >= STRATEGIE_EVERY
+        if strategy is None or reflektiert or recherchiert or faellig:
+            strategy = update_strategy(
+                self.brain,
+                identity=identity,
+                previous=self.strategy,
+                analysis=analysis,
+                reflection=reflection,
+                performance=performance,
+                treasury_state=self.treasury.state(),
+            )
+            self.store.set_json(KEY_STRATEGY, strategy)
+            self.store.set_json(KEY_STRATEGIE_ZYKLUS, cycle)
+            report.steps.append(f"Ziel: {strategy.current_goal}")
+        else:
+            report.steps.append(f"Kurs unverändert: {strategy.current_goal}")
 
         # Lohnt sich der Kurs noch? Nicht in jedem Zyklus - das kostet.
         if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL:
@@ -630,7 +662,15 @@ class Agent:
             # Erst die Bildsprache, dann malen: Was zählt, ist der Prompt.
             # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
             # zu ändern - und ein zweites Bild kostet zweimal.
-            gestaltung = self._gestalte(draft, identity, report)
+            # Die Bildsprache verbessert die Vorlage fuers Malen. Liegt
+            # schon ein echtes Foto bereit, wird nicht gemalt - dann waere
+            # sie bezahlte Arbeit fuer nichts, samt Websuche.
+            probe = getattr(self, "_bildproben", {}).get(id(fund)) if fund is not None else None
+            if probe is not None and probe.echt is not None:
+                gestaltung = None
+                report.steps.append("Bildsprache übersprungen - es gibt ein echtes Foto")
+            else:
+                gestaltung = self._gestalte(draft, identity, report)
             erzeugt, rohbild = self._erzeuge_bild(draft, basis, identity, report, fund)
             if erzeugt:
                 image_path = erzeugt
@@ -1501,7 +1541,12 @@ class Agent:
                     suchwort,
                     ziel,
                     groesse=self._bildformat,
-                    blick=self._blick_auf(suchwort),
+                    # Gegen den Fund beurteilt, nicht gegen das Suchwort.
+                    # Der letzte Anlauf sucht das Themenfeld - "archaeological
+                    # excavation site" -, und eine Grabung auf Kreta passte
+                    # dazu mit 7 von 10. Zum Muenzschatz in Russland passt
+                    # sie nicht.
+                    blick=self._blick_auf(getattr(self, "_bildthema", "") or suchwort),
                 )
             except Exception as exc:  # noqa: BLE001 - ohne Foto wird gemalt
                 log.info("Bildsuche fehlgeschlagen (%r): %s", suchwort, exc)
@@ -1708,8 +1753,8 @@ class Agent:
         if gehirn is None:
             return None
 
-        def hinsehen(pfad):
-            return gehirn.beurteile_bild(pfad, thema)
+        def hinsehen(pfad, herkunft=""):
+            return gehirn.beurteile_bild(pfad, thema, herkunft)
 
         return hinsehen
 
