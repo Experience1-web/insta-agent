@@ -102,6 +102,10 @@ def _zu_pruefen(draft: PostDraft) -> str:
         "## Weitere Zeilen auf dem Bild\n" + "\n".join(draft.visual.body_lines)
         if draft.visual.body_lines
         else "",
+        "## Texte auf den weiteren Bildern (Karussell)\n"
+        + "\n".join(f"Bild {i}: {k.text}" for i, k in enumerate(draft.karten, start=2))
+        if getattr(draft, "karten", None)
+        else "",
         f"## Bildunterschrift\n{draft.caption}",
         f"## Erster Kommentar\n{draft.first_comment_prompt}"
         if draft.first_comment_prompt.strip()

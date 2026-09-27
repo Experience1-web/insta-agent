@@ -241,6 +241,14 @@ class Store:
             )
             return cur.rowcount > 0
 
+    def setze_entwurfsdaten(self, post_id: int, draft: Any) -> None:
+        """Nur die Rohdaten des Entwurfs - Bild, Prüfung und Gestaltung bleiben."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET draft_json=? WHERE id=?",
+                (json.dumps(draft.model_dump(mode="json"), ensure_ascii=False), post_id),
+            )
+
     def setze_bildpfad(self, post_id: int, pfad: str) -> None:
         """Nur der Dateiname des Hauptbilds, sonst nichts.
 
@@ -450,6 +458,21 @@ class Store:
         return [(r["captured_at"], float(r["value"])) for r in reversed(rows)]
 
     # -- Journal -----------------------------------------------------------
+
+    def fruehere_fassungen(self, post_id: int) -> list[dict]:
+        """Die Entwürfe, wie sie vor jedem Nachbessern aussahen - neueste zuerst."""
+        zeilen = self._conn.execute(
+            "SELECT payload FROM journal WHERE kind='nachbesserung' AND payload IS NOT NULL "
+            "AND message LIKE ? ORDER BY id DESC",
+            (f"Entwurf {post_id}: Fassung vor dem Nachbessern%",),
+        ).fetchall()
+        fassungen = []
+        for zeile in zeilen:
+            try:
+                fassungen.append(json.loads(zeile["payload"]))
+            except (TypeError, ValueError):
+                continue
+        return fassungen
 
     def log(self, kind: str, message: str, cycle: int | None = None, payload: Any = None) -> None:
         with self._tx() as conn:

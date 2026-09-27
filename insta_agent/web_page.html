@@ -339,6 +339,33 @@
   .zu:hover { background: var(--flaeche-hoch); color: var(--text); transform: rotate(90deg); }
 
   @keyframes einblenden { from { opacity: 0; } }
+
+  /* Solange im Hintergrund etwas läuft: unten eine Leiste, die stehen
+     bleibt, auch wenn die Seite neu gezeichnet wird. Vorher schloss sich
+     das Popup, und nichts zeigte, dass überhaupt gearbeitet wird. */
+  .arbeitsleisten {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 1000;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    pointer-events: none;
+  }
+  .arbeitsleiste {
+    display: flex; align-items: center; gap: 12px;
+    max-width: calc(100vw - 32px); padding: 12px 18px;
+    background: var(--flaeche-hoch); color: var(--text);
+    border: 1px solid var(--rand); border-radius: var(--radius);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); font-size: 14px;
+    animation: einblenden 0.2s ease-out;
+  }
+  .arbeitsleiste .kreisel {
+    flex: none; width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--rand); border-top-color: var(--akzent);
+    animation: drehen 0.9s linear infinite;
+  }
+  .arbeitsleiste .dauer { color: var(--leise); font-variant-numeric: tabular-nums; }
+  @keyframes drehen { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .arbeitsleiste .kreisel { animation: puls 1.6s ease-in-out infinite; }
+  }
   @keyframes hochkommen {
     from { opacity: 0; transform: translateY(14px) scale(0.985); }
   }
@@ -1773,6 +1800,8 @@ function bilderreihe(p) {
           <figcaption>${i + 1} / ${alle.length}</figcaption>
           ${p.status === "draft" ? `<button class="winzig"
              data-bildneu="${p.id}" data-stelle="${i + 1}">dieses neu</button>` : ""}
+          ${p.status === "draft" && i > 0 ? `<button class="winzig"
+             data-entfernen="${p.id}" data-stelle="${i + 1}">entfernen</button>` : ""}
         </figure>`).join("")}
     </div>
     <p class="hinweis" style="margin:8px 0 16px">
@@ -1874,6 +1903,31 @@ function zu_bessern(p) {
                   (pr.befunde || []).some(b => b.urteil !== "belegt"));
 }
 
+/** Zeigt unten eine Leiste mit Kreisel und Sekunden, bis `fertig()` kommt.
+ *  Mehrere Arbeiten zugleich bekommen je eine eigene Zeile. */
+function arbeitet(text) {
+  let leiste = document.getElementById("arbeitsleiste");
+  if (!leiste) {
+    leiste = document.createElement("div");
+    leiste.id = "arbeitsleiste";
+    leiste.className = "arbeitsleisten";
+    document.body.appendChild(leiste);
+  }
+  const zeile = document.createElement("div");
+  zeile.className = "arbeitsleiste";
+  zeile.setAttribute("role", "status");
+  zeile.innerHTML = `<span class="kreisel"></span><span>${esc(text)}</span>
+    <span class="dauer">0 s</span>`;
+  leiste.appendChild(zeile);
+  const beginn = Date.now();
+  const uhr = setInterval(() => {
+    const s = Math.round((Date.now() - beginn) / 1000);
+    zeile.querySelector(".dauer").textContent =
+      s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} min`;
+  }, 1000);
+  return function fertig() { clearInterval(uhr); zeile.remove(); };
+}
+
 /** Freigeben und Verwerfen - auf der Karte wie im Popup. */
 function verdrahte_entscheidungen(bereich) {
   for (const knopf of bereich.querySelectorAll("[data-bildneu]")) {
@@ -1895,16 +1949,37 @@ function verdrahte_entscheidungen(bereich) {
       knopf.disabled = true;
       knopf.textContent = "holt …";
       schliesse_popup();
+      const fertig = arbeitet(stelle > 1
+        ? `Bild ${stelle} wird neu geholt …`
+        : "Titelbild wird neu geholt – erst Fotosuche, sonst wird gemalt …");
       const ergebnis = await sende("/api/bildneu",
-        { id: Number(knopf.dataset.bildneu), stelle });
+        { id: Number(knopf.dataset.bildneu), stelle }).finally(fertig);
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (!ergebnis.gemalt) {
         alert("Es blieb bei der typografischen Fassung. Der Grund steht im Arbeitsprotokoll " +
               "– meist ist das Tageskontingent des Bilddienstes aufgebraucht.");
       } else if (ergebnis.niveau) {
-        alert(`Neu gemalt. Jo gibt dem Einfall ${ergebnis.niveau} von 5.`);
+        alert(`Neu gemalt. ${wer_malt} gibt dem Einfall ${ergebnis.niveau} von 5.`);
+      } else {
+        alert("Fertig – das neue Bild ist da.");
       }
+      gezeichnet.beitraege = null;
+      laden();
+    };
+  }
+
+  for (const knopf of bereich.querySelectorAll("[data-entfernen]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      const stelle = Number(knopf.dataset.stelle);
+      if (!confirm(`Bild ${stelle} kommt aus dem Karussell heraus. Die anderen ` +
+                   "bleiben, wie sie sind. Das kostet nichts.\n\nWeitermachen?")) return;
+      knopf.disabled = true;
+      const ergebnis = await sende("/api/bildneu",
+        { id: Number(knopf.dataset.entfernen), stelle, entfernen: true });
+      if (!ergebnis.ok) alert(ergebnis.grund || "Das hat nicht geklappt.");
+      schliesse_popup();
       gezeichnet.beitraege = null;
       laden();
     };
@@ -1929,7 +2004,9 @@ function verdrahte_entscheidungen(bereich) {
       knopf.disabled = true;
       knopf.textContent = "er schreibt neu …";
       schliesse_popup();
-      const ergebnis = await sende("/api/nachbessern", { id: Number(knopf.dataset.nachbessern) });
+      const fertig = arbeitet(`${wer_schreibt} bessert nach, danach die Nachprüfung …`);
+      const ergebnis = await sende("/api/nachbessern", { id: Number(knopf.dataset.nachbessern) })
+        .finally(fertig);
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (ergebnis.urteil === "freigabe") {
@@ -1957,7 +2034,9 @@ function verdrahte_entscheidungen(bereich) {
       knopf.disabled = true;
       knopf.textContent = "sie prüft …";
       schliesse_popup();
-      const ergebnis = await sende("/api/pruefen", { id: Number(knopf.dataset.pruefen) });
+      const fertig = arbeitet("Die Endprüfung läuft …");
+      const ergebnis = await sende("/api/pruefen", { id: Number(knopf.dataset.pruefen) })
+        .finally(fertig);
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (ergebnis.urteil === "freigabe") {

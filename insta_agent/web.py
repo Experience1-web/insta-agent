@@ -873,11 +873,12 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             agent = Agent(steuerung.settings)
             try:
-                ergebnis = (
-                    agent.bild_neu(post_id)
-                    if stelle <= 1
-                    else agent.karte_neu(post_id, stelle)
-                )
+                if rumpf.get("entfernen"):
+                    ergebnis = agent.karte_entfernen(post_id, stelle)
+                elif stelle <= 1:
+                    ergebnis = agent.bild_neu(post_id)
+                else:
+                    ergebnis = agent.karte_neu(post_id, stelle)
             except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
                 log.warning("Bild nicht neu gemalt: %s", exc)
                 self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)

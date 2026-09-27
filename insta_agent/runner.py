@@ -777,16 +777,65 @@ class Agent:
             return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
 
         draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
-        karten = list(getattr(draft, "karten", None) or [])
-        if versatz >= len(karten):
-            return {"ok": False, "grund": "Zu diesem Bild gibt es keine Karte."}
+        if versatz >= len(draft.karten):
+            self._karten_wiederfinden(post_id, draft, len(bilder))
+        if versatz >= len(draft.karten):
+            return {
+                "ok": False,
+                "grund": "Zu diesem Bild gibt es keine Karte mehr - der Text dazu ist "
+                "verloren gegangen. Verwerfen und neu schreiben lassen hilft.",
+            }
 
         self.treasury.check()
         vorher = self.treasury.state().cycle_spent_usd
+        roh = self._karte_erneuern(post_id, draft, bilder, versatz, identity)
+        kosten = self._mitrechnen(post_id, vorher)
+        self.store.log(
+            "bild_neu",
+            f"Entwurf {post_id}: Bild {stelle} neu ({kosten:.4f} USD)",
+        )
+        return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": []}
 
+    def karte_entfernen(self, post_id: int, stelle: int) -> dict:
+        """Nimmt ein Bild aus dem Karussell heraus - kostenlos.
+
+        Manchmal gibt es für eine Karte kein passendes Bild, und ein
+        falsches ist schlechter als keines: Die sowjetische Münze von 1923
+        in einem Beitrag über Zarengold. Dann fällt die Karte weg. Das
+        Titelbild bleibt immer.
+        """
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur bei einem Entwurf lassen sich Bilder entfernen."}
+        if stelle <= 1:
+            return {"ok": False, "grund": "Das Titelbild bleibt - tauschen geht mit „Bild neu“."}
+        bilder = json.loads(zeile["karussell_json"] or "[]")
+        versatz = stelle - 2
+        if not 0 <= versatz < len(bilder):
+            return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
+
+        del bilder[versatz]
+        self.store.setze_karussell(post_id, bilder)
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        if versatz < len(draft.karten):
+            del draft.karten[versatz]
+            self.store.setze_entwurfsdaten(post_id, draft)
+        self.store.log("bild_neu", f"Entwurf {post_id}: Bild {stelle} entfernt")
+        return {"ok": True, "entfernt": stelle, "schritte": []}
+
+    def _karte_erneuern(self, post_id: int, draft, bilder: list, versatz: int, identity):
+        """Holt das Bild einer Karte neu und beschriftet es - ohne zu buchen.
+
+        Gebucht wird dort, wo der Auftrag herkommt: bei "dieses neu" für
+        diese eine Karte, beim Nachbessern mit allem anderen zusammen.
+        Gibt das Grundbild zurück, oder None, wenn es bei Schrift blieb.
+        """
+        stelle = versatz + 2
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         basis = f"{stamp}-neu-{post_id}"
-        karte = karten[versatz]
+        karte = draft.karten[versatz]
         roh, _nachweis = self._karte_rohbild(karte, basis, stelle)
 
         if roh is not None:
@@ -801,13 +850,46 @@ class Agent:
         neues = self._beschrifte_karte(karte, roh, basis, stelle, draft, identity)
         bilder[versatz] = str(neues)
         self.store.setze_karussell(post_id, bilder)
+        return roh
 
-        kosten = self._mitrechnen(post_id, vorher)
-        self.store.log(
-            "bild_neu",
-            f"Entwurf {post_id}: Bild {stelle} neu ({kosten:.4f} USD)",
-        )
-        return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": []}
+    def _karten_wiederfinden(self, post_id: int, draft, anzahl: int) -> bool:
+        """Holt verlorene Kartentexte aus der Ablage der Entwürfe zurück.
+
+        Vor dieser Korrektur gingen beim Nachbessern die Karten verloren:
+        Die Bilder blieben, ihr Text im Entwurf war weg. Jeder Entwurf liegt
+        aber auch als Datei in der Ablage, mit allen Rohdaten. Erkannt wird
+        er am Bildprompt - den lässt das Nachbessern ausdrücklich stehen -
+        und daran, dass er genau so viele Karten hat, wie es Bilder gibt.
+        """
+        for frueher in self.store.fruehere_fassungen(post_id):
+            try:
+                alt = PostDraft.model_validate(frueher)
+            except Exception:  # noqa: BLE001
+                continue
+            if len(alt.karten) == anzahl:
+                draft.karten = alt.karten
+                self.store.setze_entwurfsdaten(post_id, draft)
+                return True
+
+        ordner = getattr(self.settings, "draft_dir", None)
+        if not ordner or not Path(ordner).is_dir() or not draft.image_generation_prompt:
+            return False
+        for datei in sorted(Path(ordner).glob("*.md"), reverse=True):
+            try:
+                text = datei.read_text(encoding="utf-8")
+                roh = text.split("```json", 1)[1].split("```", 1)[0]
+                alt = PostDraft.model_validate(json.loads(roh))
+            except Exception:  # noqa: BLE001 - diese Datei passt eben nicht
+                continue
+            if (
+                alt.image_generation_prompt == draft.image_generation_prompt
+                and len(alt.karten) == anzahl
+            ):
+                draft.karten = alt.karten
+                self.store.setze_entwurfsdaten(post_id, draft)
+                log.info("Karten von Entwurf %s aus %s wiedergefunden", post_id, datei.name)
+                return True
+        return False
 
     def bild_neu(self, post_id: int) -> dict:
         """Holt das Titelbild eines Entwurfs neu, ohne den Text anzufassen.
@@ -984,7 +1066,23 @@ class Agent:
         bild, wie = self._schrift_erneuern(zeile, neu, identity, post_id)
         bericht_lauf.steps.append(f"Bild: {wie}")
 
+        # Der alte Entwurf kommt ins Protokoll. Ohne das war er weg, sobald
+        # der neue gespeichert war - samt allem, was das Modell beim
+        # Umschreiben verloren hatte.
+        self.store.log(
+            "nachbesserung",
+            f"Entwurf {post_id}: Fassung vor dem Nachbessern",
+            payload=alt.model_dump(mode="json"),
+        )
         self.store.ersetze_entwurf(post_id, neu, str(bild))
+
+        # Karten, deren Text sich geändert hat, brauchen ein neues Bild -
+        # die alte Schrift steht fest darauf.
+        bilder = json.loads(zeile["karussell_json"] or "[]")
+        for versatz, (vorige, jetzt) in enumerate(zip(alt.karten, neu.karten)):
+            if versatz < len(bilder) and vorige.text.strip() != jetzt.text.strip():
+                self._karte_erneuern(post_id, neu, bilder, versatz, identity)
+                bericht_lauf.steps.append(f"Bild {versatz + 2}: neuer Text, neues Bild")
 
         # Und noch einmal geprüft - sonst wäre die Nachbesserung nur eine
         # Behauptung. Aber als Nachprüfung gegen den ersten Bericht, ohne

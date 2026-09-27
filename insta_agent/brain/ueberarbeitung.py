@@ -37,6 +37,13 @@ def _befunde_text(bericht: Pruefbericht) -> str:
     return "\n".join(zeilen) or "(keine Einzelbefunde)"
 
 
+def _karten_text(draft: PostDraft) -> str:
+    karten = list(getattr(draft, "karten", None) or [])
+    if not karten:
+        return "(keine)"
+    return "\n".join(f"Bild {i}: {k.text}" for i, k in enumerate(karten, start=2))
+
+
 def ueberarbeite_beitrag(
     brain: Brain,
     *,
@@ -70,6 +77,9 @@ def ueberarbeite_beitrag(
 
 ## Weitere Zeilen
 {chr(10).join(draft.visual.body_lines) or "(keine)"}
+
+## Texte auf den weiteren Bildern (Karussell)
+{_karten_text(draft)}
 
 ## Bildunterschrift
 {draft.caption}
@@ -129,9 +139,21 @@ ihn einfach noch einmal so hin, wie er ist.
 
 Was du am Bild ändern kannst, ist die Schrift darauf: Steht dort eine
 falsche Zahl, korrigier sie im Text fürs Bild. Sie wird dann auf dasselbe
-Motiv neu gesetzt.""",
+Motiv neu gesetzt.
+
+Die Karten des Karussells gibst du vollständig zurück: gleich viele, in
+derselben Reihenfolge, mit allen Feldern. Ändere den Text einer Karte nur,
+wenn ein Befund ihn betrifft - jede geänderte Karte bekommt ein neues Bild.""",
         ),
     )
+
+    # Die Bilder der Karten sind schon gemacht, ihre Schrift steht darauf.
+    # Kommen die Karten anders zurück - weniger, mehr, leer -, passen Text
+    # und Bilder nicht mehr zusammen. Beim Goldrubel-Beitrag fehlten danach
+    # alle vier, und "dieses neu" meldete "Zu diesem Bild gibt es keine
+    # Karte". Dann gelten die alten.
+    if len(neu.karten) != len(draft.karten):
+        neu.karten = [k.model_copy() for k in draft.karten]
 
     log.info("Beitrag nachgebessert: %s", neu.bildtext[:60])
     return neu
