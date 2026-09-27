@@ -1693,10 +1693,13 @@ function anriss(text, zeichen = 110) {
 let letzte_entwuerfe = [];
 // Wer gerade schreibt. Stand hier fest verdrahtet, als es nur einen gab.
 let wer_schreibt = "Er";
+let wer_malt = "die Bildsprache";
 
 function zeichne_beitraege(d) {
   letzte_entwuerfe = d.entwuerfe;
   wer_schreibt = (d.identitaet && d.identitaet.agent_name) || "Er";
+  const bildsprache = (d.mannschaft || []).find(m => m.schluessel === "bildsprache");
+  wer_malt = (bildsprache && bildsprache.name) || "die Bildsprache";
   if (!d.entwuerfe.length) { $("postbox").innerHTML = ""; return; }
 
   // Die Karte zeigt, was man zum Entscheiden braucht: Bild, Stand,
@@ -1882,7 +1885,9 @@ function verdrahte_entscheidungen(bereich) {
       const frage = stelle > 1
         ? `Nur Bild ${stelle} wird neu geholt. Die anderen bleiben, wie sie sind.\n\n` +
           "Das kostet ein paar Cent.\n\nWeitermachen?"
-        : "Jo sieht sich den Bildeinfall neu an und malt das Bild noch einmal. " +
+        : "Das Titelbild wird neu geholt: zuerst wird ein echtes Foto gesucht, " +
+          `das den Fund zeigt. Passt keines, sieht sich ${wer_malt} den Bildeinfall ` +
+          "neu an und malt das Bild.\n\n" +
           "Der Text bleibt, wie er ist – auch die Endprüfung gilt weiter.\n\n" +
           "Das kostet ein paar Cent und dauert etwa eine Minute.\n\nWeitermachen?";
       if (!confirm(frage)) return;

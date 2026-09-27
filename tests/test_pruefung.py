@@ -621,6 +621,79 @@ def test_beim_bildtausch_sieht_die_bildsprache_noch_einmal_hin(agent_mit_doppel,
     assert gesehen["n"] == 1
 
 
+def test_mit_echtem_foto_fragt_bild_neu_die_bildsprache_nicht(
+    agent_mit_doppel, monkeypatch, tmp_path
+):
+    """Ihr Ergebnis ist ein Malprompt, mit Websuche der teuerste Teil von
+    "Bild neu" - und wertlos, wenn ein Foto genommen wird. Gesucht wird
+    dabei nur einmal, nicht noch einmal beim Beschriften."""
+    from PIL import Image
+
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    agent.store._conn.execute(
+        "UPDATE posts SET fund_json=? WHERE id=?",
+        (_fund_fuer_bild().model_dump_json(), entwurf["id"]),
+    )
+    agent.store._conn.commit()
+
+    foto = tmp_path / "foto.jpg"
+    Image.new("RGB", (1080, 1350), "gray").save(foto)
+    suchen = {"n": 0}
+
+    def echtes_bild(fund, basis, report):
+        suchen["n"] += 1
+        return foto, "Bild: Test · CC0"
+
+    gestaltet = {"n": 0}
+    monkeypatch.setattr(agent, "_echtes_bild", echtes_bild)
+    monkeypatch.setattr(
+        agent, "_gestalte", lambda *a, **k: gestaltet.__setitem__("n", gestaltet["n"] + 1)
+    )
+
+    ergebnis = agent.bild_neu(entwurf["id"])
+
+    assert ergebnis["ok"]
+    assert gestaltet["n"] == 0
+    assert suchen["n"] == 1
+    assert any("Bildsprache übersprungen" in s for s in ergebnis["schritte"])
+
+
+def test_ohne_foto_malt_bild_neu_nach_der_bildsprache(agent_mit_doppel, monkeypatch):
+    agent = agent_mit_doppel
+    agent.run_cycle()
+    entwurf = agent.store.pending_drafts()[0]
+    agent.store._conn.execute(
+        "UPDATE posts SET fund_json=? WHERE id=?",
+        (_fund_fuer_bild().model_dump_json(), entwurf["id"]),
+    )
+    agent.store._conn.commit()
+
+    suchen = {"n": 0}
+
+    def kein_foto(fund, basis, report):
+        suchen["n"] += 1
+        return None, ""
+
+    gestaltet = {"n": 0}
+    monkeypatch.setattr(agent, "_echtes_bild", kein_foto)
+    monkeypatch.setattr(
+        agent, "_gestalte", lambda *a, **k: gestaltet.__setitem__("n", gestaltet["n"] + 1)
+    )
+
+    agent.bild_neu(entwurf["id"])
+
+    assert gestaltet["n"] == 1
+    assert suchen["n"] == 1
+
+
+def _fund_fuer_bild():
+    from test_stoff import _schwach
+
+    return _schwach(titel="409 Goldrubel in Torschok")
+
+
 def test_ein_veroeffentlichter_beitrag_bekommt_kein_neues_bild(agent_mit_doppel):
     """Was draussen ist, aendert sich nicht mehr unter der Hand."""
     agent = agent_mit_doppel

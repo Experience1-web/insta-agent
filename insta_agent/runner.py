@@ -810,9 +810,10 @@ class Agent:
         return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": []}
 
     def bild_neu(self, post_id: int) -> dict:
-        """Malt das Bild eines Entwurfs neu, ohne den Text anzufassen.
+        """Holt das Titelbild eines Entwurfs neu, ohne den Text anzufassen.
 
-        Gedacht fuer den Fall, dass einem das Bild einfach nicht gefaellt.
+        Zuerst wird ein echtes Foto gesucht; nur wenn keines passt, wird
+        gemalt. Gedacht fuer den Fall, dass einem das Bild nicht gefaellt.
         Die Bildsprache schreibt den Prompt vorher neu - ein zweiter Wurf
         mit demselben Prompt sieht meist fast gleich aus, und "gefaellt mir
         nicht" meint fast immer den Einfall, nicht den Zufall.
@@ -835,7 +836,24 @@ class Agent:
         self.treasury.check()
         vorher = self.treasury.state().cycle_spent_usd
 
-        gestaltung = self._gestalte(draft, identity, lauf)
+        fund = (
+            Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
+        )
+
+        # Erst nach einem echten Foto suchen, dann erst die Bildsprache
+        # fragen. Ihr Ergebnis ist ein neuer Malprompt - mit Websuche der
+        # teuerste Teil von "Bild neu" -, und der ist umsonst bezahlt, wenn
+        # am Ende ein Foto genommen wird. Die Suche wird aufgehoben, damit
+        # sie beim Malen nicht ein zweites Mal läuft.
+        gestaltung = None
+        echtes_foto = False
+        if fund is not None:
+            self._bildprobe(fund, lauf)
+            echtes_foto = self._bildproben[id(fund)].echt is not None
+        if echtes_foto:
+            lauf.steps.append("Bildsprache übersprungen - es gibt ein echtes Foto")
+        else:
+            gestaltung = self._gestalte(draft, identity, lauf)
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         basis = f"{stamp}-neu-{post_id}"
@@ -843,9 +861,6 @@ class Agent:
             draft.visual,
             self.settings.media_dir / f"{basis}.png",
             groesse=self._bildformat,
-        )
-        fund = (
-            Fund.model_validate(json.loads(zeile["fund_json"])) if zeile["fund_json"] else None
         )
         gemalt, rohbild = self._erzeuge_bild(draft, basis, identity, lauf, fund)
         if gemalt:
