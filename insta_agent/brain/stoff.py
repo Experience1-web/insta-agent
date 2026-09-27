@@ -389,7 +389,7 @@ Wann: {fund.wann}
 Was geschah: {fund.was_geschah}
 Das Detail, das anhält: {fund.das_detail}
 Warum außergewöhnlich: {fund.warum_aussergewoehnlich}
-Warum kaum bekannt: {fund.warum_kaum_bekannt or "nicht vermerkt"}
+Warum kaum bekannt (Einschätzung der Stoffsuche, nicht belegt - gehört nicht in den Beitrag): {fund.warum_kaum_bekannt or "nicht vermerkt"}
 Beleglage: {fund.beleglage}
 Reiz: {fund.reiz} von 5 (Hook {fund.hookkraft}, Bild {fund.bildkraft}, verständlich {fund.breite})
 Bildidee: {fund.bildidee}

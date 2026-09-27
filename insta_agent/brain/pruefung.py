@@ -229,3 +229,98 @@ Trag in `quellen` ein, was du tatsächlich aufgerufen hast.""",
         len(bericht.beanstandet),
     )
     return bericht
+
+
+def _erster_bericht(bericht: Pruefbericht) -> str:
+    """Der erste Bericht so, dass man gegen ihn nachprüfen kann."""
+    zeilen = []
+    for b in bericht.befunde:
+        zeilen.append(f'- "{b.behauptung}"\n  {b.urteil.upper()}: {b.begruendung}')
+        if b.beleg:
+            zeilen.append(f"  Fundstelle: {b.beleg}")
+    if bericht.korrekturen:
+        zeilen.append("\nVerlangte Korrekturen:")
+        zeilen.extend(f"- {k}" for k in bericht.korrekturen)
+    return "\n".join(zeilen) or "(keine Einzelbefunde)"
+
+
+def pruefe_nachbesserung(
+    brain: Brain,
+    *,
+    identity,
+    draft: PostDraft,
+    erster: Pruefbericht,
+    modell: str | None = None,
+    person: dict | None = None,
+    fund=None,
+) -> Pruefbericht:
+    """Prüft einen nachgebesserten Beitrag gegen den ersten Bericht - ohne Websuche.
+
+    Die erste Prüfung hat alles nachgeschlagen, mit Fundstellen. Nach dem
+    Nachbessern hat sich meist eine Stelle geändert, nicht der Beitrag.
+    Dafür noch einmal drei Minuten Websuche zu bezahlen, heißt, zehn
+    belegte Aussagen ein zweites Mal zu belegen, um eine zu prüfen.
+
+    Hier wird deshalb verglichen statt gesucht: Was schon belegt war, bleibt
+    es mit seiner Fundstelle. Was beanstandet war, wird an dem gemessen,
+    was die erste Prüfung über die Quellen gesagt hat. Und was neu
+    hinzugekommen ist, ohne dass es dort oder im Fund steht, ist
+    unbelegbar - neue Behauptungen gehören nicht in eine Korrektur.
+    """
+    person_name, haltung = _wer(person, PRUEFER_NAME)
+    bericht = brain.structured(
+        schema=Pruefbericht,
+        system=pruefer_persona(person_name, haltung),
+        label="Nachprüfung",
+        task="research",
+        web_search=False,
+        modell=modell,
+        prompt=with_context(
+            identity_block(identity),
+            f"""\
+# Der nachgebesserte Beitrag
+
+{_zu_pruefen(draft)}""",
+            fund_block(fund),
+            f"""\
+# Dein erster Bericht zur vorigen Fassung
+
+Diese Befunde hast du mit Websuche erarbeitet. Die Fundstellen gelten.
+
+Urteil: {erster.urteil}
+{erster.zusammenfassung}
+
+{_erster_bericht(erster)}""",
+            """\
+# Auftrag
+Das ist eine Nachprüfung. Du schlägst nichts neu nach - du vergleichst die
+neue Fassung mit deinem ersten Bericht. Geh sie Aussage für Aussage durch
+und lege für jede Zahl, Quellenangabe und Tatsachenbehauptung einen Befund
+an, wörtlich zitiert:
+
+- Sagt die Aussage in der Sache dasselbe wie ein Befund, den du als
+  "belegt" geführt hast: "belegt", mit derselben Fundstelle.
+- War die Aussage beanstandet: Ist sie jetzt so, wie die Quellen es laut
+  deinem ersten Bericht sagen? Dann "belegt". Sonst dasselbe Urteil wie
+  vorher, mit Begründung.
+- Ist die Aussage neu - weder im ersten Bericht noch im Fund oben zu
+  finden: "unbelegbar". Eine Korrektur darf nichts Neues behaupten.
+- Rechnungen rechnest du wie immer nach.
+
+Gesamturteil wie immer: freigabe nur, wenn kein Befund offen bleibt.""",
+        ),
+    )
+
+    bericht.geprueft_von = person_name
+    bericht.mit_suche = erster.mit_suche
+    bericht.nachpruefung = True
+    # Was die erste Prüfung nachgeschlagen hat, trägt die zweite mit.
+    bericht.quellen = list(dict.fromkeys([*erster.quellen, *bericht.quellen]))
+
+    log.info(
+        "Nachprüfung: %s (%d Befunde, davon %d beanstandet)",
+        bericht.urteil,
+        len(bericht.befunde),
+        len(bericht.beanstandet),
+    )
+    return bericht

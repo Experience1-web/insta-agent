@@ -28,6 +28,7 @@ from .brain import (
     finde_stoff,
     invent_identity,
     pruefe_beitrag,
+    pruefe_nachbesserung,
     pruefe_gestaltung,
     reflect,
     run_market_research,
@@ -970,15 +971,18 @@ class Agent:
 
         self.store.ersetze_entwurf(post_id, neu, str(bild))
 
-        # Und noch einmal durch dieselbe Prüfung - sonst wäre die
-        # Nachbesserung nur eine Behauptung.
+        # Und noch einmal geprüft - sonst wäre die Nachbesserung nur eine
+        # Behauptung. Aber als Nachprüfung gegen den ersten Bericht, ohne
+        # neue Websuche: Die Belege liegen schon vor, geändert hat sich
+        # eine Stelle. Die volle Prüfung ein zweites Mal kostete im
+        # Goldrubel-Zyklus drei Minuten und einen guten Teil des Geldes.
         #
         # Reicht das Geld dafür nicht mehr, bleibt ein neu geschriebener
         # Entwurf ohne Bericht liegen. Der sieht dann aus wie einer, den
         # nie jemand geprüft hat - und das ist die gefährlichste aller
         # Anzeigen. Also wenigstens ins Protokoll damit.
         try:
-            zweiter = self._pruefe(post_id, neu, identity, bericht_lauf, fund)
+            zweiter = self._pruefe_nach_dem_bessern(post_id, neu, identity, bericht, bericht_lauf, fund)
         except (BudgetExhausted, CycleBudgetExceeded):
             # Auch der abgebrochene Versuch hat Geld gekostet. Ihn nicht
             # mitzuzaehlen, wuerde den Beitrag billiger aussehen lassen,
@@ -1302,6 +1306,48 @@ class Agent:
         self.store.log(
             "pruefung",
             f"Entwurf {post_id}: {bericht.urteil} - {bericht.zusammenfassung}",
+        )
+        return bericht
+
+    def _pruefe_nach_dem_bessern(
+        self, post_id: int, draft, identity, erster, report: CycleReport, fund=None
+    ):
+        """Die Nachprüfung nach dem Nachbessern - gegen den ersten Bericht.
+
+        Hatte die erste Prüfung keine Websuche, gibt es nichts, wogegen sich
+        vergleichen ließe; dann läuft die volle Prüfung.
+        """
+        if not self.settings.posting.pruefung_noetig:
+            return None
+        if not erster.mit_suche:
+            return self._pruefe(post_id, draft, identity, report, fund)
+        try:
+            bericht = pruefe_nachbesserung(
+                self.brain,
+                identity=identity,
+                draft=draft,
+                erster=erster,
+                modell=self._modell("pruefung"),
+                person=self._person("pruefung"),
+                fund=fund,
+            )
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+            log.warning("Nachprüfung fehlgeschlagen: %s", exc)
+            report.steps.append(f"Entwurf {post_id} konnte nicht nachgeprüft werden: {exc}")
+            self.store.log("pruefung_error", f"Entwurf {post_id}: {exc}")
+            return None
+
+        self.store.set_pruefung(post_id, bericht)
+        beanstandet = len(bericht.beanstandet)
+        report.steps.append(
+            f"Nachprüfung {post_id}: {bericht.urteil}"
+            + (f", {beanstandet} beanstandet" if beanstandet else "")
+        )
+        self.store.log(
+            "pruefung",
+            f"Entwurf {post_id} nachgeprüft: {bericht.urteil} - {bericht.zusammenfassung}",
         )
         return bericht
 

@@ -107,6 +107,15 @@ Achte darauf:
 - Jede Rechnung muss aufgehen. Rechne sie nach, bevor du sie hinschreibst.
 - Was du nicht belegen kannst, kennzeichnest du als Annahme - oder lässt
   es weg.
+- Eine Korrektur fügt nichts Neues hinzu. Jede Aussage im neuen Beitrag
+  stand schon im alten und ist nicht beanstandet, oder sie steht so in den
+  Befunden oben oder im Fund. Alles andere wird bei der Nachprüfung als
+  unbelegbar gestrichen.
+- Wie bekannt der Fund ist, wer darüber berichtet hat und wer nicht,
+  gehört nicht in den Beitrag - das lässt sich nicht belegen.
+- Beanstandet heißt: Genau diese Stelle ändert sich, und zwar so, wie die
+  Befunde es sagen. Steht dort, das Gefäß war glasiert, dann schreibst du
+  glasiert - nicht eine andere Beschreibung, die wieder daneben liegt.
 - Der Text auf dem Bild und die Bildunterschrift müssen zueinander
   passen. Eine korrigierte Zahl in der Unterschrift nützt nichts, wenn im
   Bild die alte steht.

@@ -434,6 +434,10 @@ class Pruefbericht(BaseModel):
     quellen: list[str] = Field(default_factory=list, description="URLs, die nachgeschlagen wurden")
     geprueft_von: str = Field(default="", description="Wer geprüft hat")
     mit_suche: bool = Field(default=True, description="Ob nachgeschlagen werden konnte")
+    nachpruefung: bool = Field(
+        default=False,
+        description="Nachprüfung nach dem Nachbessern: gegen die Belege der ersten Prüfung",
+    )
 
     @property
     def darf_raus(self) -> bool:

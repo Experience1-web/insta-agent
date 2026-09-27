@@ -22,6 +22,26 @@ from insta_agent.models import Befund, Pruefbericht
 from test_cycle import _entwurf, _identitaet
 
 
+
+@pytest.fixture(autouse=True)
+def nachpruefung_wie_endpruefung(monkeypatch):
+    """Die Nachprüfung urteilt in diesen Tests wie die (ersetzte) Endprüfung.
+
+    Die Tests hier legen das Urteil über `runner.pruefe_beitrag` fest. Nach
+    dem Nachbessern läuft aber die Nachprüfung - sie soll dasselbe Urteil
+    fällen, sonst prüfte ein Test etwas anderes, als er vorgibt.
+    """
+    import insta_agent.runner as runner
+
+    def nachpruefung(brain, *, identity, draft, erster, modell=None, person=None, fund=None):
+        bericht = runner.pruefe_beitrag(
+            brain, identity=identity, draft=draft, modell=modell, person=person, fund=fund
+        )
+        bericht.nachpruefung = True
+        return bericht
+
+    monkeypatch.setattr(runner, "pruefe_nachbesserung", nachpruefung)
+
 class FakeBrain:
     """Merkt sich den Aufruf und gibt einen vorbereiteten Bericht zurück."""
 
@@ -643,3 +663,49 @@ def test_bei_alten_entwuerfen_wird_das_grundbild_wiedergefunden(
     )
 
     assert agent.nachbessern(entwurf["id"])["bild"] == "neu beschriftet"
+
+
+# --- Die Nachprüfung nach dem Nachbessern ----------------------------------
+
+
+def _nachpruefe(brain, erster: Pruefbericht):
+    from insta_agent.brain.pruefung import pruefe_nachbesserung
+
+    return pruefe_nachbesserung(brain, identity=_identitaet(), draft=_entwurf(), erster=erster)
+
+
+def test_die_nachpruefung_sucht_nicht_und_kennt_den_ersten_bericht():
+    erster = Pruefbericht(
+        urteil="nachbessern",
+        zusammenfassung="Das Gefäß ist falsch beschrieben.",
+        befunde=[
+            Befund(
+                behauptung="grob gebrannter Ton",
+                urteil="ungenau",
+                begruendung="Laut Quellen glasiert, braun-gelb.",
+                beleg="https://beispiel.de/fund",
+            )
+        ],
+        quellen=["https://beispiel.de/fund"],
+    )
+    brain = FakeBrain()
+
+    bericht = _nachpruefe(brain, erster)
+
+    assert brain.aufruf["web_search"] is False
+    assert "Laut Quellen glasiert" in brain.aufruf["prompt"]
+    assert "unbelegbar" in brain.aufruf["prompt"]
+    assert bericht.nachpruefung is True
+    assert "https://beispiel.de/fund" in bericht.quellen
+
+
+def test_der_fund_sagt_wo_die_einschaetzung_zur_bekanntheit_hingehoert():
+    """ "Im deutschsprachigen Raum praktisch nicht angekommen" stand im
+    Goldrubel-Beitrag. Das war die Begründung der Stoffsuche, warum sie den
+    Fund wählte - keine Tatsache, und nicht belegbar."""
+    from insta_agent.brain.stoff import fund_block
+    from test_stoff import _schwach
+
+    fund = _schwach(warum_kaum_bekannt="Im deutschsprachigen Raum kaum berichtet")
+
+    assert "gehört nicht in den Beitrag" in fund_block(fund)

@@ -24,6 +24,7 @@ from .pruefung import (
     PRUEFER_NAME,
     PRUEFER_ROLLE,
     pruefe_beitrag,
+    pruefe_nachbesserung,
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "build_monetization_plan",
     "assess_opportunities",
     "pruefe_beitrag",
+    "pruefe_nachbesserung",
     "PRUEFER_NAME",
     "PRUEFER_ROLLE",
     "PRUEFER_AUFGABE",

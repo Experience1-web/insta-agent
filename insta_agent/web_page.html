@@ -940,6 +940,9 @@ function pruef_bericht_html(pr) {
     ${!pr.mit_suche ? `<p class="hinweis">Diesmal ohne Websuche geprüft – es konnte
       nichts nachgeschlagen werden. Was hier „unbelegbar" heißt, kann trotzdem
       stimmen; belegt ist es deshalb nicht.</p>` : ""}
+    ${pr.nachpruefung ? `<p class="hinweis">Nachprüfung nach dem Nachbessern: verglichen
+      mit den Belegen der ersten Prüfung, ohne neue Websuche. Neu hinzugekommene
+      Aussagen gelten deshalb als unbelegbar.</p>` : ""}
     ${befunde || '<p class="hinweis">Keine prüfbare Tatsachenbehauptung gefunden.</p>'}
     ${(pr.korrekturen || []).length ? `<div class="feld">
       <div class="feldkopf"><span>Was zu ändern wäre</span></div>

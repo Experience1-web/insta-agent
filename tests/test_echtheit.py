@@ -28,6 +28,26 @@ from test_cycle import (  # noqa: F401 - agent und settings sind Fixtures
 )
 
 
+
+@pytest.fixture(autouse=True)
+def nachpruefung_wie_endpruefung(monkeypatch):
+    """Die Nachprüfung urteilt in diesen Tests wie die (ersetzte) Endprüfung.
+
+    Die Tests hier legen das Urteil über `runner.pruefe_beitrag` fest. Nach
+    dem Nachbessern läuft aber die Nachprüfung - sie soll dasselbe Urteil
+    fällen, sonst prüfte ein Test etwas anderes, als er vorgibt.
+    """
+    import insta_agent.runner as runner
+
+    def nachpruefung(brain, *, identity, draft, erster, modell=None, person=None, fund=None):
+        bericht = runner.pruefe_beitrag(
+            brain, identity=identity, draft=draft, modell=modell, person=person, fund=fund
+        )
+        bericht.nachpruefung = True
+        return bericht
+
+    monkeypatch.setattr(runner, "pruefe_nachbesserung", nachpruefung)
+
 class FakeBrain:
     def __init__(self):
         self.bericht = Pruefbericht(urteil="freigabe", zusammenfassung="ok")

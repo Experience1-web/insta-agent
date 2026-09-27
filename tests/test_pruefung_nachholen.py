@@ -61,7 +61,7 @@ def test_eine_abgebrochene_nachbesserung_bleibt_im_protokoll(agent, monkeypatch)
     def kein_geld_mehr(*a, **k):
         raise CycleBudgetExceeded("Zyklusbudget aufgebraucht: 1.53 USD von 1.50 USD.")
 
-    monkeypatch.setattr(agent, "_pruefe", kein_geld_mehr)
+    monkeypatch.setattr(agent, "_pruefe_nach_dem_bessern", kein_geld_mehr)
 
     with pytest.raises(CycleBudgetExceeded):
         agent.nachbessern(post_id)
@@ -75,7 +75,9 @@ def test_eine_abgebrochene_nachbesserung_bleibt_im_protokoll(agent, monkeypatch)
 def test_die_pruefung_laesst_sich_nachholen(agent, monkeypatch):
     post_id = _entwurf_mit_befund(agent)
     monkeypatch.setattr(
-        agent, "_pruefe", lambda *a, **k: (_ for _ in ()).throw(CycleBudgetExceeded("leer"))
+        agent,
+        "_pruefe_nach_dem_bessern",
+        lambda *a, **k: (_ for _ in ()).throw(CycleBudgetExceeded("leer")),
     )
     with pytest.raises(CycleBudgetExceeded):
         agent.nachbessern(post_id)
@@ -177,3 +179,39 @@ def test_vom_handy_aus_wird_nicht_geprueft(settings):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --- Nachprüfung statt zweiter Vollprüfung ---------------------------------
+
+
+def test_nach_dem_nachbessern_wird_nicht_noch_einmal_gesucht(agent):
+    """Der Goldrubel-Zyklus: elf Befunde belegt, einer beanstandet - und
+    danach noch einmal drei Minuten Websuche für alle elf. Die Belege
+    liegen schon vor; verglichen wird gegen den ersten Bericht."""
+    post_id = _entwurf_mit_befund(agent)
+    agent.brain.gesucht.clear()
+
+    ergebnis = agent.nachbessern(post_id)
+
+    assert ergebnis["ok"] is True
+    assert "Nachprüfung" in agent.brain.aufrufe
+    assert "Endprüfung" not in agent.brain.aufrufe[-2:]
+    assert agent.brain.gesucht == []
+    bericht = Pruefbericht.model_validate(
+        json.loads(agent.store.get_post(post_id)["pruefung_json"])
+    )
+    assert bericht.nachpruefung is True
+
+
+def test_ohne_suche_in_der_ersten_pruefung_wird_voll_geprueft(agent):
+    """Dann gibt es keine Belege, gegen die sich vergleichen ließe."""
+    post_id = _entwurf_mit_befund(agent)
+    ohne = _beanstandet()
+    ohne.mit_suche = False
+    agent.store.set_pruefung(post_id, ohne)
+    agent.brain.aufrufe.clear()
+
+    agent.nachbessern(post_id)
+
+    assert "Endprüfung" in agent.brain.aufrufe
+    assert "Nachprüfung" not in agent.brain.aufrufe
