@@ -368,8 +368,11 @@ def finde_stoff(
 
     fund.gesucht_von = person_name
     fund.mit_suche = mit_suche
-    if brain.letzte_quellen:
-        fund.quellen = list(dict.fromkeys([*fund.quellen, *brain.letzte_quellen]))
+    # Was die Suche geöffnet hat, ist nicht dasselbe wie das, was den Fund
+    # belegt: Darunter sind auch die Seiten zu allen Funden, die gelesen und
+    # weggelegt wurden. Beim Goldrubel-Fund standen so ein Hort aus Galiläa
+    # und römische Münzen aus Luxemburg unter "Fundstellen". Deshalb getrennt.
+    fund.gesichtet = [q for q in dict.fromkeys(brain.letzte_quellen) if q not in fund.quellen]
 
     log.info("Stoff gefunden: %s (Reiz %d/5, %s)", fund.titel, fund.reiz, fund.beleglage)
     return fund

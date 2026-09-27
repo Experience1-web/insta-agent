@@ -878,13 +878,18 @@ function fund_html(f) {
       <a href="${esc(f.bildseite)}" target="_blank" rel="noopener noreferrer">${esc(f.bildseite)}</a></p>` : ""}
     ${f.warum_aussergewoehnlich ? `<p><b>Warum das kein Alltag ist:</b>
       ${esc(f.warum_aussergewoehnlich)}</p>` : ""}
-    ${f.warum_kaum_bekannt ? `<p><b>Warum es kaum jemand kennt:</b>
+    ${f.warum_kaum_bekannt ? `<p><b>Warum es kaum jemand kennt</b> <span class="hinweis">(Einschätzung der Stoffsuche, kommt nicht in den Beitrag)</span><b>:</b>
       ${esc(f.warum_kaum_bekannt)}</p>` : ""}
     ${(f.quellen || []).length ? `<div class="feldkopf" style="margin-top:12px">
         <span>Fundstellen</span></div>
       <ul>${f.quellen.map(q => q.startsWith("http")
         ? `<li><a href="${esc(q)}" target="_blank" rel="noopener noreferrer">${esc(q)}</a></li>`
         : `<li>${esc(q)}</li>`).join("")}</ul>` : ""}
+    ${(f.gesichtet || []).length ? `<details style="margin-top:12px">
+        <summary class="hinweis">Außerdem bei der Suche geöffnet (${f.gesichtet.length}
+          Seiten, auch zu weggelegten Funden)</summary>
+      <ul>${f.gesichtet.map(q => `<li><a href="${esc(q)}" target="_blank"
+        rel="noopener noreferrer">${esc(q)}</a></li>`).join("")}</ul></details>` : ""}
     ${(f.verworfen || []).length ? `<div class="feldkopf" style="margin-top:12px">
         <span>Auch gefunden und weggelegt</span></div>
       <ul>${f.verworfen.map(v => `<li>${esc(v)}</li>`).join("")}</ul>` : ""}
@@ -948,11 +953,12 @@ function pruef_bericht_html(pr) {
       <div class="feldkopf"><span>Was zu ändern wäre</span></div>
       <ul>${pr.korrekturen.map(k => `<li>${esc(k)}</li>`).join("")}</ul>
     </div>` : ""}
-    ${(pr.quellen || []).length ? `<div class="feld">
-      <div class="feldkopf"><span>Nachgeschlagen</span></div>
+    ${(pr.quellen || []).length ? `<details class="feld">
+      <summary class="hinweis">Alle Seiten, die bei der Prüfung geöffnet wurden
+        (${pr.quellen.length}) – die Belege stehen oben bei den Befunden</summary>
       <ul>${pr.quellen.map(q => `<li><a href="${esc(q)}" target="_blank"
         rel="noopener noreferrer">${esc(q)}</a></li>`).join("")}</ul>
-    </div>` : ""}
+    </details>` : ""}
     <p class="hinweis" style="margin-top:16px">Geprüft von ${esc(pr.geprueft_von || "?")}.</p>`;
 }
 

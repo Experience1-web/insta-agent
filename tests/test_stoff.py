@@ -432,3 +432,20 @@ def _sparsam():
     from insta_agent.config import EconomyConfig
 
     return EconomyConfig(treasury_start_usd=10.0)
+
+
+def test_fundstellen_sind_nur_die_belege_nicht_alles_geoeffnete(treasury):
+    """Beim Goldrubel-Fund standen unter "Fundstellen" auch ein Hort aus
+    Galiläa und römische Münzen aus Luxemburg - Seiten, die die Suche zu
+    anderen Funden geöffnet hatte."""
+    from insta_agent.config import LLMConfig
+
+    brain = SucheBrain(LLMConfig(), treasury)
+    brain.letzte_quellen = ["https://beleg.de/fund", "https://anderer.de/galilaea"]
+    fund = _schwach(quellen=["https://beleg.de/fund"])
+    brain.structured = lambda **_: fund
+
+    ergebnis = finde_stoff(brain, identity=_identitaet(), strategy=_strategie())
+
+    assert ergebnis.quellen == ["https://beleg.de/fund"]
+    assert ergebnis.gesichtet == ["https://anderer.de/galilaea"]

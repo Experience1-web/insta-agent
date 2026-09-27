@@ -124,7 +124,14 @@ class Fund(BaseModel):
     wann: str = Field(description="Wann es geschah oder veröffentlicht wurde")
     quellen: list[str] = Field(
         default_factory=list,
-        description="Wo es steht: Veröffentlichung, Jahrgang, möglichst URL",
+        description=(
+            "Wo es steht: Veröffentlichung, Jahrgang, möglichst URL. Nur, was "
+            "genau diesen Fund belegt - keine Seiten zu anderen Funden"
+        ),
+    )
+    gesichtet: list[str] = Field(
+        default_factory=list,
+        description="Vom Programm ausgefüllt: alle Seiten, die die Suche geöffnet hat",
     )
     beleglage: Literal["gesichert", "gemeldet", "unbestaetigt"] = Field(
         default="gemeldet",
