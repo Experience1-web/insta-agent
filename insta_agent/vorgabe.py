@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from .models import Identity
 
-HANDLE = "erstfund"
+HANDLE = "erstfund.de"
 
 IDENTITAET = Identity(
     agent_name="Jonas Vehl",
