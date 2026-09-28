@@ -142,8 +142,9 @@ falsche Zahl, korrigier sie im Text fürs Bild. Sie wird dann auf dasselbe
 Motiv neu gesetzt.
 
 Die Karten des Karussells gibst du vollständig zurück: gleich viele, in
-derselben Reihenfolge, mit allen Feldern. Ändere den Text einer Karte nur,
-wenn ein Befund ihn betrifft - jede geänderte Karte bekommt ein neues Bild.""",
+derselben Reihenfolge. Ändere den Text einer Karte nur, wenn ein Befund
+ihn betrifft - jede geänderte Karte bekommt ein neues Bild. Die
+Bildwünsche und Suchbegriffe der Karten übernimmt das Programm von selbst.""",
         ),
     )
 
@@ -154,6 +155,19 @@ wenn ein Befund ihn betrifft - jede geänderte Karte bekommt ein neues Bild.""",
     # Karte". Dann gelten die alten.
     if len(neu.karten) != len(draft.karten):
         neu.karten = [k.model_copy() for k in draft.karten]
+    else:
+        # Das Modell hat nur die Texte gesehen. Was zum Bild gehört -
+        # Suchbegriffe, Malwunsch -, kommt aus der alten Karte; sonst hätte
+        # "dieses neu" danach nichts mehr, womit es suchen könnte.
+        neu.karten = [
+            vorher.model_copy(
+                update={
+                    "text": jetzt.text,
+                    "akzentwort": jetzt.akzentwort if jetzt.text != vorher.text else vorher.akzentwort,
+                }
+            )
+            for vorher, jetzt in zip(draft.karten, neu.karten)
+        ]
 
     log.info("Beitrag nachgebessert: %s", neu.bildtext[:60])
     return neu

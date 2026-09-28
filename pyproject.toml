@@ -29,3 +29,8 @@ include = ["insta_agent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures werden aus test_cycle importiert und als Parameter wieder
+# genannt - so arbeitet pytest, das ist keine doppelte Definition.
+"tests/**" = ["F811"]

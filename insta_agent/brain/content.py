@@ -80,6 +80,15 @@ Der Fehler, den du nicht machen darfst: etwas erfinden. Jede Karte
 sagt nur, was im Fund belegt ist - aber sie sagt es so, dass man es
 versteht. Und keine wiederholt, was schon auf dem ersten Bild steht.
 
+**Eine Karte ist kurz, aber sie ist nicht ungenau.** Kurz heisst: das
+genaue Wort, nicht ein dramatischeres. Beim Goldrubel-Fund stand "Wer
+das Gold vergrub" - versteckt war es unter den Steinen eines
+Hausfundaments, nicht in der Erde vergraben. "Versteckte" waere genauso
+kurz gewesen und haette gestimmt. Und was die Forscher nur vermuten -
+wer es war, warum, wann genau -, steht auf keiner Karte als Tatsache.
+Entweder mit "vermutlich" oder als offene Frage ("Wem es gehoerte, weiss
+bis heute niemand"), die oft ohnehin die bessere Karte ist.
+
 **Die Bilder zeigen die Sache, um die es geht.** Nicht ein Wort aus dem
 Kartentext. Steht auf der Karte "aus einer Hoehle", ist das Bild keine
 Treppe in einer Tropfsteinhoehle, sondern wieder die Koralle - oder ihr

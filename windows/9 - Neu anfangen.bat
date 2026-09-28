@@ -10,14 +10,14 @@ echo   Der Agent sucht sich eine neue Nische, einen neuen Namen
 echo   und eine neue Strategie.
 echo.
 echo   Seine Kasse, sein Arbeitsprotokoll und die schon geschriebenen
-echo   Beitraege bleiben erhalten.
+echo   Beiträge bleiben erhalten.
 echo.
-echo   Gleich kommt eine Rueckfrage. Tippe  j  und druecke Enter.
-echo   ^(y geht auch^). Wenn du es dir anders ueberlegst: n und Enter.
+echo   Gleich kommt eine Rückfrage. Tippe  j  und drücke Enter.
+echo   ^(y geht auch^). Wenn du es dir anders überlegst: n und Enter.
 echo.
 %PY% -m insta_agent.cli neustart
 echo.
 echo   Danach: Doppelklick auf  2 - Dashboard starten
-echo   und dort auf  Starten  druecken.
+echo   und dort auf  Starten  drücken.
 echo.
 pause

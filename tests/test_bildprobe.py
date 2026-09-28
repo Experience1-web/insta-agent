@@ -257,3 +257,59 @@ def test_ohne_neue_zahlen_wird_nicht_reflektiert_und_der_kurs_bleibt(tmp_path, m
     assert aufrufe == []
     assert any("Reflexion übersprungen" in s for s in bericht.steps)
     assert any("Kurs unverändert" in s for s in bericht.steps)
+
+
+def test_nach_dem_update_wird_der_vorhandene_stand_uebernommen(tmp_path, monkeypatch):
+    """Vor der Regel gab es keine Notiz, auf welchen Zahlen Reflexion und
+    Kurs beruhen. Ohne Uebernahme liefen beide nach dem Update einmal
+    umsonst - rund 20 bis 40 Cent fuer denselben Stand."""
+    from insta_agent.runner import KEY_STRATEGIE_ZYKLUS, KEY_ZAHLEN_BEI_REFLEXION
+
+    aufrufe = []
+    monkeypatch.setattr(runner_modul, "reflect", lambda *a, **k: aufrufe.append("reflexion"))
+    monkeypatch.setattr(runner_modul, "update_strategy", lambda *a, **k: aufrufe.append("strategie"))
+
+    class Kurs:
+        current_goal = "Wachsen"
+
+    agent = object.__new__(Agent)
+    speicher = {}  # Stand von vor dem Update: keine Notizen
+
+    class Laden:
+        def get_json(self, k):
+            return speicher.get(k)
+
+        def set_json(self, k, v):
+            speicher[k] = v
+
+        def published_count(self):
+            return 3
+
+        def get_model(self, k, art):
+            return Kurs() if k == "strategy" else object()  # Reflexion und Kurs sind da
+
+    class Kasse:
+        def check(self):
+            return self.state()
+
+        def state(self):
+            class S:
+                mode = runner_modul.Mode.NORMAL
+                balance_usd = 10.0
+            return S()
+
+    agent.store = Laden()
+    agent.treasury = Kasse()
+    agent.bootstrap = lambda **k: type("I", (), {"handle": "x", "motto": "y"})()
+    agent.collect_metrics = lambda cycle: "dieselben Zahlen"
+    agent._veroeffentliche_freigegebenes = lambda report: None
+    agent._produce_posts = lambda *a: None
+    bericht = _Bericht()
+
+    agent._run_cycle_inner(12, bericht, None)
+
+    assert aufrufe == []
+    assert any("Reflexion übersprungen" in s for s in bericht.steps)
+    assert any("Kurs unverändert" in s for s in bericht.steps)
+    assert speicher[KEY_ZAHLEN_BEI_REFLEXION] == "dieselben Zahlen"
+    assert speicher[KEY_STRATEGIE_ZYKLUS] == 12

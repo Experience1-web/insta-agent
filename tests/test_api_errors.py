@@ -5,7 +5,6 @@ sagen, was zu tun ist - nicht mit einem Python-Fehler abstürzen.
 """
 
 import httpx
-import pytest
 from anthropic import APIStatusError
 
 from insta_agent.runner import _erklaere_api_fehler

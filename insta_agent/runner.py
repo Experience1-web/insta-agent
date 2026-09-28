@@ -229,6 +229,22 @@ class Agent:
             art=settings.bild.art,
         )
 
+        # Zustand der Bildsuche. Gesetzt wird er im Zyklus - aber die
+        # Knöpfe im Dashboard ("dieses neu", "Bild neu") bauen einen
+        # frischen Agenten ohne Zyklus. Fehlte das hier, stürzte "dieses
+        # neu" ab, sobald eine Karte gemalt werden sollte.
+        self._bilder_heute_aus: str | None = None
+        self._bildthema = ""
+        self._quellbilder: list = []
+
+    def _bildthema_fuer(self, fund) -> str:
+        """Worum es auf allen Bildern gehen muss - der Fund, nicht ein Suchwort."""
+        return " - ".join(
+            teil
+            for teil in (getattr(fund, "bildsuche", ""), getattr(fund, "titel", ""))
+            if teil
+        )
+
     def close(self) -> None:
         if self.ig:
             self.ig.close()
@@ -519,6 +535,11 @@ class Agent:
         # mit dem teuersten Modell, und kam zu denselben Schluessen. Das
         # war ein gutes Zehntel jedes Beitrags fuer nichts.
         reflection = self.reflection
+        if reflection is not None and self.store.get_json(KEY_ZAHLEN_BEI_REFLEXION) is None:
+            # Stand von vor dieser Regel: Es gibt eine Reflexion, aber keine
+            # Notiz, auf welchen Zahlen sie beruht. Dann gilt sie für die
+            # jetzigen - sonst liefe sie nach jedem Update einmal umsonst.
+            self.store.set_json(KEY_ZAHLEN_BEI_REFLEXION, performance)
         neue_zahlen = performance != (self.store.get_json(KEY_ZAHLEN_BEI_REFLEXION) or "")
         reflektiert = False
         if self.store.published_count() > 0 and (neue_zahlen or reflection is None):
@@ -555,6 +576,10 @@ class Agent:
         # dem teuersten Modell neu herzuleiten, ergab denselben Kurs.
         strategy = self.strategy
         letzte = self.store.get_json(KEY_STRATEGIE_ZYKLUS)
+        if strategy is not None and not isinstance(letzte, int):
+            # Ebenso: Ein Kurs ist da, nur nicht, seit wann. Er zählt ab jetzt.
+            letzte = cycle
+            self.store.set_json(KEY_STRATEGIE_ZYKLUS, cycle)
         faellig = not isinstance(letzte, int) or cycle - letzte >= STRATEGIE_EVERY
         if strategy is None or reflektiert or recherchiert or faellig:
             strategy = update_strategy(
@@ -785,6 +810,13 @@ class Agent:
                 "grund": "Zu diesem Bild gibt es keine Karte mehr - der Text dazu ist "
                 "verloren gegangen. Verwerfen und neu schreiben lassen hilft.",
             }
+
+        # Beurteilt wird das neue Bild gegen den Fund, nicht gegen das
+        # Suchwort der Karte - sonst passt jede Grabung zu "excavation".
+        if zeile["fund_json"]:
+            self._bildthema = self._bildthema_fuer(
+                Fund.model_validate(json.loads(zeile["fund_json"]))
+            )
 
         self.treasury.check()
         vorher = self.treasury.state().cycle_spent_usd
@@ -1079,6 +1111,8 @@ class Agent:
         # Karten, deren Text sich geändert hat, brauchen ein neues Bild -
         # die alte Schrift steht fest darauf.
         bilder = json.loads(zeile["karussell_json"] or "[]")
+        if fund is not None:
+            self._bildthema = self._bildthema_fuer(fund)
         for versatz, (vorige, jetzt) in enumerate(zip(alt.karten, neu.karten)):
             if versatz < len(bilder) and vorige.text.strip() != jetzt.text.strip():
                 self._karte_erneuern(post_id, neu, bilder, versatz, identity)
@@ -1670,11 +1704,7 @@ class Agent:
         # Worum es auf allen Bildern gehen muss - auch auf den Karten. Ohne
         # das wurde jedes Kartenbild gegen sein eigenes Suchwort beurteilt,
         # und eine Treppe in einer Hoehle passte bestens zu "cave".
-        self._bildthema = " - ".join(
-            teil
-            for teil in (getattr(fund, "bildsuche", ""), getattr(fund, "titel", ""))
-            if teil
-        )
+        self._bildthema = self._bildthema_fuer(fund)
 
         # Die Aufnahmen vom Fund selbst zuerst - aus der Studie, von der
         # Behoerde. Ein Archivbild passt zum Thema; dieses zeigt die Sache.

@@ -6,7 +6,7 @@ where py > nul 2> nul
 if errorlevel 1 set PY=python
 title Guthaben eintragen
 echo.
-echo   Der Agent schaetzt seine Kosten selbst. Die Wahrheit steht auf
+echo   Der Agent schätzt seine Kosten selbst. Die Wahrheit steht auf
 echo   console.anthropic.com unter "Organisations-Credits".
 echo.
 echo   Trag die Zahl hier ein. Punkt statt Komma: 1.11

@@ -11,7 +11,7 @@ echo.
 %PY% -m pip install -e . --quiet
 if errorlevel 1 goto fehler
 echo.
-echo   Schritt 2 von 2: API-Schluessel eintragen
+echo   Schritt 2 von 2: API-Schlüssel eintragen
 echo.
 %PY% -m insta_agent.cli setup
 echo.

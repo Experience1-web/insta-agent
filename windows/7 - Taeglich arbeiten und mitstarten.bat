@@ -6,7 +6,7 @@ where py > nul 2> nul
 if errorlevel 1 set PY=python
 echo.
 echo   Ab jetzt startet das Dashboard beim Hochfahren von selbst,
-echo   ist im WLAN erreichbar und der Agent arbeitet einmal taeglich.
+echo   ist im WLAN erreichbar und der Agent arbeitet einmal täglich.
 echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.

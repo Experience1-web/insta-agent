@@ -672,6 +672,7 @@ async function laden() {
       { headers: kopf, cache: "no-store" });
     if (antwort.status === 403) {
       $("zustand").innerHTML = '<span class="schlecht">Kein Zugang</span>';
+      gezeichnet.warnung = null;
       $("warnbox").innerHTML = `<div class="karte"><h3 class="schlecht">Zugangswort fehlt</h3>
         <p class="hinweis" style="margin:6px 0 0">Ruf die Seite mit der vollständigen Adresse
         auf, die beim Start angezeigt wurde – die mit <code>?token=…</code> am Ende.</p></div>`;
@@ -1553,7 +1554,14 @@ function zeichne_warnung(d) {
       <p style="margin:6px 0 0">${text}</p></div>`;
   }
   inhalt += rechte_hinweis(d.rechte);
-  if ($("warnbox").innerHTML !== inhalt) $("warnbox").innerHTML = inhalt;
+  // Nur neu setzen, wenn sich etwas geändert hat - sonst wird der Kasten
+  // alle zwei Sekunden ersetzt, und ein Klick darin geht verloren.
+  // (Verglichen mit dem, was zuletzt gesetzt wurde: Der Browser schreibt
+  // innerHTML beim Auslesen um, der direkte Vergleich schlüge immer fehl.)
+  if (gezeichnet.warnung !== inhalt) {
+    gezeichnet.warnung = inhalt;
+    $("warnbox").innerHTML = inhalt;
+  }
 }
 
 /** Fehlt dem Instagram-Zugang eine Berechtigung, steht das hier - von
@@ -2065,13 +2073,15 @@ function verdrahte_entscheidungen(bereich) {
       if (!ergebnis.ok) {
         alert(ergebnis.grund || "Das hat nicht geklappt.");
       } else if (ergebnis.urteil === "freigabe") {
-        alert("Nachgebessert. Die Endprüfung hat diesmal nichts beanstandet.\n\n" +
+        alert("Nachgebessert. Die Nachprüfung hat nichts mehr beanstandet.\n\n" +
               `Bild: ${ergebnis.bild || "unverändert"}.`);
       } else if (ergebnis.urteil) {
-        alert(`Nachgebessert, aber die Endprüfung findet weiter ${ergebnis.offen} ` +
-              `Sache(n) (${ergebnis.urteil}). Sieh im Beitrag nach, was noch offen ist.`);
+        const sachen = ergebnis.offen === 1 ? "eine Sache" : `${ergebnis.offen} Sachen`;
+        alert(`Nachgebessert, aber die Nachprüfung findet weiter ${sachen} ` +
+              `(${ergebnis.urteil}). Sieh im Beitrag nach, was noch offen ist.`);
       } else {
-        alert("Nachgebessert, aber die Endprüfung kam nicht durch. Prüfbericht fehlt.");
+        alert("Nachgebessert, aber die Nachprüfung kam nicht durch. Prüfbericht fehlt – " +
+              "„Prüfen lassen“ holt sie nach.");
       }
       gezeichnet.beitraege = null;
       laden();
@@ -2097,7 +2107,8 @@ function verdrahte_entscheidungen(bereich) {
       } else if (ergebnis.urteil === "freigabe") {
         alert("Geprüft. Ruth hat nichts zu beanstanden.");
       } else {
-        alert(`Geprüft: ${ergebnis.urteil}, ${ergebnis.offen} Sache(n) beanstandet. ` +
+        alert(`Geprüft: ${ergebnis.urteil}, ` +
+              `${ergebnis.offen === 1 ? "eine Sache" : ergebnis.offen + " Sachen"} beanstandet. ` +
               "Sieh im Beitrag nach – mit „Nachbessern\u201c lässt er sie beheben.");
       }
       gezeichnet.beitraege = null;
@@ -2119,7 +2130,7 @@ function verdrahte_entscheidungen(bereich) {
         "Mit „Prüfen lassen\u201c holst du das für ein paar Cent nach.\n\n" +
         "Trotzdem ungeprüft veröffentlichen?")) return;
       if (offen.length && !confirm(
-        `Die Endprüfung hat ${offen.length} Sache(n) beanstandet:\n\n` +
+        `Die Endprüfung hat ${offen.length === 1 ? "eine Sache" : offen.length + " Sachen"} beanstandet:\n\n` +
         offen.slice(0, 3).map(b => `· ${b.urteil}: ${b.behauptung}`).join("\n") +
         (offen.length > 3 ? `\n· … und ${offen.length - 3} weitere` : "") +
         "\n\nDer Beitrag geht unverändert hinaus – nichts wird dabei " +

@@ -168,3 +168,82 @@ def test_nach_dem_nachbessern_liegt_die_alte_fassung_im_protokoll(agent, monkeyp
     ohne = PostDraft.model_validate(json.loads(agent.store.get_post(post_id)["draft_json"]))
     assert agent._karten_wiederfinden(post_id, ohne, 2)
     assert len(json.loads(agent.store.get_post(post_id)["draft_json"])["karten"]) == 2
+
+
+class _Maler:
+    name = "maler"
+
+    def erzeuge(self, prompt, ziel):
+        from PIL import Image
+
+        Image.new("RGB", (1080, 1350), (24, 28, 40)).save(ziel)
+        return ziel
+
+
+def test_dieses_neu_im_dashboard_stuerzt_beim_malen_nicht_ab(agent, settings, monkeypatch):
+    """Die Knöpfe bauen einen frischen Agenten ohne Zyklus. Dem fehlte der
+    Zustand der Bildsuche, und "dieses neu" brach ab, sobald gemalt wurde."""
+    from insta_agent.runner import Agent
+
+    agent.run_cycle()
+    post_id = agent.store.pending_drafts()[0]["id"]
+    draft = _mit_karten(2)
+    for karte in draft.karten:
+        karte.bildsuche = ""
+        karte.bildwunsch = "a quiet dark field"
+    agent.store.setze_entwurfsdaten(post_id, draft)
+    agent.store.setze_karussell(post_id, ["/a.png", "/b.png"])
+
+    frisch = Agent(settings)  # wie im Dashboard: kein run_cycle vorher
+    frisch.bildgenerator = _Maler()
+    try:
+        ergebnis = frisch.karte_neu(post_id, 2)
+    finally:
+        frisch.close()
+
+    assert ergebnis["ok"], ergebnis
+    assert ergebnis["gemalt"] is True
+
+
+def test_dieses_neu_beurteilt_gegen_den_fund_nicht_gegen_das_suchwort(agent, monkeypatch):
+    """Sonst passt jede Grabung zu "excavation" - so kam Kreta ins Titelbild."""
+    import insta_agent.imaging.echtbild as echtbild
+    from test_stoff import _schwach
+
+    agent.run_cycle()
+    post_id = agent.store.pending_drafts()[0]["id"]
+    draft = _mit_karten(1)
+    draft.karten[0].bildsuche = "archaeological excavation"
+    agent.store.setze_entwurfsdaten(post_id, draft)
+    agent.store.setze_karussell(post_id, ["/a.png"])
+    fund = _schwach(titel="409 Goldrubel in Torschok", bildsuche="Torzhok gold hoard")
+    agent.store.set_fund(post_id, fund)
+
+    themen = []
+    monkeypatch.setattr(agent, "_blick_auf", lambda thema: themen.append(thema))
+    monkeypatch.setattr(echtbild, "finde_und_hole", lambda *a, **k: None)
+
+    agent.karte_neu(post_id, 2)
+
+    assert themen and "Torschok" in themen[0]
+    assert themen[0] != "archaeological excavation"
+
+
+def test_beim_nachbessern_bleiben_die_suchbegriffe_der_karten():
+    """Das Modell sieht nur die Texte - die Bildfelder kommen von der alten Karte."""
+    alt = _mit_karten(2)
+    for karte in alt.karten:
+        karte.bildsuche = "Torzhok gold hoard"
+        karte.bildwunsch = "gold coins in dark soil"
+    antwort = _mit_karten(2)
+    antwort.karten[1].text = "Versteckt unter dem Fundament"
+    antwort.karten[1].akzentwort = "Fundament"
+
+    neu = ueberarbeite_beitrag(
+        _Brain(antwort), identity=_identitaet(), strategy=None, draft=alt, bericht=_bericht()
+    )
+
+    assert [k.bildsuche for k in neu.karten] == ["Torzhok gold hoard"] * 2
+    assert neu.karten[1].bildwunsch == "gold coins in dark soil"
+    assert neu.karten[1].text == "Versteckt unter dem Fundament"
+    assert neu.karten[1].akzentwort == "Fundament"

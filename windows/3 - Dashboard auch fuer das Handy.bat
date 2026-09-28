@@ -6,7 +6,7 @@ where py > nul 2> nul
 if errorlevel 1 set PY=python
 title insta-agent - dieses Fenster offen lassen
 echo.
-echo   Gleich erscheint ein QR-Code fuers Handy.
+echo   Gleich erscheint ein QR-Code fürs Handy.
 echo.
 %PY% -m insta_agent.cli web --host 0.0.0.0 --read-only
 echo.

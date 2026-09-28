@@ -371,7 +371,6 @@ def test_eine_bezahlte_recherche_wird_beim_zweiten_versuch_wiederverwendet(agent
     from insta_agent.runner import KEY_ANALYSIS
 
     aufrufe = {"n": 0}
-    echte_recherche = None
     agent.settings.posting.identitaet_frei = True
 
     def zaehlende_recherche(brain, **kwargs):

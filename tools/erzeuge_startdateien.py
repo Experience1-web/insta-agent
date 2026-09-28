@@ -34,7 +34,7 @@ echo.
 %PY% -m pip install -e . --quiet
 if errorlevel 1 goto fehler
 echo.
-echo   Schritt 2 von 2: API-Schluessel eintragen
+echo   Schritt 2 von 2: API-Schlüssel eintragen
 echo.
 %PY% -m insta_agent.cli setup
 echo.
@@ -55,7 +55,7 @@ pause""",
     "3 - Dashboard auch fuer das Handy.bat": f"""{KOPF}
 title insta-agent - dieses Fenster offen lassen
 echo.
-echo   Gleich erscheint ein QR-Code fuers Handy.
+echo   Gleich erscheint ein QR-Code fürs Handy.
 echo.
 %PY% -m insta_agent.cli web --host 0.0.0.0 --read-only
 echo.
@@ -92,7 +92,7 @@ pause
 exit /b
 :netzfehler
 echo.
-echo   Keine Verbindung zu GitHub. Internet pruefen und nochmal versuchen.
+echo   Keine Verbindung zu GitHub. Internet prüfen und nochmal versuchen.
 echo.
 pause
 exit /b
@@ -104,7 +104,7 @@ pause""",
     "7 - Taeglich arbeiten und mitstarten.bat": f"""{KOPF}
 echo.
 echo   Ab jetzt startet das Dashboard beim Hochfahren von selbst,
-echo   ist im WLAN erreichbar und der Agent arbeitet einmal taeglich.
+echo   ist im WLAN erreichbar und der Agent arbeitet einmal täglich.
 echo.
 %PY% -m insta_agent.cli autostart --ein --handy --arbeitet 24
 echo.
@@ -124,7 +124,7 @@ pause""",
     "15 - Guthaben eintragen.bat": f"""{KOPF}
 title Guthaben eintragen
 echo.
-echo   Der Agent schaetzt seine Kosten selbst. Die Wahrheit steht auf
+echo   Der Agent schätzt seine Kosten selbst. Die Wahrheit steht auf
 echo   console.anthropic.com unter "Organisations-Credits".
 echo.
 echo   Trag die Zahl hier ein. Punkt statt Komma: 1.11
@@ -160,27 +160,27 @@ echo.
 echo.
 pause""",
     "13 - Wirklich veroeffentlichen.bat": f"""{KOPF}
-title Wirklich veroeffentlichen
+title Wirklich veröffentlichen
 echo.
 echo   Legt den Hauptschalter um.
 echo.
-echo   Solange er aus ist, legt der Agent nur Entwuerfe ab - auch
+echo   Solange er aus ist, legt der Agent nur Entwürfe ab - auch
 echo   wenn du sie freigibst. Danach geht jede Freigabe wirklich
 echo   auf Instagram.
 echo.
-echo   Eine Rueckfrage kommt. Tippe  j  und Enter.
+echo   Eine Rückfrage kommt. Tippe  j  und Enter.
 echo.
 %PY% -m insta_agent.cli scharf
 echo.
 pause""",
     "12 - Platz fuer die Bilder.bat": f"""{KOPF}
-title Platz fuer die Bilder
+title Platz für die Bilder
 echo.
 echo   Der letzte Schritt.
 echo.
 echo   Instagram nimmt keine Datei entgegen - es holt sich das Bild
-echo   von einer Adresse im Netz. Dafuer brauchen die fertigen
-echo   Bilder einen kurzen oeffentlichen Platz.
+echo   von einer Adresse im Netz. Dafür brauchen die fertigen
+echo   Bilder einen kurzen öffentlichen Platz.
 echo.
 %PY% -m insta_agent.cli ablage
 echo.
@@ -202,9 +202,9 @@ echo.
 echo   Wer soll die Bilder malen?
 echo.
 echo   Claude kann keine Bilder erzeugen. Du hast drei Wege:
-echo   Google Gemini (kostenloses Kontingent, nur ein Schluessel),
+echo   Google Gemini (kostenloses Kontingent, nur ein Schlüssel),
 echo   dein eigener Rechner (kostenlos, braucht eine Grafikkarte)
-echo   oder Replicate (wenige Cent pro Bild, beste Qualitaet).
+echo   oder Replicate (wenige Cent pro Bild, beste Qualität).
 echo.
 %PY% -m insta_agent.cli bilder
 echo.
@@ -216,15 +216,15 @@ echo   Der Agent sucht sich eine neue Nische, einen neuen Namen
 echo   und eine neue Strategie.
 echo.
 echo   Seine Kasse, sein Arbeitsprotokoll und die schon geschriebenen
-echo   Beitraege bleiben erhalten.
+echo   Beiträge bleiben erhalten.
 echo.
-echo   Gleich kommt eine Rueckfrage. Tippe  j  und druecke Enter.
-echo   ^(y geht auch^). Wenn du es dir anders ueberlegst: n und Enter.
+echo   Gleich kommt eine Rückfrage. Tippe  j  und drücke Enter.
+echo   ^(y geht auch^). Wenn du es dir anders überlegst: n und Enter.
 echo.
 %PY% -m insta_agent.cli neustart
 echo.
 echo   Danach: Doppelklick auf  2 - Dashboard starten
-echo   und dort auf  Starten  druecken.
+echo   und dort auf  Starten  drücken.
 echo.
 pause""",
     "8 - Dashboard beenden.bat": f"""{KOPF}

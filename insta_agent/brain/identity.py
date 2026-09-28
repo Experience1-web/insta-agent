@@ -31,7 +31,7 @@ def invent_identity(
         system=PERSONA,
         label="Identität erfinden",
         prompt=with_context(
-            f"""\
+            """\
 # Auftrag
 Du startest heute einen Instagram-Account bei null Followern.
 

@@ -6,7 +6,6 @@ Entwurf ohne die neuen Felder, ein Neustart, der zu viel löscht.
 
 from __future__ import annotations
 
-import json
 
 import pytest
 

@@ -30,6 +30,12 @@ PNG = (
 )
 
 
+def _punkte(bild):
+    """Die Bildpunkte - getdata() ist abgekündigt, der Nachfolger neu."""
+    return (getattr(bild, "get_flattened_data", None) or bild.getdata)()
+
+
+
 def _generator(handler, modell="black-forest-labs/flux-1.1-pro") -> ReplicateGenerator:
     g = ReplicateGenerator("geheim", modell)
     g.client = httpx.Client(transport=httpx.MockTransport(handler))
@@ -200,11 +206,11 @@ def test_auf_hellem_grund_wird_ein_schleier_gelegt(tmp_path):
 
     # Im oberen Bereich muss das helle Bild abgedunkelt worden sein.
     oben_hell = a.crop((0, 260, 1080, 400)).resize((8, 8))
-    mittel = sum(p[0] for p in oben_hell.getdata()) / 64
+    mittel = sum(p[0] for p in _punkte(oben_hell)) / 64
     assert mittel < 240, "Der Schleier hat nicht gegriffen"
     # Das dunkle Bild braucht keinen und behält seinen Grund.
     oben_dunkel = b.crop((0, 900, 1080, 1000)).resize((8, 8))
-    assert sum(p[0] for p in oben_dunkel.getdata()) / 64 < 40
+    assert sum(p[0] for p in _punkte(oben_dunkel)) / 64 < 40
 
 
 # --- Im Zyklus ------------------------------------------------------------
@@ -312,7 +318,6 @@ def test_ohne_prompt_wird_kein_bild_bestellt(agent):
         entwurf.image_generation_prompt = "   "
         return entwurf
 
-    monkeypatch_ziel = "insta_agent.runner.create_post_draft"
     import insta_agent.runner as r
 
     alt = r.create_post_draft
@@ -861,7 +866,7 @@ def _akzentanteil(bild_pfad, akzent=(123, 224, 90)) -> int:
     streifen = bild.crop((0, oben, bild.width, oben + int(bild.height * 0.04)))
     return sum(
         1
-        for p in streifen.getdata()
+        for p in _punkte(streifen)
         if abs(p[0] - akzent[0]) < 30 and abs(p[1] - akzent[1]) < 30 and abs(p[2] - akzent[2]) < 30
     )
 
@@ -960,7 +965,7 @@ def test_die_notfassung_hebt_dasselbe_wort_hervor(tmp_path):
     bild = Image.open(ziel).convert("RGB")
     treffer = sum(
         1
-        for p in bild.getdata()
+        for p in _punkte(bild)
         if abs(p[0] - 123) < 30 and abs(p[1] - 224) < 30 and abs(p[2] - 90) < 30
     )
     # Der Akzentbalken oben allein macht rund 19.000 Pixel aus.
@@ -984,7 +989,7 @@ def test_die_schrift_bekommt_eine_kontur(tmp_path):
     oben = int(bild.height * 0.15)
     streifen = bild.crop((0, oben, bild.width, oben + int(bild.height * 0.05)))
     # Ohne Kontur gäbe es hier gar keine dunklen Pixel.
-    assert sum(1 for p in streifen.getdata() if sum(p) < 200) > 500
+    assert sum(1 for p in _punkte(streifen) if sum(p) < 200) > 500
 
 
 # --- Das Format, in dem der Beitrag wirklich erscheint ---------------------

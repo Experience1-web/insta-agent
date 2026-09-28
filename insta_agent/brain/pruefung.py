@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 
 from ..llm import Brain
-from ..models import Fund, PostDraft, Pruefbericht
+from ..models import PostDraft, Pruefbericht
 from .prompts import identity_block, persona_mit, with_context
 from .stoff import fund_block
 

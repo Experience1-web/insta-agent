@@ -537,7 +537,6 @@ def test_ein_eigenes_portrait_hat_vorrang(settings, tmp_path, monkeypatch):
     import urllib.request
     from http.server import ThreadingHTTPServer
 
-    import insta_agent.web as web
     from insta_agent.web import Steuerung, _handler_klasse
 
     # Ein eigenes Bild in einem nachgestellten Projektordner.

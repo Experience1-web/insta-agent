@@ -27,7 +27,7 @@ pause
 exit /b
 :netzfehler
 echo.
-echo   Keine Verbindung zu GitHub. Internet pruefen und nochmal versuchen.
+echo   Keine Verbindung zu GitHub. Internet prüfen und nochmal versuchen.
 echo.
 pause
 exit /b
