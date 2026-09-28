@@ -170,3 +170,35 @@ def test_jeder_aufruf_wird_auch_abgerechnet(agent_mit_mitschrift):
     buchungen = [z for z in agent.store.ledger_entries(100) if z["category"] == "llm"]
     assert len(buchungen) == len(client.anfragen)
     assert bericht.cost_usd > 0
+
+
+def test_jede_anfrage_nutzt_den_zwischenspeicher_richtig(agent_mit_mitschrift):
+    """Die Haltung (System-Prompt) ist immer gemerkt. Der Auftrag nur bei
+    einer Websuche - dort liest das Modell ihn nach jeder Suche erneut;
+    ohne Suche kostete das Merkzeichen nur den Aufschlag."""
+    agent, client = agent_mit_mitschrift
+    agent.run_cycle()
+
+    merkzeichen = 0
+    for anfrage in client.anfragen:
+        system = anfrage["system"]
+        assert isinstance(system, list) and system[-1]["cache_control"] == {"type": "ephemeral"}
+        erster = anfrage["messages"][0]["content"][0]
+        mit_suche = bool(anfrage.get("tools"))
+        assert ("cache_control" in erster) is mit_suche, anfrage.get("tools")
+        merkzeichen += 1 + mit_suche
+        # Höchstens vier Merkzeichen je Anfrage erlaubt die API.
+        assert 1 + mit_suche <= 4
+    assert merkzeichen >= len(client.anfragen)
+    assert any(a.get("tools") for a in client.anfragen), "kein Aufruf mit Websuche geprüft"
+
+
+def test_gespeicherte_token_werden_richtig_berechnet():
+    from insta_agent.economy.pricing import cost_of_usage
+
+    usage = SimpleNamespace(
+        input_tokens=1000, output_tokens=0,
+        cache_read_input_tokens=10_000, cache_creation_input_tokens=0,
+    )
+    # Sonnet 5: 1.000 frisch zu 2 $/Mio + 10.000 gelesen zu 0,20 $/Mio
+    assert cost_of_usage("claude-sonnet-5", usage) == pytest.approx(0.002 + 0.002)

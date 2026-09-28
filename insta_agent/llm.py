@@ -85,6 +85,36 @@ class _KeinErgebnis(Exception):
     """Dieses Modell hat nichts Brauchbares geliefert - das naechste ist dran."""
 
 
+
+# Zwischenspeicher (Prompt-Caching). Die Haltung einer Rolle - der
+# System-Prompt - ist bei jedem ihrer Aufrufe Wort für Wort gleich; liegt
+# sie im Zwischenspeicher, kostet sie beim nächsten Aufruf innerhalb von
+# fünf Minuten nur ein Zehntel. Bei einer Websuche lohnt es sich
+# ausserdem für den ganzen Auftrag: Das Modell liest ihn nach jeder
+# Suche erneut, und aus dem Zwischenspeicher ist das fast umsonst.
+# Einmalige Aufrufe zahlen einen kleinen Aufschlag (ein Viertel auf den
+# gespeicherten Teil); zu kurze Texte werden gar nicht gespeichert und
+# kosten nichts extra.
+ZWISCHENSPEICHER = {"type": "ephemeral"}
+
+
+def _system_bloecke(system: str) -> list[dict[str, Any]]:
+    """Der System-Prompt als Block mit Merkzeichen für den Zwischenspeicher."""
+    return [{"type": "text", "text": system, "cache_control": dict(ZWISCHENSPEICHER)}]
+
+
+def _erste_nachricht(prompt: str, *, mit_suche: bool) -> dict[str, Any]:
+    """Der Auftrag - bei einer Websuche ebenfalls gemerkt, sonst nicht.
+
+    Ohne Suche wird der Auftrag genau einmal gelesen; ein Merkzeichen
+    kostete dort nur den Aufschlag. Mit Suche liest das Modell ihn nach
+    jedem Suchschritt wieder.
+    """
+    block: dict[str, Any] = {"type": "text", "text": prompt}
+    if mit_suche:
+        block["cache_control"] = dict(ZWISCHENSPEICHER)
+    return {"role": "user", "content": [block]}
+
 class Brain:
     def __init__(self, config: LLMConfig, treasury: Treasury, api_key: str | None = None) -> None:
         self.config = config
@@ -170,6 +200,9 @@ class Brain:
                 "rolle": label,
                 "input_tokens": getattr(response.usage, "input_tokens", 0),
                 "output_tokens": getattr(response.usage, "output_tokens", 0),
+                "cache_gelesen": getattr(response.usage, "cache_read_input_tokens", 0) or 0,
+                "cache_geschrieben": getattr(response.usage, "cache_creation_input_tokens", 0)
+                or 0,
             },
         )
         log.debug("%s auf %s: %.5f USD", label, model, cost)
@@ -253,7 +286,7 @@ class Brain:
         max_rounds: int,
     ) -> T:
         """Ein Modell, ein Werkzeugsatz. Wirft _KeinErgebnis, wenn nichts kam."""
-        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        messages: list[dict[str, Any]] = [_erste_nachricht(prompt, mit_suche=bool(tools))]
         response = None
 
         # Ein Aufruf dauert Minuten. Ohne diese Zeile steht im Protokoll
@@ -269,7 +302,7 @@ class Brain:
             kwargs: dict[str, Any] = {
                 "model": attempt_model,
                 "max_tokens": self.config.max_tokens,
-                "system": system,
+                "system": _system_bloecke(system),
                 "messages": messages,
                 "output_format": schema,
             }
@@ -405,7 +438,7 @@ class Brain:
         model = self._model_for(task, modell)
         tools = [web_search_tool(self.config.max_web_searches, model)] if web_search else []
 
-        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        messages: list[dict[str, Any]] = [_erste_nachricht(prompt, mit_suche=bool(tools))]
         total_cost = 0.0
         sources: list[str] = []
         pieces: list[str] = []
@@ -421,7 +454,7 @@ class Brain:
             kwargs: dict[str, Any] = {
                 "model": model,
                 "max_tokens": self.config.max_tokens,
-                "system": system,
+                "system": _system_bloecke(system),
                 "messages": messages,
             }
             if konfig := self._output_config(model, task):
