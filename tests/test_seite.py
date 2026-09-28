@@ -150,7 +150,7 @@ def test_ein_laufender_zyklus_meldet_sich_zwischendurch():
 
 def test_der_kopf_zeigt_das_neueste_bild():
     """Eine Seite ueber Bilder, die selbst keine zeigt, ist ein Widerspruch."""
-    assert 'class="hintergrund"' in QUELLE
+    assert 'class="hintergrund' in QUELLE
     assert "mitbild" in QUELLE
 
 

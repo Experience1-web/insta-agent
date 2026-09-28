@@ -291,6 +291,13 @@ class Steuerung:
                         "caption": daten["caption"],
                         "hashtags": daten["hashtags"],
                         "bild": Path(zeile["image_path"]).name if zeile["image_path"] else None,
+                        # Das Bild ohne Schrift - für den Kopf der Seite, wo
+                        # sonst zwei Überschriften übereinanderliegen.
+                        "grundbild": (
+                            Path(zeile["rohbild_path"]).name
+                            if "rohbild_path" in zeile.keys() and zeile["rohbild_path"]
+                            else None
+                        ),
                         "zeitpunkt": daten.get("best_time_hint", ""),
                         "erwartung": daten.get("expected_outcome", ""),
                         "aufruf": daten.get("call_to_action", ""),

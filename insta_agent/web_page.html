@@ -6,359 +6,402 @@
 <title>insta-agent</title>
 <link rel="icon" href="/avatar">
 <style>
-  /* Die Akzentfarben kommen zur Laufzeit aus der Bildsprache des Agenten.
-     Die Seite sieht dadurch nach ihm aus und nicht nach Werkzeug. */
+  /* Aufgeräumt nach dem Vorbild des Apple Store: heller Grund, weiße
+     Flächen ohne Rahmen, große ruhige Überschriften, viel Luft, runde
+     Knöpfe. Ist das System auf dunkel gestellt, folgt die Seite.
+     Die Akzentfarbe kommt zur Laufzeit aus der Bildsprache des Agenten. */
   :root {
-    --bg: #0c0e13;
-    --flaeche: #14171f;
-    --flaeche-hoch: #1b1f2a;
-    --rand: #262c39;
-    --text: #edecea;
-    --leise: #8d95a6;
-    --akzent: #E4572E;
-    --akzent-weich: rgba(228, 87, 46, 0.14);
+    color-scheme: light dark;
+    --bg: #f5f5f7;
+    --flaeche: #ffffff;
+    --flaeche-hoch: #f5f5f7;
+    --flaeche-tief: #e8e8ed;
+    --rand: #d2d2d7;
+    --linie: rgba(0, 0, 0, 0.08);
+    --text: #1d1d1f;
+    --leise: #6e6e73;
+    --platzhalter: #8e8e93;
+    --akzent: #0071e3;
+    --akzent-weich: rgba(0, 113, 227, 0.12);
     --marke: #16324F;
-    --gut: #4ade80;
-    --warnung: #fbbf24;
-    --schlecht: #f87171;
-    --radius: 14px;
+    --gut: #1a7f37;
+    --gut-weich: rgba(52, 199, 89, 0.14);
+    --warnung: #b25000;
+    --warnung-weich: rgba(255, 149, 0, 0.16);
+    --schlecht: #d70015;
+    --schlecht-weich: rgba(255, 59, 48, 0.12);
+    --bildgrund: #1d1d1f;
+    --schatten: 0 2px 12px rgba(0, 0, 0, 0.06);
+    --schatten-hoch: 0 12px 34px rgba(0, 0, 0, 0.12);
+    --kopfleiste: rgba(245, 245, 247, 0.8);
+    --radius: 18px;
+    --radius-klein: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --flaeche: #1c1c1e;
+      --flaeche-hoch: #2c2c2e;
+      --flaeche-tief: #3a3a3c;
+      --rand: #38383a;
+      --linie: rgba(255, 255, 255, 0.09);
+      --text: #f5f5f7;
+      --leise: #a1a1a6;
+      --platzhalter: #6e6e73;
+      --akzent: #2997ff;
+      --akzent-weich: rgba(41, 151, 255, 0.16);
+      --gut: #30d158;
+      --gut-weich: rgba(48, 209, 88, 0.16);
+      --warnung: #ffb340;
+      --warnung-weich: rgba(255, 179, 64, 0.16);
+      --schlecht: #ff6961;
+      --schlecht-weich: rgba(255, 105, 97, 0.16);
+      --bildgrund: #000000;
+      --schatten: none;
+      --schatten-hoch: 0 12px 34px rgba(0, 0, 0, 0.5);
+      --kopfleiste: rgba(22, 22, 23, 0.8);
+    }
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    margin: 0; padding: 0 20px 100px;
+    margin: 0; padding: 0 16px 120px;
     background: var(--bg); color: var(--text);
-    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 17px/1.47 -apple-system, BlinkMacSystemFont, "SF Pro Text",
+          "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.012em;
     -webkit-font-smoothing: antialiased;
   }
-  .huelle { max-width: 1080px; margin: 0 auto; }
+  .huelle { max-width: 1040px; margin: 0 auto; }
+  a { color: var(--akzent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font: 0.88em ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+         background: var(--flaeche-hoch); padding: 1px 6px; border-radius: 6px; }
 
-  /* ---------- Kopfzeile ---------- */
+  /* ---------- Kopfleiste: dünn, durchscheinend, bleibt oben ---------- */
   .oben {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 18px 0; font-size: 12.5px; color: var(--leise);
-    border-bottom: 1px solid var(--rand); margin-bottom: 40px;
+    position: sticky; top: 0; z-index: 40;
+    margin: 0 -16px 8px; padding: 0 16px;
+    font-size: 12px; color: var(--leise);
+    background: var(--kopfleiste);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--linie);
   }
+  .oben-innen { max-width: 1040px; margin: 0 auto; min-height: 48px;
+                display: flex; align-items: center; gap: 6px 16px; flex-wrap: wrap;
+                padding: 8px 0; }
+  .markenname { font-size: 17px; font-weight: 600; color: var(--text);
+                letter-spacing: -0.02em; }
   .oben .stand { font-variant-numeric: tabular-nums; }
-  .zustand { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 520px) { .oben .stand { display: none; } }
+  .zustand { margin-left: auto; display: flex; align-items: center; gap: 8px;
+             color: var(--text); font-weight: 500; }
   .puls { width: 8px; height: 8px; border-radius: 50%; background: var(--gut);
           animation: puls 1.1s infinite; }
   @keyframes puls { 50% { opacity: 0.25; } }
 
-  /* ---------- Kopf: das Vorhaben ---------- */
-  /* Der Kopf traegt das neueste Bild als Hintergrund. Eine Seite ueber
-     Bilder, die selbst keine zeigt, ist ein Widerspruch. */
+  /* ---------- Kopf: groß, ruhig, das neueste Bild dahinter ---------- */
   .leitstand {
-    margin-bottom: 34px; animation: auftauchen 0.35s ease-out backwards;
-    position: relative; border-radius: var(--radius); overflow: hidden;
+    margin: 28px 0 8px; animation: auftauchen 0.35s ease-out backwards;
+    position: relative; border-radius: 28px; overflow: hidden;
+    padding: 12px 4px 8px;
   }
-  .leitstand.mitbild { padding: 46px 32px 30px; min-height: 260px;
-                       display: flex; flex-direction: column; justify-content: flex-end; }
+  .leitstand.mitbild {
+    padding: 56px 40px 40px; min-height: 340px; color: #f5f5f7;
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
   .leitstand .hintergrund {
     position: absolute; inset: 0; z-index: 0;
-    /* Etwas ueber der Mitte: Bei Hochformaten sitzt das Motiv meist oben. */
     background-size: cover; background-position: center 35%;
-    transform: scale(1.04); filter: saturate(1.05);
+    transform: scale(1.04);
   }
-  /* Ohne diesen Verlauf ist die Schrift auf einem hellen Bild unlesbar. */
+  /* Nur das fertige Bild mit Schrift da: weichzeichnen, damit die Schrift
+     darauf nicht mit dem Namen oben konkurriert. */
+  .leitstand .hintergrund.weich { filter: blur(14px) saturate(1.2); transform: scale(1.15); }
   .leitstand .schleier {
     position: absolute; inset: 0; z-index: 1;
     background: linear-gradient(180deg,
-      rgba(12,14,19,0.35) 0%, rgba(12,14,19,0.72) 45%, rgba(12,14,19,0.96) 100%);
+      rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 45%, rgba(0,0,0,0.88) 100%);
   }
   .leitstand .vorn { position: relative; z-index: 2; }
-  .vorhaben {
-    font-size: clamp(27px, 4.4vw, 40px); line-height: 1.1; margin: 6px 0 10px;
-    letter-spacing: -0.025em; font-weight: 800;
+  .rolle {
+    font-size: 14px; font-weight: 600; color: var(--leise); margin-bottom: 4px;
+  }
+  .leitstand.mitbild .rolle { color: rgba(245, 245, 247, 0.75); }
+  h1.vorhaben {
+    font-size: clamp(40px, 7vw, 64px); line-height: 1.05; margin: 0 0 12px;
+    letter-spacing: -0.03em; font-weight: 700;
   }
   .untertitel {
-    margin: 0; color: var(--leise); font-size: 15px;
-    display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: baseline;
+    margin: 0; color: var(--leise); font-size: clamp(17px, 2vw, 21px);
+    line-height: 1.4; max-width: 46ch;
+    display: flex; flex-direction: column; gap: 6px;
   }
-  .untertitel a { color: var(--akzent); text-decoration: none; font-weight: 600; }
-  .untertitel a:hover { text-decoration: underline; }
+  .leitstand.mitbild .untertitel { color: rgba(245, 245, 247, 0.86); }
+  .untertitel a { color: var(--akzent); font-weight: 500; }
+  .leitstand.mitbild .untertitel a { color: #fff; }
 
-  /* ---------- Held: die Mitarbeiterkarte ---------- */
-  .held {
-    display: grid; gap: 34px; align-items: center;
-    grid-template-columns: auto 1fr; margin-bottom: 18px;
-  }
-  .portrait {
-    width: 148px; height: 148px; border-radius: 50%; object-fit: cover;
-    background: var(--flaeche); border: 3px solid var(--akzent);
-    box-shadow: 0 0 0 9px var(--akzent-weich);
-  }
-  .rolle {
-    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--akzent); font-weight: 700; margin-bottom: 8px;
-  }
+  /* ---------- Held (Personenseite) ---------- */
+  .held { display: grid; gap: 34px; align-items: center;
+          grid-template-columns: auto 1fr; margin-bottom: 18px; }
+  .portrait { width: 148px; height: 148px; border-radius: 50%; object-fit: cover;
+              background: var(--flaeche-hoch); }
   .name { font-size: clamp(30px, 5vw, 46px); line-height: 1.08; margin: 0 0 14px;
-          letter-spacing: -0.025em; font-weight: 800; }
-  .motto {
-    font: italic 400 clamp(17px, 2.3vw, 23px)/1.45 Georgia, "Times New Roman", serif;
-    color: var(--text); margin: 0 0 16px; max-width: 42ch;
-    border-left: 3px solid var(--akzent); padding-left: 18px;
-  }
+          letter-spacing: -0.025em; font-weight: 700; }
+  .motto { font-size: clamp(17px, 2.3vw, 21px); line-height: 1.45;
+           color: var(--text); margin: 0 0 16px; max-width: 42ch; }
   .steckbrief { display: flex; gap: 10px 22px; flex-wrap: wrap;
                 font-size: 14px; color: var(--leise); }
   .steckbrief b { color: var(--text); font-weight: 600; }
 
-  /* ---------- Abschnitte ---------- */
+  /* ---------- Abschnitte: Überschrift wie im Store ---------- */
   h2 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: 0.15em;
-    color: var(--leise); margin: 52px 0 16px; font-weight: 700;
-    display: flex; align-items: center; gap: 12px;
+    font-size: clamp(24px, 3.2vw, 32px); line-height: 1.12; font-weight: 700;
+    letter-spacing: -0.022em; color: var(--text);
+    margin: 64px 0 20px;
   }
-  h2::after { content: ""; flex: 1; height: 1px; background: var(--rand); }
-  h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 .grau { color: var(--leise); }
+  h3 { font-size: 19px; margin: 0 0 8px; letter-spacing: -0.015em; font-weight: 600; }
 
   .karte {
-    background: var(--flaeche); border: 1px solid var(--rand);
-    border-radius: var(--radius); padding: 22px 24px;
+    background: var(--flaeche); border-radius: var(--radius); padding: 24px 26px;
+    box-shadow: var(--schatten);
   }
   .karte + .karte { margin-top: 14px; }
-  .gitter { display: grid; gap: 16px; }
+  .gitter { display: grid; gap: 18px; }
   .zwei { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
   .drei { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 
   /* ---------- Kennzahlen ---------- */
-  .kacheln { display: grid; gap: 12px;
-             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-  .kachel { background: var(--flaeche); border: 1px solid var(--rand);
-            border-radius: var(--radius); padding: 15px 17px; }
-  .kachel .wert { font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums;
-                  letter-spacing: -0.02em; }
-  .kachel .name { font-size: 11.5px; color: var(--leise); text-transform: uppercase;
-                  letter-spacing: 0.08em; margin-top: 3px; }
+  .kacheln { display: grid; gap: 14px;
+             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .kachel { background: var(--flaeche); border-radius: var(--radius);
+            padding: 20px 22px; box-shadow: var(--schatten); }
+  .kachel .wert { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums;
+                  letter-spacing: -0.025em; line-height: 1.15; }
+  .kachel .name { font-size: 13px; color: var(--leise); margin-top: 4px; }
 
   /* ---------- Das Vorhaben ---------- */
-  .vorhaben { border-left: 3px solid var(--akzent); }
-  /* Frueher stand das Ziel in Ueberschriftengroesse. Das ging, solange es
-     ein Satz war - inzwischen schreibt er Absaetze, und ein Absatz in 25px
-     fett ist eine Wand. Gross genug, um herauszustechen, klein genug, um
-     ein Absatz sein zu duerfen. */
-  .ziel { font-size: clamp(16.5px, 1.5vw, 19px); font-weight: 600; line-height: 1.5;
-          letter-spacing: -0.01em; margin: 0 0 12px; max-width: 68ch; }
-  /* Im Fenster ist das Ziel ein Absatz, keine Schlagzeile - fett ueber
-     fuenf Zeilen liest sich niemand durch. */
-  .popup-inhalt .ziel { font-size: 17px; font-weight: 500; line-height: 1.6;
-                        border-left: 3px solid var(--akzent); padding-left: 16px; }
+  .ziel { font-size: clamp(17px, 1.6vw, 21px); font-weight: 600; line-height: 1.4;
+          letter-spacing: -0.015em; margin: 0 0 12px; max-width: 60ch; }
+  .popup-inhalt .ziel { font-size: 17px; font-weight: 500; line-height: 1.6; }
   .begruendung { color: var(--leise); margin: 0 0 18px; max-width: 72ch; }
   dl.fakten { display: grid; grid-template-columns: max-content 1fr;
-              gap: 14px 24px; margin: 0; font-size: 14.5px; }
+              gap: 14px 24px; margin: 0; font-size: 15px; }
   dl.fakten dt { color: var(--leise); }
-  /* Ohne eigene Zeilenhoehe backen mehrzeilige Werte ineinander. */
   dl.fakten dd { margin: 0; line-height: 1.6; }
   dl.fakten ul { margin: 0; padding-left: 18px; }
   dl.fakten li { margin: 3px 0; }
   @media (max-width: 620px) {
-    /* Nebeneinander bleibt auf dem Handy kein Platz fuer den Wert. */
     dl.fakten { grid-template-columns: 1fr; gap: 4px; }
     dl.fakten dt { margin-top: 10px; }
   }
 
-  /* ---------- Beiträge ---------- */
-  /* Zwei Beitraege nebeneinander, das Bild daneben statt darueber: So
-     bleibt die Caption lesbar breit und das Bild trotzdem gross genug,
-     um zu erkennen, was er da gebaut hat. */
-  /* Eine Galerie, kein Textblock: Das Bild ist der Beitrag, der Rest
-     steht darunter oder im Fenster. */
-  .beitraege { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-               align-items: start; }
-  .beitragsbild { position: relative; background: #05070b; }
+  /* ---------- Beiträge: eine Reihe zum Wischen, wie im Store ---------- */
+  .beitraege {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 300px);
+    gap: 18px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory; scroll-padding: 0 16px;
+    margin: 0 -16px; padding: 6px 16px 26px; align-items: start;
+    scrollbar-width: thin;
+  }
+  .beitraege > * { scroll-snap-align: start; }
+  .beitragsbild { position: relative; background: var(--bildgrund); }
   .beitragsbild img { aspect-ratio: 4 / 5; object-fit: cover; }
-  /* Marken liegen auf dem Bild, damit sie keine Zeile kosten. */
   .beitragsbild .marken {
-    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    position: absolute; left: 12px; right: 12px; bottom: 12px;
     display: flex; flex-wrap: wrap; gap: 5px;
   }
-  .beitragsbild .marken .marke { backdrop-filter: blur(6px); }
+  .beitragsbild .marken .marke {
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.5); color: #fff;
+  }
+  .beitragsbild .marken .marke.gepruft { background: rgba(26, 127, 55, 0.78); }
+  .beitragsbild .marken .marke.mangel { background: rgba(178, 80, 0, 0.82); }
+  .beitragsbild .marken .marke.abgelehnt { background: rgba(215, 0, 21, 0.8); }
   .ohnebild .beitragsbild {
     aspect-ratio: 4 / 5; display: grid; place-items: center; padding: 18px;
-    background: linear-gradient(160deg, var(--flaeche-hoch), var(--flaeche));
+    background: var(--flaeche-hoch);
   }
   .ohnebild .beitragsbild .leerhinweis {
-    color: var(--leise); font-size: 13px; text-align: center; line-height: 1.6;
+    color: var(--leise); font-size: 14px; text-align: center; line-height: 1.6;
   }
-  .beitrag { background: var(--flaeche); border: 1px solid var(--rand);
-             border-radius: var(--radius); overflow: hidden; display: flex;
-             flex-direction: column; }
-  .beitrag img { width: 100%; display: block; background: #000; }
-  @media (min-width: 900px) {
-    /* Beide Knoepfe sollen nebeneinander passen und nicht umbrechen. */
-    .beitrag .knopfreihe > * { flex: 1 1 auto; text-align: center; }
-  }
-  .beitrag .inhalt { padding: 16px 18px; display: flex; flex-direction: column;
-                     flex: 1; gap: 10px; }
-  .beitrag .caption { white-space: pre-wrap; font-size: 14.5px; margin: 0; flex: 1; }
-  .tags { color: var(--leise); font-size: 13px; word-break: break-word; }
-  .feld { border-top: 1px solid var(--rand); padding-top: 11px; }
+  .beitrag { background: var(--flaeche); border-radius: var(--radius); overflow: hidden;
+             display: flex; flex-direction: column; box-shadow: var(--schatten); }
+  .beitrag img { width: 100%; display: block; background: var(--bildgrund); }
+  .beitrag .knopfreihe > * { flex: 1 1 auto; text-align: center; }
+  .beitrag .inhalt { padding: 18px 20px 20px; display: flex; flex-direction: column;
+                     flex: 1; gap: 12px; }
+  .beitrag .caption { font-size: 17px; font-weight: 600; line-height: 1.3; margin: 0;
+                      letter-spacing: -0.015em; flex: 1; }
+  .tags { color: var(--leise); font-size: 14px; word-break: break-word; }
+  .feld { border-top: 1px solid var(--linie); padding-top: 14px; margin-top: 14px; }
   .feldkopf { display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
-              font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
-              color: var(--leise); font-weight: 600; }
+              font-size: 13px; color: var(--leise); font-weight: 600; }
   .feldkopf span { flex: 1; }
-  .winzig { padding: 3px 9px; font-size: 11px; border-radius: 99px;
-            background: var(--rand); color: var(--text); border: none; cursor: pointer; }
-  .winzig:hover { background: #333b4b; }
-  .winzig.fertig { background: var(--gut); color: #05240f; }
-  .prompt { display: block; font-size: 12.5px; line-height: 1.5; color: var(--leise);
-            background: var(--bg); border: 1px solid var(--rand); border-radius: 9px;
-            padding: 10px 12px; white-space: pre-wrap; word-break: break-word;
+  .winzig { padding: 4px 11px; font-size: 12px; border-radius: 980px; font-weight: 500;
+            background: var(--flaeche-tief); color: var(--text); border: none; cursor: pointer; }
+  .winzig:hover { filter: brightness(0.95); }
+  .winzig.fertig { background: var(--gut); color: #fff; }
+  .prompt { display: block; font-size: 13px; line-height: 1.5; color: var(--leise);
+            background: var(--flaeche-hoch); border-radius: var(--radius-klein);
+            padding: 12px 14px; white-space: pre-wrap; word-break: break-word;
             font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-  .frage { margin: 0; font-size: 14px; font-style: italic; color: var(--text); }
-  .bildtext { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
+  .frage { margin: 0; font-size: 15px; font-style: italic; color: var(--text); }
+  .bildtext { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.3;
+              letter-spacing: -0.015em; }
   .marke {
-    display: inline-block; font-size: 10.5px; padding: 3px 9px; border-radius: 99px;
-    background: var(--rand); color: var(--leise); text-transform: uppercase;
-    letter-spacing: 0.07em; font-weight: 600;
+    display: inline-block; font-size: 11.5px; padding: 3px 10px; border-radius: 980px;
+    background: var(--flaeche-tief); color: var(--leise); font-weight: 600;
   }
-  .marke.live { background: var(--gut); color: #05240f; }
-  .marke.warm { background: var(--warnung); color: #2a1c00; }
-  button.klein.warn { background: var(--warnung); color: #2a1c00; font-weight: 600; }
+  .marke.live { background: var(--gut); color: #fff; }
+  .marke.warm { background: var(--warnung-weich); color: var(--warnung); }
+  button.klein.warn { background: var(--warnung-weich); color: var(--warnung); }
   .marke.aus  { opacity: 0.55; text-decoration: line-through; }
-  .klein.gut { background: var(--gut); border-color: var(--gut); color: #05240f; }
-  .klein.gut:hover:not(:disabled) { background: #6ee79c; }
+  .klein.gut { background: var(--gut); border-color: var(--gut); color: #fff; }
   .marke.akzent { background: var(--akzent); color: #fff; }
 
   /* ---------- Ideen ---------- */
-  .idee { background: var(--flaeche); border: 1px solid var(--rand);
-          border-radius: var(--radius); padding: 18px 20px; display: flex;
-          flex-direction: column; gap: 9px; }
-  .idee.empfohlen { border-color: var(--akzent); background: var(--flaeche-hoch); }
-  .idee .zahl { font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
+  .idee { background: var(--flaeche); border-radius: var(--radius); padding: 22px 24px;
+          display: flex; flex-direction: column; gap: 10px; box-shadow: var(--schatten);
+          border: 2px solid transparent; }
+  .idee.empfohlen { border-color: var(--akzent); }
+  .idee .zahl { font-size: 28px; font-weight: 700; letter-spacing: -0.025em;
                 font-variant-numeric: tabular-nums; }
-  .idee .erlaeuterung { font-size: 13.5px; color: var(--leise); }
-  .balken { height: 5px; border-radius: 99px; background: var(--rand); overflow: hidden; }
+  .idee .erlaeuterung { font-size: 14px; color: var(--leise); }
+  .balken { height: 6px; border-radius: 99px; background: var(--flaeche-tief); overflow: hidden; }
   .balken i { display: block; height: 100%; background: var(--akzent); }
 
-  /* ---------- Bedienung ---------- */
+  /* ---------- Bedienung: runde Knöpfe, ruhige Felder ---------- */
   input, select, textarea, button, .knopf {
-    font: inherit; border-radius: 10px; border: 1px solid var(--rand);
-    background: var(--bg); color: var(--text); padding: 11px 13px;
+    font: inherit; font-size: 16px; border-radius: var(--radius-klein);
+    border: 1px solid var(--rand); background: var(--flaeche); color: var(--text);
+    padding: 11px 14px;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--akzent); box-shadow: 0 0 0 4px var(--akzent-weich);
   }
   textarea { width: 100%; resize: vertical; line-height: 1.5; min-height: 68px; }
-  textarea::placeholder { color: #667289; }
-  /* Ein Formular im Popup: Beschriftung ueber dem Feld, nie daneben -
-     auf dem Handy bleibt fuer beides nebeneinander kein Platz. */
-  .formzeile { margin-bottom: 14px; }
-  .formzeile > label { display: block; font-size: 12.5px; letter-spacing: 0.04em;
-    text-transform: uppercase; color: var(--leise); margin-bottom: 6px; }
+  textarea::placeholder, input::placeholder { color: var(--platzhalter); }
+  .formzeile { margin-bottom: 16px; }
+  .formzeile > label { display: block; font-size: 13px; font-weight: 600;
+    color: var(--leise); margin-bottom: 6px; }
   .formzeile > input { width: 100%; }
   .formzeile .hinweis { margin: 6px 0 0; }
-  /* Das Zahnrad sitzt in der Personenkarte und darf den Klick auf die
-     Karte nicht erben - sonst oeffnet sich beides. */
   .zahnrad {
     background: none; border: none; padding: 6px 8px; color: var(--leise);
-    font-size: 17px; line-height: 1; border-radius: 8px;
+    font-size: 17px; line-height: 1; border-radius: 50%;
   }
-  .zahnrad:hover { background: var(--rand); color: var(--text); filter: none; }
+  .zahnrad:hover { background: var(--flaeche-hoch); color: var(--text); filter: none; }
   input { flex: 1; min-width: 150px; }
-  input::placeholder { color: #667289; }
   button, .knopf {
     background: var(--akzent); border-color: var(--akzent); color: #fff;
-    font-weight: 650; cursor: pointer; padding: 11px 24px; text-decoration: none;
-    display: inline-block; white-space: nowrap;
+    font-weight: 500; cursor: pointer; padding: 11px 22px; text-decoration: none;
+    display: inline-block; white-space: nowrap; border-radius: 980px;
+    transition: filter 0.15s ease, background 0.15s ease;
   }
-  button:hover:not(:disabled), .knopf:hover { filter: brightness(1.13); }
-  button:disabled { opacity: 0.45; cursor: not-allowed; }
-  .klein { padding: 8px 13px; font-size: 13px; font-weight: 550;
-           background: var(--rand); border-color: var(--rand); color: var(--text); }
-  .klein:hover:not(:disabled) { background: #333b4b; filter: none; }
-  .klein.fertig { background: var(--gut); border-color: var(--gut); color: #05240f; }
+  button:hover:not(:disabled), .knopf:hover { filter: brightness(1.08); text-decoration: none; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .klein { padding: 8px 16px; font-size: 14px; font-weight: 500;
+           background: var(--flaeche-tief); border-color: transparent; color: var(--text); }
+  .klein:hover:not(:disabled) { filter: brightness(0.96); }
+  .klein.fertig { background: var(--gut); border-color: var(--gut); color: #fff; }
   .zeile { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .knopfreihe { display: flex; gap: 8px; flex-wrap: wrap; }
 
   pre {
-    background: #07090c; border: 1px solid var(--rand); border-radius: var(--radius);
-    padding: 16px; overflow: auto; max-height: 300px; margin: 0;
-    font: 13px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
-    white-space: pre-wrap;
+    background: var(--flaeche); border-radius: var(--radius); box-shadow: var(--schatten);
+    padding: 18px 20px; overflow: auto; max-height: 320px; margin: 0;
+    font: 13px/1.65 ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    white-space: pre-wrap; color: var(--text);
   }
-  .verlauf { max-height: 300px; overflow: auto; }
-  .verlauf div { display: flex; gap: 14px; padding: 7px 0; font-size: 13.5px; }
-  .verlauf div + div { border-top: 1px solid var(--rand); }
+  .verlauf { max-height: 320px; overflow: auto; }
+  .verlauf div { display: flex; gap: 14px; padding: 9px 0; font-size: 14px; }
+  .verlauf div + div { border-top: 1px solid var(--linie); }
   .verlauf .zeit { color: var(--leise); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-  .verlauf .art { color: var(--akzent); min-width: 96px; flex-shrink: 0; font-size: 12px;
-                  text-transform: uppercase; letter-spacing: 0.06em; padding-top: 2px; }
-  details summary { cursor: pointer; color: var(--leise); font-size: 13px; }
-  .hinweis { color: var(--leise); font-size: 14px; }
+  .verlauf .art { color: var(--leise); min-width: 96px; flex-shrink: 0; font-size: 12px;
+                  font-weight: 600; padding-top: 2px; }
+  details summary { cursor: pointer; color: var(--akzent); font-size: 14px; }
+  .hinweis { color: var(--leise); font-size: 15px; }
   .gut { color: var(--gut); } .warnung { color: var(--warnung); }
   .schlecht { color: var(--schlecht); }
   ul.schritte { margin: 8px 0 0; padding-left: 20px; }
   ul.schritte li { margin-bottom: 5px; }
   .tabellenkasten { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
-  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--rand); }
-  th { color: var(--leise); font-weight: 600; font-size: 11.5px;
-       text-transform: uppercase; letter-spacing: 0.07em; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 460px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--linie); }
+  th { color: var(--leise); font-weight: 600; font-size: 13px; }
   td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
 
+  :focus-visible { outline: 3px solid var(--akzent-weich); outline-offset: 2px; }
+  #kassekorrektur { margin-top: 14px; }
   @media (max-width: 640px) {
+    .kachel .wert { font-size: 21px; }
+    .kachel { padding: 16px 18px; }
     .held { grid-template-columns: 1fr; gap: 20px; text-align: left; }
-    .portrait { width: 104px; height: 104px; box-shadow: 0 0 0 6px var(--akzent-weich); }
+    .portrait { width: 104px; height: 104px; }
+    .leitstand.mitbild { padding: 40px 22px 26px; min-height: 280px; border-radius: 22px; }
+    .karte { padding: 20px; }
+    h2 { margin-top: 48px; }
   }
 
-  /* ---------- Popup: alles Lange steckt hier drin ----------
-     Die Seite war zugebaut, weil jeder Beitrag seinen vollen Text zeigte.
-     Jetzt zeigt die Karte, was man zum Entscheiden braucht; alles Weitere
-     kommt auf Klick. */
+  /* ---------- Popup ---------- */
   .popup-grund {
     position: fixed; inset: 0; z-index: 50;
-    background: rgba(6, 8, 12, 0.72);
-    backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     display: flex; align-items: flex-start; justify-content: center;
-    padding: 5vh 18px; overflow-y: auto;
+    padding: 5vh 16px; overflow-y: auto;
     animation: einblenden 0.18s ease-out;
   }
   .popup {
-    background: var(--flaeche); border: 1px solid var(--rand);
-    border-radius: var(--radius); max-width: 760px; width: 100%;
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+    background: var(--flaeche); border-radius: 22px; max-width: 760px; width: 100%;
+    box-shadow: var(--schatten-hoch);
     animation: hochkommen 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
   }
   .popup-kopf {
     display: flex; align-items: center; gap: 14px;
-    padding: 20px 22px; border-bottom: 1px solid var(--rand);
-    position: sticky; top: 0; background: var(--flaeche);
-    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 20px 24px; border-bottom: 1px solid var(--linie);
+    position: sticky; top: 0; background: var(--flaeche); z-index: 2;
+    border-radius: 22px 22px 0 0;
   }
-  .popup-kopf h3 { margin: 0; font-size: 19px; flex: 1; }
-  .popup-inhalt { padding: 22px; }
-  .popup-inhalt a { color: var(--akzent); }
-  .grossbild { width: 100%; border-radius: 10px; display: block;
-               margin-bottom: 18px; background: #05070b; }
+  .popup-kopf h3 { margin: 0; font-size: 21px; flex: 1; }
+  .popup-inhalt { padding: 24px; }
+  .grossbild { width: 100%; border-radius: var(--radius-klein); display: block;
+               margin-bottom: 18px; background: var(--bildgrund); }
   .popup-inhalt ul { margin: 6px 0; padding-left: 20px; }
   .popup-inhalt li { margin: 4px 0; word-break: break-word; }
   .popup-inhalt .feld:first-child { margin-top: 0; }
   .zu {
-    background: none; border: 1px solid var(--rand); color: var(--leise);
-    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
-    font-size: 19px; line-height: 1; flex: none;
-    transition: background 0.15s, color 0.15s, transform 0.15s;
+    background: var(--flaeche-hoch); border: none; color: var(--leise);
+    width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: pointer;
+    font-size: 17px; line-height: 1; flex: none;
+    transition: background 0.15s, color 0.15s;
   }
-  .zu:hover { background: var(--flaeche-hoch); color: var(--text); transform: rotate(90deg); }
+  .zu:hover { background: var(--flaeche-tief); color: var(--text); filter: none; }
 
   @keyframes einblenden { from { opacity: 0; } }
 
   /* Solange im Hintergrund etwas läuft: unten eine Leiste, die stehen
-     bleibt, auch wenn die Seite neu gezeichnet wird. Vorher schloss sich
-     das Popup, und nichts zeigte, dass überhaupt gearbeitet wird. */
+     bleibt, auch wenn die Seite neu gezeichnet wird. */
   .arbeitsleisten {
-    position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 1000;
+    position: fixed; left: 16px; right: 16px; bottom: 20px; z-index: 1000;
     display: flex; flex-direction: column; align-items: center; gap: 10px;
     pointer-events: none;
   }
   .arbeitsleiste {
     display: flex; align-items: center; gap: 12px;
-    max-width: calc(100vw - 32px); padding: 12px 18px;
-    background: var(--flaeche-hoch); color: var(--text);
-    border: 1px solid var(--rand); border-radius: var(--radius);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); font-size: 14px;
+    max-width: calc(100vw - 32px); padding: 12px 20px;
+    background: var(--kopfleiste); color: var(--text);
+    backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border: 1px solid var(--linie); border-radius: 980px;
+    box-shadow: var(--schatten-hoch); font-size: 15px;
     animation: einblenden 0.2s ease-out;
   }
   .arbeitsleiste .kreisel {
     flex: none; width: 16px; height: 16px; border-radius: 50%;
-    border: 2px solid var(--rand); border-top-color: var(--akzent);
+    border: 2px solid var(--flaeche-tief); border-top-color: var(--akzent);
     animation: drehen 0.9s linear infinite;
   }
   .arbeitsleiste .dauer { color: var(--leise); font-variant-numeric: tabular-nums; }
@@ -374,151 +417,110 @@
   }
 
   /* ---------- Die Mannschaft ---------- */
-  .mannschaft { display: grid; gap: 12px; }
+  .mannschaft { display: grid; gap: 12px;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
   .person {
     display: flex; align-items: center; gap: 15px; text-align: left;
-    background: var(--flaeche); border: 1px solid var(--rand);
-    border-radius: var(--radius); padding: 15px 18px; cursor: pointer;
-    color: inherit; font: inherit;
-    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    background: var(--flaeche); border: none; box-shadow: var(--schatten);
+    border-radius: var(--radius); padding: 16px 18px; cursor: pointer;
+    color: inherit; font: inherit; white-space: normal;
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
   }
-  .person:hover { transform: translateY(-2px); border-color: var(--akzent); }
-  /* Die Unterstellung wird sichtbar, nicht nur behauptet. */
-  /* Im Raster genuegt der Einzug; eine feste Breite wuerde ihn auf
-     schmalen Schirmen ueber den Rand schieben. */
-  .person.geprueft { margin-left: 34px; position: relative; }
-  @media (max-width: 520px) { .person.geprueft { margin-left: 22px; } }
-  .person.geprueft::before {
-    content: ""; position: absolute; left: -22px; top: -12px; bottom: 50%;
-    width: 22px; border-left: 1px solid var(--rand);
-    border-bottom: 1px solid var(--rand); border-bottom-left-radius: 8px;
-  }
+  .person:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--schatten-hoch);
+                                 filter: none; }
+  .person.geprueft { position: relative; }
   .zeichen {
-    width: 42px; height: 42px; border-radius: 50%; flex: none;
-    display: grid; place-items: center; font-weight: 800; font-size: 15px;
+    width: 44px; height: 44px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-weight: 700; font-size: 15px;
     background: var(--akzent-weich); color: var(--akzent);
-    border: 1px solid var(--akzent);
   }
-  .person.geprueft .zeichen {
-    background: var(--flaeche-hoch); color: var(--leise); border-color: var(--rand);
-  }
+  .person.geprueft .zeichen { background: var(--flaeche-hoch); color: var(--leise); }
   .person .wer { flex: 1; min-width: 0; }
-  .person .wer b { display: block; font-size: 15px; }
-  .person .wer span { font-size: 13px; color: var(--leise); }
+  .person .wer b { display: block; font-size: 16px; font-weight: 600; }
+  .person .wer span { font-size: 14px; color: var(--leise); }
   .person .schlafend { font-size: 12px; color: var(--warnung); }
-  .person .rechts { display: flex; align-items: center; gap: 12px; flex: none; }
-  .person .rechts .mehr { margin: 0; font-size: 12.5px; }
-  .person .mehr::after { transition: transform 0.16s ease; }
-  .person:hover .mehr::after { transform: translateX(3px); }
+  .person .rechts { display: flex; align-items: center; gap: 10px; flex: none; }
+  .person .rechts .mehr { display: none; }
   .zeichen.bild { padding: 0; object-fit: cover; background: var(--flaeche-hoch); }
   .modellinfo {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.07);
-    font-size: 13px;
-    line-height: 1.5;
+    margin-top: 10px; padding: 12px 14px; border-radius: var(--radius-klein);
+    background: var(--flaeche-hoch); font-size: 14px; line-height: 1.5;
   }
   .modellinfo p { margin: 0 0 6px; }
   .modellinfo p:last-child { margin-bottom: 0; }
   .wischreihe {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 10px;
-    scroll-snap-type: x mandatory;
-    margin-bottom: 4px;
+    display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px;
+    scroll-snap-type: x mandatory; margin-bottom: 4px;
   }
   .wischreihe figure { margin: 0; flex: 0 0 auto; scroll-snap-align: center; }
   .wischreihe img {
-    display: block;
-    height: 340px;
-    width: auto;
-    border-radius: 10px;
-    background: #000;
+    display: block; height: 340px; width: auto; border-radius: var(--radius-klein);
+    background: var(--bildgrund);
   }
   .wischreihe figcaption {
-    margin-top: 5px;
-    font-size: 11px;
-    text-align: center;
-    opacity: .5;
-    letter-spacing: .04em;
+    margin-top: 6px; font-size: 12px; text-align: center; color: var(--leise);
   }
   .wischreihe figure button { display: block; margin: 6px auto 0; }
-  @media (max-width: 720px) {
-    .wischreihe img { height: 260px; }
-  }
+  @media (max-width: 720px) { .wischreihe img { height: 260px; } }
 
-  .modellinfo .merkmal { opacity: .75; }
-  .modellinfo .preis { font-size: 14px; opacity: .95; }
-  /* Eigene Namen, weil .mehr und .klein im Rest der Seite schon etwas
-     anderes bedeuten - ein Knopf und eine Zeile mit Pfeil. */
+  .modellinfo .merkmal { color: var(--leise); }
+  .modellinfo .preis { font-size: 15px; }
   .modellinfo .abstand { margin-top: 6px; }
-  .modellinfo .teurer { color: #f0a868; }
-  .modellinfo .guenstiger { color: #7fd19a; }
-  .modellinfo .unveraendert { opacity: .7; }
-  .modellinfo .fussnote { margin-top: 8px; font-size: 11px; opacity: .45; }
-  .modellinfo .warnung { color: #f0a868; }
-  .modellinfo .gemessen { margin-top: 8px; padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,.07); }
-  .modellinfo .gemessen.leer { opacity: .5; }
+  .modellinfo .teurer { color: var(--warnung); }
+  .modellinfo .guenstiger { color: var(--gut); }
+  .modellinfo .unveraendert { color: var(--leise); }
+  .modellinfo .fussnote { margin-top: 8px; font-size: 12px; color: var(--leise); }
+  .modellinfo .warnung { color: var(--warnung); }
+  .modellinfo .gemessen { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--linie); }
+  .modellinfo .gemessen.leer { color: var(--leise); }
 
   .modellmarke {
-    font-size: 11px; letter-spacing: 0.06em; color: var(--leise);
-    border: 1px solid var(--rand); border-radius: 99px; padding: 3px 9px;
-    white-space: nowrap;
+    font-size: 12px; color: var(--leise); background: var(--flaeche-hoch);
+    border-radius: 980px; padding: 3px 10px; white-space: nowrap;
   }
   .personkopf { display: flex; gap: 18px; align-items: center; margin-bottom: 18px; }
   .grossesbild {
     width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none;
-    background: var(--flaeche-hoch); border: 2px solid var(--akzent);
+    background: var(--flaeche-hoch);
   }
   .eigenschaften { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
   @media (max-width: 520px) {
     .modellmarke { display: none; }
     .personkopf { flex-direction: column; align-items: flex-start; }
+    .mannschaft { grid-template-columns: 1fr; }
   }
   .person { animation: auftauchen 0.3s ease-out backwards; }
   .popup-inhalt .fakten { margin: 18px 0 0; }
-  @media (max-width: 520px) {
-    .person .rechts .mehr { display: none; }
-  }
 
   /* ---------- Prüfmarken ---------- */
-  .marke.gepruft { background: rgba(74, 222, 128, 0.16); color: var(--gut); }
-  .marke.mangel  { background: rgba(251, 191, 36, 0.16); color: var(--warnung); }
-  .marke.abgelehnt { background: rgba(248, 113, 113, 0.16); color: var(--schlecht); }
+  .marke.gepruft { background: var(--gut-weich); color: var(--gut); }
+  .marke.mangel  { background: var(--warnung-weich); color: var(--warnung); }
+  .marke.abgelehnt { background: var(--schlecht-weich); color: var(--schlecht); }
   .marke.ungeprueft { background: var(--flaeche-hoch); color: var(--leise); }
 
-  .befund {
-    border-left: 3px solid var(--rand); padding: 2px 0 2px 14px; margin: 12px 0;
-  }
+  .befund { border-left: 3px solid var(--rand); padding: 2px 0 2px 14px; margin: 14px 0; }
   .befund.falsch, .befund.unbelegbar { border-left-color: var(--schlecht); }
   .befund.ungenau { border-left-color: var(--warnung); }
   .befund.belegt { border-left-color: var(--gut); }
   .befund p { margin: 4px 0; }
   .befund .zitat { font-style: italic; }
 
-  /* ---------- Beitragskarte, jetzt knapp ---------- */
+  /* ---------- Klickbare Karten ---------- */
   .beitrag { animation: auftauchen 0.3s ease-out backwards; }
-  .beitrag.klickbar { cursor: pointer; transition: transform 0.16s ease,
-                      border-color 0.16s ease; }
-  .beitrag.klickbar:hover { transform: translateY(-3px); border-color: var(--akzent); }
+  .beitrag.klickbar, .karte.klickbar { cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .beitrag.klickbar:hover, .karte.klickbar:hover {
+    transform: translateY(-3px) scale(1.005); box-shadow: var(--schatten-hoch); }
   .beitrag .inhalt > div:first-child { display: flex; flex-wrap: wrap; gap: 6px; }
-  .vorhabenfuss { display: flex; align-items: center; gap: 12px;
-                    flex-wrap: wrap; margin-top: 2px; }
+  .vorhabenfuss { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 2px; }
   .vorhabenfuss .mehr { margin: 0; }
-  .karte.klickbar { cursor: pointer; transition: transform 0.16s ease,
-                    border-color 0.16s ease; }
-  .karte.klickbar:hover { transform: translateY(-2px); border-color: var(--akzent); }
-  .karte.klickbar:hover .mehr::after { transform: translateX(3px); }
   .mehr {
-    font-size: 13px; color: var(--akzent); margin-top: 2px;
-    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 15px; color: var(--akzent); margin-top: 2px;
+    display: inline-flex; align-items: center; gap: 4px;
   }
-  .mehr::after { content: "→"; transition: transform 0.16s ease; }
-  .beitrag.klickbar:hover .mehr::after { transform: translateX(3px); }
+  .mehr::after { content: "›"; font-size: 1.25em; line-height: 1;
+                 transition: transform 0.16s ease; }
+  .klickbar:hover .mehr::after { transform: translateX(3px); }
 
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -527,17 +529,61 @@
 </style>
 </head>
 <body>
-<div class="huelle">
-
 <div class="oben">
-  <span class="stand" id="version"></span>
-  <span class="zustand" id="zustand"></span>
+  <div class="oben-innen">
+    <b class="markenname" id="markenname">Leitstand</b>
+    <span class="stand" id="version"></span>
+    <span class="zustand" id="zustand"></span>
+  </div>
 </div>
+<div class="huelle">
 
 <div id="warnbox"></div>
 <div id="heldbox"></div>
 
-<div id="mannschaftbox"></div>
+<div id="postbox"></div>
+
+<div id="protokollbox" style="display:none">
+  <h2>Was er gerade tut. <span class="grau">Live.</span></h2>
+  <pre id="protokoll"></pre>
+</div>
+
+<h2 id="steuerungstitel">Arbeiten lassen. <span class="grau">Ein Zyklus bringt einen neuen Beitrag.</span></h2>
+<div class="karte" id="steuerung">
+  <div class="zeile">
+    <select id="zyklen">
+      <option value="1">1 Zyklus</option>
+      <option value="3">3 Zyklen</option>
+      <option value="7">7 Zyklen (eine Woche)</option>
+    </select>
+    <input id="hinweis" placeholder="Wunsch für die Nische (optional – sonst entscheidet er allein)">
+    <button id="start">Starten</button>
+  </div>
+  <p class="hinweis" id="starthinweis" style="margin:13px 0 0"></p>
+  <p class="hinweis" id="takthinweis" style="margin:8px 0 0; display:none"></p>
+
+  <div id="fortsetzen" style="display:none; margin-top:14px; padding-top:14px;
+       border-top:1px solid var(--linie)">
+    <p class="hinweis" style="margin:0 0 10px" id="fortsetzengrund"></p>
+    <button class="klein" id="weiter">Zyklus zu Ende führen</button>
+  </div>
+
+  <div class="zeile" style="margin-top:14px; padding-top:14px;
+       border-top:1px solid var(--linie)">
+    <label for="grenze" style="font-size:13px; opacity:.8">Höchstens je Zyklus</label>
+    <input id="grenze" type="number" step="0.25" min="0.10" max="50"
+           style="max-width:110px; min-width:90px">
+    <span style="font-size:13px; opacity:.8">USD</span>
+    <button class="klein" id="grenzesetzen">Übernehmen</button>
+  </div>
+  <p class="hinweis" style="margin:8px 0 0">
+    Die Notbremse gegen Ausreißer, kein Sparplan: Sie verhindert, dass ein
+    einzelner Lauf durch eine Schleife das halbe Guthaben verbrennt. Greift
+    sie, bricht der Zyklus ab – dann erscheint oben der Knopf zum
+    Zu-Ende-führen.
+  </p>
+</div>
+
 <div id="kassebox"></div>
 <div class="karte" id="kassekorrektur">
   <div class="zeile">
@@ -553,52 +599,11 @@
 </div>
 <div id="vorhabenbox"></div>
 
-<h2 id="steuerungstitel">Ihn arbeiten lassen</h2>
-<div class="karte" id="steuerung">
-  <div class="zeile">
-    <select id="zyklen">
-      <option value="1">1 Zyklus</option>
-      <option value="3">3 Zyklen</option>
-      <option value="7">7 Zyklen (eine Woche)</option>
-    </select>
-    <input id="hinweis" placeholder="Wunsch für die Nische (optional – sonst entscheidet er allein)">
-    <button id="start">Starten</button>
-  </div>
-  <p class="hinweis" id="starthinweis" style="margin:13px 0 0"></p>
-  <p class="hinweis" id="takthinweis" style="margin:8px 0 0; display:none"></p>
-
-  <div id="fortsetzen" style="display:none; margin-top:14px; padding-top:14px;
-       border-top:1px solid rgba(255,255,255,.09)">
-    <p class="hinweis" style="margin:0 0 10px" id="fortsetzengrund"></p>
-    <button class="klein" id="weiter">Zyklus zu Ende führen</button>
-  </div>
-
-  <div class="zeile" style="margin-top:14px; padding-top:14px;
-       border-top:1px solid rgba(255,255,255,.09)">
-    <label for="grenze" style="font-size:13px; opacity:.8">Höchstens je Zyklus</label>
-    <input id="grenze" type="number" step="0.25" min="0.10" max="50"
-           style="max-width:110px; min-width:90px">
-    <span style="font-size:13px; opacity:.8">USD</span>
-    <button class="klein" id="grenzesetzen">Übernehmen</button>
-  </div>
-  <p class="hinweis" style="margin:8px 0 0">
-    Die Notbremse gegen Ausreißer, kein Sparplan: Sie verhindert, dass ein
-    einzelner Lauf durch eine Schleife das halbe Guthaben verbrennt. Greift
-    sie, bricht der Zyklus ab – dann erscheint oben der Knopf zum
-    Zu-Ende-führen.
-  </p>
-</div>
-
-<div id="protokollbox" style="display:none">
-  <h2>Was er gerade tut</h2>
-  <pre id="protokoll"></pre>
-</div>
-
-<div id="postbox"></div>
+<div id="mannschaftbox"></div>
 <div id="ideenbox"></div>
 <div id="chancenbox"></div>
 
-<h2 id="einnahmetitel">Einnahme eintragen</h2>
+<h2 id="einnahmetitel">Einnahmen. <span class="grau">Geld empfängt nur ein Mensch.</span></h2>
 <div class="karte" id="einnahmebox">
   <div class="zeile">
     <input id="betrag" type="number" step="0.01" min="0.01" placeholder="Betrag in USD"
@@ -682,7 +687,10 @@ async function laden() {
 
 // --- Farben lesbar halten -------------------------------------------------
 
-const SEITENGRUND = [12, 14, 19];  // --bg
+// Der Grund, auf dem die Akzentfarbe lesbar sein muss: hell oder dunkel,
+// je nachdem, wie das System eingestellt ist.
+const DUNKEL = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+const SEITENGRUND = DUNKEL ? [28, 28, 30] : [255, 255, 255];  // --flaeche
 
 function zu_rgb(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
@@ -741,7 +749,8 @@ function lesbar(hex) {
   const [h, s, l] = zu_hsl(rgb);
   let hell = l, aktuell = rgb;
   for (let i = 0; i < 20 && kontrast(aktuell, SEITENGRUND) < 4.5; i++) {
-    hell = Math.min(0.88, hell + 0.05);
+    // Auf dunklem Grund heller machen, auf hellem dunkler.
+    hell = DUNKEL ? Math.min(0.88, hell + 0.05) : Math.max(0.12, hell - 0.05);
     aktuell = aus_hsl([h, s, hell]);
   }
   return "#" + aktuell.map(w => w.toString(16).padStart(2, "0")).join("");
@@ -992,7 +1001,7 @@ function pruef_bericht_html(pr) {
 function zeichne_mannschaft(d) {
   const leute = d.mannschaft || [];
   $("mannschaftbox").innerHTML = !leute.length ? "" : `
-    <h2>Wer hier arbeitet</h2>
+    <h2>Das Team. <span class="grau">Vier Aufgaben, vier Köpfe.</span></h2>
     <div class="mannschaft">
       ${leute.map((m, i) => `
         <button class="person ${esc(m.rang)}" data-person="${esc(m.schluessel)}"
@@ -1597,6 +1606,7 @@ document.addEventListener("click", async e => {
 function zeichne_kopf(d) {
   const i = d.identitaet;
   document.title = i ? `${i.display_name} · Leitstand` : "insta-agent · Leitstand";
+  $("markenname").textContent = i ? i.display_name : "Leitstand";
 
   if (!i) {
     $("heldbox").innerHTML = `
@@ -1610,10 +1620,14 @@ function zeichne_kopf(d) {
 
   // Das neueste Bild, das er gemalt hat - es gehoert nach oben, nicht
   // nur in eine kleine Kachel weit unten.
-  const neuestes = (d.entwuerfe || []).find(p => p.bild);
+  // Wenn es geht, das Bild ohne Schrift: Sonst liegt die Zeile des
+  // Beitrags unter dem Namen des Accounts, und beide sind schlecht lesbar.
+  const neuestes = (d.entwuerfe || []).find(p => p.grundbild || p.bild);
   const hinter = neuestes
-    ? `<div class="hintergrund" style="background-image:url('/media?name=${
-        encodeURIComponent(neuestes.bild)}${anhang}')"></div><div class="schleier"></div>`
+    ? `<div class="hintergrund ${neuestes.grundbild ? "" : "weich"}"
+         style="background-image:url('/media?name=${
+        encodeURIComponent(neuestes.grundbild || neuestes.bild)}${anhang}')"></div>
+       <div class="schleier"></div>`
     : "";
 
   $("heldbox").innerHTML = `
@@ -1623,9 +1637,9 @@ function zeichne_kopf(d) {
         <div class="rolle">Leitstand</div>
         <h1 class="vorhaben">${esc(i.display_name)}</h1>
         <p class="untertitel">
+          <span>${esc(i.motto || erster_satz(i.niche))}</span>
           <a href="https://instagram.com/${encodeURIComponent(i.handle)}" target="_blank"
-             rel="noopener noreferrer">@${esc(i.handle)}</a>
-          <span>${esc(i.niche)}</span>
+             rel="noopener noreferrer">@${esc(i.handle)} ›</a>
         </p>
       </div>
     </div>`;
@@ -1635,7 +1649,7 @@ function zeichne_kasse(d) {
   const k = d.kasse;
   const farbe = { normal: "gut", frugal: "warnung", halted: "schlecht" }[k.modus] || "";
   $("kassebox").innerHTML = `
-    <h2>Seine Kasse</h2>
+    <h2>Kasse. <span class="grau">Was er ausgibt und was er einnimmt.</span></h2>
     <div class="kacheln">
       ${kachel(geld(k.kontostand), "Kontostand")}
       ${kachel(geld(k.ausgegeben), "Fürs Denken ausgegeben")}
@@ -1670,7 +1684,7 @@ function zeichne_vorhaben(d) {
   // inzwischen zu lang, um im Vorbeigehen gelesen zu werden - das gehoert
   // ins Fenster, nicht auf die Seite.
   $("vorhabenbox").innerHTML = !s ? "" : `
-    <h2>Sein Vorhaben für diese Woche</h2>
+    <h2>Diese Woche. <span class="grau">Sein Vorhaben.</span></h2>
     <div class="karte vorhaben klickbar" id="vorhabenkarte">
       <p class="ziel">${esc(erster_satz(s.current_goal))}</p>
       <div class="vorhabenfuss">
@@ -1774,7 +1788,7 @@ function zeichne_beitraege(d) {
   // Prüfurteil, der erste Satz. Alles Weitere steckt im Popup - sonst
   // ist die Seite nach drei Beiträgen unlesbar.
   $("postbox").innerHTML = `
-    <h2>Seine Arbeit</h2>
+    <h2>Beiträge. <span class="grau">Du entscheidest, was hinausgeht.</span></h2>
     <p class="hinweis" style="margin:-6px 0 16px">${arbeitsweise(d)}</p>
     <div class="gitter beitraege">${d.entwuerfe.map((p, i) => `
       <article class="beitrag klickbar ${p.bild ? "" : "ohnebild"}" data-oeffnen="${p.id}"
@@ -2129,7 +2143,7 @@ function verdrahte_entscheidungen(bereich) {
 function zeichne_ideen(d) {
   const pl = d.plan;
   $("ideenbox").innerHTML = !pl ? "" : `
-    <h2>Womit er Geld verdienen will</h2>
+    <h2>Geld verdienen. <span class="grau">Seine Ideen.</span></h2>
     <p class="begruendung" style="margin:0 0 16px">${esc(pl.reasoning)}</p>
     <div class="gitter drei">
       ${pl.ideas.map(x => `
@@ -2161,7 +2175,7 @@ function zeichne_chancen(d) {
   const beste = Math.max(...b.opportunities.map(o => o.value_if_it_works_usd * o.probability), 1);
 
   $("chancenbox").innerHTML = `
-    <h2>Lohnt sich sein Kurs noch?</h2>
+    <h2>Der Kurs. <span class="grau">Lohnt er sich noch?</span></h2>
     <div class="karte">
       <h3>${esc(wort)}</h3>
       <p class="begruendung" style="margin:6px 0 16px">${esc(b.reasoning)}</p>
@@ -2190,7 +2204,7 @@ function zeichne_chancen(d) {
 function zeichne_handy(d) {
   const am_pc = ["127.0.0.1", "localhost"].includes(location.hostname);
   $("handybox").innerHTML = (d.handy_url && am_pc) ? `
-    <h2>Aufs Handy holen</h2>
+    <h2>Aufs Handy. <span class="grau">Dasselbe Dashboard unterwegs.</span></h2>
     <div class="karte" style="display:flex; gap:22px; align-items:center; flex-wrap:wrap">
       <img src="/qr" alt="QR-Code" width="164" height="164"
            style="border-radius:10px; background:#fff">
@@ -2206,7 +2220,7 @@ function zeichne_handy(d) {
 
 function zeichne_verlauf(d) {
   $("verlaufbox").innerHTML = !d.verlauf.length ? "" : `
-    <h2>Sein Arbeitsprotokoll</h2>
+    <h2>Protokoll. <span class="grau">Alles, was er getan hat.</span></h2>
     <div class="karte verlauf">
       ${d.verlauf.map(z => `<div>
         <span class="zeit">${esc(z.zeit)}</span>
