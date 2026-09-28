@@ -45,6 +45,7 @@ from .models import (
     CycleReport,
     Fund,
     Identity,
+    Karte,
     MarketAnalysis,
     MonetizationPlan,
     OpportunityAssessment,
@@ -736,10 +737,20 @@ class Agent:
             # Die weiteren Bilder zum Durchwischen. Erst jetzt, nach dem
             # ersten Bild: Sie richten sich in Farbe und Stil danach.
             self._benutzte_abdruecke = []
+            self._letzte_kartenroh = []
             weitere, karten_nachweise, ersatz = self._baue_karussell(
                 draft, basis, identity, report, erstes_roh=rohbild
             )
             self._merke_abdruecke(post_id, rohbild)
+            if weitere:
+                roh_liste = list(self._letzte_kartenroh or [])
+                self._speichere_bildstand(post_id, {
+                    "titel": [],
+                    "karten": [
+                        {"roh": roh_liste[i] if i < len(roh_liste) else None, "verlauf": []}
+                        for i in range(len(weitere))
+                    ],
+                })
             # Was aus der Quelle uebrig ist, gehoert zu diesem Beitrag und
             # zu keinem anderen. Liegen gelassen, taucht es sonst beim
             # naechsten "Bild neu" in einem fremden Beitrag auf.
@@ -880,7 +891,10 @@ class Agent:
         if not 0 <= versatz < len(bilder):
             return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
 
+        stand = self._bildstand(post_id, len(bilder))
         del bilder[versatz]
+        del stand["karten"][versatz]
+        self._speichere_bildstand(post_id, stand)
         self.store.setze_karussell(post_id, bilder)
         draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
         if versatz < len(draft.karten):
@@ -889,13 +903,19 @@ class Agent:
         self.store.log("bild_neu", f"Entwurf {post_id}: Bild {stelle} entfernt")
         return {"ok": True, "entfernt": stelle, "schritte": []}
 
-    def _karte_erneuern(self, post_id: int, draft, bilder: list, versatz: int, identity):
+    def _karte_erneuern(
+        self, post_id: int, draft, bilder: list, versatz: int, identity, alte_karte=None
+    ):
         """Holt das Bild einer Karte neu und beschriftet es - ohne zu buchen.
 
         Gebucht wird dort, wo der Auftrag herkommt: bei "dieses neu" für
         diese eine Karte, beim Nachbessern mit allem anderen zusammen.
         Gibt das Grundbild zurück, oder None, wenn es bei Schrift blieb.
+
+        Das bisherige Bild kommt in den Verlauf - "vorheriges" holt es
+        zurück, samt dem Text, der darauf stand.
         """
+        self._karte_in_verlauf(post_id, bilder, versatz, alte_karte or draft.karten[versatz])
         stelle = versatz + 2
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         basis = f"{stamp}-neu-{post_id}"
@@ -914,7 +934,208 @@ class Agent:
         neues = self._beschrifte_karte(karte, roh, basis, stelle, draft, identity)
         bilder[versatz] = str(neues)
         self.store.setze_karussell(post_id, bilder)
+        stand = self._bildstand(post_id, len(bilder))
+        stand["karten"][versatz]["roh"] = str(roh) if roh else None
+        self._speichere_bildstand(post_id, stand)
         return roh
+
+    # --- Verlauf der Bilder und Texte von Hand ----------------------------
+
+    VERLAUF_TIEFE = 10
+
+    def _bildstand(self, post_id: int, anzahl_karten: int | None = None) -> dict:
+        """Grundbilder und Verlauf eines Beitrags - Titelbild und jede Karte."""
+        stand = self.store.get_json(f"bildstand:{post_id}") or {}
+        stand.setdefault("titel", [])
+        stand.setdefault("karten", [])
+        if anzahl_karten is not None:
+            while len(stand["karten"]) < anzahl_karten:
+                stand["karten"].append({"roh": None, "verlauf": []})
+        return stand
+
+    def _speichere_bildstand(self, post_id: int, stand: dict) -> None:
+        for eintrag in [stand.get("titel", []), *(k["verlauf"] for k in stand.get("karten", []))]:
+            del eintrag[: max(0, len(eintrag) - self.VERLAUF_TIEFE)]
+        self.store.set_json(f"bildstand:{post_id}", stand)
+
+    def _karte_in_verlauf(self, post_id: int, bilder: list, versatz: int, karte) -> None:
+        stand = self._bildstand(post_id, len(bilder))
+        stand["karten"][versatz]["verlauf"].append({
+            "bild": bilder[versatz],
+            "roh": stand["karten"][versatz].get("roh"),
+            "karte": karte.model_dump(mode="json") if karte is not None else None,
+        })
+        self._speichere_bildstand(post_id, stand)
+
+    def _titel_in_verlauf(self, post_id: int, zeile, draft) -> None:
+        stand = self._bildstand(post_id)
+        stand["titel"].append({
+            "bild": zeile["image_path"],
+            "roh": zeile["rohbild_path"],
+            "nachweis": zeile["bildnachweis"],
+            "bildtext": draft.hook_text_on_screen,
+        })
+        self._speichere_bildstand(post_id, stand)
+
+    def _kartenroh(self, post_id: int, versatz: int, bildpfad: str | None) -> Path | None:
+        """Das Grundbild einer Karte - gemerkt, oder neben dem fertigen Bild gefunden.
+
+        Ältere Beiträge haben keinen gemerkten Stand. Das Grundbild liegt
+        aber meist noch da: "...-k3-echt.jpg" oder "...-k3-roh.png" neben
+        dem fertigen "...-k3.png".
+        """
+        stand = self._bildstand(post_id)
+        if versatz < len(stand["karten"]):
+            if (roh := stand["karten"][versatz].get("roh")) and Path(roh).is_file():
+                return Path(roh)
+        if bildpfad:
+            fertig = Path(bildpfad)
+            for endung in ("-echt.jpg", "-roh.png"):
+                kandidat = fertig.with_name(fertig.stem + endung)
+                if kandidat.is_file():
+                    return kandidat
+        return None
+
+    def verlauf_laengen(self, post_id: int) -> dict[str, int]:
+        """Wie oft sich je Stelle zurückgehen lässt - für die Knöpfe im Dashboard."""
+        stand = self._bildstand(post_id)
+        laengen = {"1": len(stand["titel"])}
+        for versatz, karte in enumerate(stand["karten"]):
+            laengen[str(versatz + 2)] = len(karte.get("verlauf", []))
+        return laengen
+
+    def vorheriges_bild(self, post_id: int, stelle: int) -> dict:
+        """Stellt das Bild an dieser Stelle so wieder her, wie es vorher war."""
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur bei einem Entwurf lässt sich etwas zurückholen."}
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        bilder = json.loads(zeile["karussell_json"] or "[]")
+        stand = self._bildstand(post_id, len(bilder))
+
+        if stelle <= 1:
+            if not stand["titel"]:
+                return {"ok": False, "grund": "Für das Titelbild gibt es kein vorheriges."}
+            alt = stand["titel"].pop()
+            if not alt.get("bild") or not Path(alt["bild"]).is_file():
+                self._speichere_bildstand(post_id, stand)
+                return {"ok": False, "grund": "Die Datei des vorherigen Bildes gibt es nicht mehr."}
+            self.store.setze_bildpfad(post_id, alt["bild"])
+            self.store.setze_rohbild(post_id, alt.get("roh"))
+            self.store.setze_bildnachweis(post_id, alt.get("nachweis"))
+            if alt.get("bildtext") is not None and alt["bildtext"] != draft.hook_text_on_screen:
+                draft.hook_text_on_screen = alt["bildtext"]
+                self.store.setze_entwurfsdaten(post_id, draft)
+        else:
+            versatz = stelle - 2
+            if not 0 <= versatz < len(bilder) or not stand["karten"][versatz]["verlauf"]:
+                return {"ok": False, "grund": f"Für Bild {stelle} gibt es kein vorheriges."}
+            alt = stand["karten"][versatz]["verlauf"].pop()
+            if not alt.get("bild") or not Path(alt["bild"]).is_file():
+                self._speichere_bildstand(post_id, stand)
+                return {"ok": False, "grund": "Die Datei des vorherigen Bildes gibt es nicht mehr."}
+            bilder[versatz] = alt["bild"]
+            stand["karten"][versatz]["roh"] = alt.get("roh")
+            self.store.setze_karussell(post_id, bilder)
+            if alt.get("karte") and versatz < len(draft.karten):
+                draft.karten[versatz] = Karte.model_validate(alt["karte"])
+                self.store.setze_entwurfsdaten(post_id, draft)
+        self._speichere_bildstand(post_id, stand)
+        self.store.log("bild_neu", f"Entwurf {post_id}: Bild {stelle} zurückgeholt")
+        return {"ok": True, "stelle": stelle}
+
+    def text_aendern(
+        self, post_id: int, stelle: int, text: str, akzentwort: str | None = None
+    ) -> dict:
+        """Setzt einen neuen Text auf dasselbe Bild - ohne Suche, ohne Kosten.
+
+        Stelle 1 ist der Text auf dem Titelbild, ab 2 der Fakt auf einer
+        Karte. Das Foto bleibt; nur die Schrift wird neu gesetzt. Die
+        vorige Fassung kommt in den Verlauf.
+        """
+        text = " ".join((text or "").split())
+        if not text:
+            return {"ok": False, "grund": "Ein leerer Text geht nicht."}
+        if len(text) > 160:
+            return {"ok": False, "grund": "Das ist zu lang für ein Bild - höchstens 160 Zeichen."}
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
+        if zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur ein Entwurf lässt sich ändern."}
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        akzent = (akzentwort or "").strip()
+        if akzent and akzent.casefold() not in text.casefold():
+            akzent = ""
+
+        if stelle <= 1:
+            if text == draft.bildtext and not akzent:
+                return {"ok": True, "unveraendert": True}
+            self._titel_in_verlauf(post_id, zeile, draft)
+            neu = draft.model_copy(deep=True)
+            neu.hook_text_on_screen = text
+            if akzent:
+                neu.visual.akzentwort = akzent
+            bild, _wie = self._schrift_erneuern(zeile, neu, identity, post_id)
+            self.store.setze_bildpfad(post_id, str(bild))
+            self.store.setze_entwurfsdaten(post_id, neu)
+        else:
+            bilder = json.loads(zeile["karussell_json"] or "[]")
+            versatz = stelle - 2
+            if not 0 <= versatz < len(bilder):
+                return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
+            if versatz >= len(draft.karten):
+                self._karten_wiederfinden(post_id, draft, len(bilder))
+            if versatz >= len(draft.karten):
+                return {"ok": False, "grund": "Zu diesem Bild ist kein Text gespeichert."}
+            alte = draft.karten[versatz]
+            if text == alte.text and (not akzent or akzent == alte.akzentwort):
+                return {"ok": True, "unveraendert": True}
+            roh = self._kartenroh(post_id, versatz, bilder[versatz])
+            self._karte_in_verlauf(post_id, bilder, versatz, alte)
+            karte = alte.model_copy(update={"text": text, "akzentwort": akzent})
+            draft.karten[versatz] = karte
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            neues = self._beschrifte_karte(
+                karte, roh, f"{stamp}-text-{post_id}", stelle, draft, identity
+            )
+            bilder[versatz] = str(neues)
+            self.store.setze_karussell(post_id, bilder)
+            stand = self._bildstand(post_id, len(bilder))
+            stand["karten"][versatz]["roh"] = str(roh) if roh else None
+            self._speichere_bildstand(post_id, stand)
+            self.store.setze_entwurfsdaten(post_id, draft)
+
+        self._von_hand_geaendert(post_id)
+        return {"ok": True, "stelle": stelle}
+
+    def bildunterschrift_aendern(self, post_id: int, caption: str) -> dict:
+        """Die Bildunterschrift von Hand - kostenlos, wie der Text auf den Bildern."""
+        caption = (caption or "").strip()
+        if not caption:
+            return {"ok": False, "grund": "Eine leere Bildunterschrift geht nicht."}
+        if len(caption) > 2200:
+            return {"ok": False, "grund": "Instagram erlaubt höchstens 2.200 Zeichen."}
+        zeile = self.store.get_post(post_id)
+        if zeile is None or zeile["status"] != "draft":
+            return {"ok": False, "grund": "Nur ein Entwurf lässt sich ändern."}
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        if caption == draft.caption.strip():
+            return {"ok": True, "unveraendert": True}
+        draft.caption = caption
+        self.store.setze_entwurfsdaten(post_id, draft)
+        self._von_hand_geaendert(post_id)
+        return {"ok": True}
+
+    def _von_hand_geaendert(self, post_id: int) -> None:
+        """Merkt sich, dass die Prüfung die vorige Fassung betraf."""
+        self.store.set_json(f"handgeaendert:{post_id}", True)
+        self.store.log("text_von_hand", f"Entwurf {post_id}: Text von Hand geändert")
 
     def _karten_wiederfinden(self, post_id: int, draft, anzahl: int) -> bool:
         """Holt verlorene Kartentexte aus der Ablage der Entwürfe zurück.
@@ -994,6 +1215,8 @@ class Agent:
         # Nicht noch einmal dasselbe: Alles, was dieser Beitrag schon an
         # Bildern hatte, ist bei der Suche ausgeschlossen.
         self._ausschluss = self._abdruecke_des_beitrags(post_id, zeile)
+        # Und das jetzige bleibt erreichbar: "vorheriges" holt es zurück.
+        self._titel_in_verlauf(post_id, zeile, draft)
 
         gestaltung = None
         echtes_foto = False
@@ -1154,7 +1377,7 @@ class Agent:
         self._benutzte_abdruecke = []
         for versatz, (vorige, jetzt) in enumerate(zip(alt.karten, neu.karten)):
             if versatz < len(bilder) and vorige.text.strip() != jetzt.text.strip():
-                self._karte_erneuern(post_id, neu, bilder, versatz, identity)
+                self._karte_erneuern(post_id, neu, bilder, versatz, identity, alte_karte=vorige)
                 bericht_lauf.steps.append(f"Bild {versatz + 2}: neuer Text, neues Bild")
         self._merke_abdruecke(post_id)
 
@@ -1182,6 +1405,8 @@ class Agent:
                 "das Budget war aufgebraucht. Vor der Freigabe prüfen lassen.",
             )
             raise
+        if zweiter is not None:
+            self.store.set_json(f"handgeaendert:{post_id}", False)
         kosten = self._mitrechnen(post_id, vorher)
         self.store.log(
             "nachbesserung",
@@ -1214,7 +1439,10 @@ class Agent:
             return {"ok": False, "grund": "Diesen Entwurf gibt es nicht."}
         if zeile["status"] != "draft":
             return {"ok": False, "grund": "Nur ein Entwurf lässt sich prüfen."}
-        if zeile["pruefung_json"]:
+        # Von Hand geänderter Text: Der Bericht galt der vorigen Fassung.
+        # Dann wird nachgeprüft - gegen seine Belege, ohne neue Websuche.
+        von_hand = bool(self.store.get_json(f"handgeaendert:{post_id}"))
+        if zeile["pruefung_json"] and not von_hand:
             return {"ok": False, "grund": "Dieser Entwurf ist schon geprüft."}
 
         identity = self.identity
@@ -1229,18 +1457,35 @@ class Agent:
         self.treasury.check()
         vorher = self.treasury.state().cycle_spent_usd
 
-        # Absichtlich ohne die Abschaltung zu beachten: Wer hier drückt,
-        # will geprüft haben, auch wenn die Prüfung sonst ausgeschaltet ist.
-        bericht = pruefe_beitrag(
-            self.brain,
-            identity=identity,
-            draft=draft,
-            mit_suche=self.treasury.state().mode is Mode.NORMAL,
-            modell=self._modell("pruefung"),
-            person=self._person("pruefung"),
-            fund=fund,
+        erster = (
+            Pruefbericht.model_validate(json.loads(zeile["pruefung_json"]))
+            if zeile["pruefung_json"]
+            else None
         )
+        if von_hand and erster is not None and erster.mit_suche:
+            bericht = pruefe_nachbesserung(
+                self.brain,
+                identity=identity,
+                draft=draft,
+                erster=erster,
+                modell=self._modell("pruefung"),
+                person=self._person("pruefung"),
+                fund=fund,
+            )
+        else:
+            # Absichtlich ohne die Abschaltung zu beachten: Wer hier drückt,
+            # will geprüft haben, auch wenn die Prüfung sonst ausgeschaltet ist.
+            bericht = pruefe_beitrag(
+                self.brain,
+                identity=identity,
+                draft=draft,
+                mit_suche=self.treasury.state().mode is Mode.NORMAL,
+                modell=self._modell("pruefung"),
+                person=self._person("pruefung"),
+                fund=fund,
+            )
         self.store.set_pruefung(post_id, bericht)
+        self.store.set_json(f"handgeaendert:{post_id}", False)
         kosten = self._mitrechnen(post_id, vorher)
         self.store.log(
             "pruefung",
@@ -2178,6 +2423,10 @@ class Agent:
                 akzent_hex=draft.visual.accent_hex,
             )
             log.info("Karussell: %s von %s Bildern angeglichen", angeglichen, len(reihe))
+
+        # Die Grundbilder ohne Schrift werden aufgehoben: Damit lässt sich
+        # später nur der Text einer Karte ändern, ohne ein neues Bild.
+        self._letzte_kartenroh = [str(r) if r else None for r in rohbilder]
 
         bilder: list[Path] = []
         for versatz, (karte, roh) in enumerate(zip(genommen, rohbilder)):

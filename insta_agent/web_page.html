@@ -460,7 +460,17 @@
   .wischreihe figcaption {
     margin-top: 6px; font-size: 12px; text-align: center; color: var(--leise);
   }
-  .wischreihe figure button { display: block; margin: 6px auto 0; }
+  .wischreihe figure { text-align: center; }
+  .wischreihe figure button { display: inline-block; margin: 6px 2px 0; }
+  .textzeile { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px;
+               align-items: center; margin-bottom: 8px; }
+  .textzeile label { font-size: 13px; color: var(--leise); font-weight: 600; }
+  .textzeile input { min-width: 0; padding: 9px 12px; font-size: 15px; }
+  .captionfeld { font-size: 15px; line-height: 1.55; min-height: 180px; }
+  @media (max-width: 520px) {
+    .textzeile { grid-template-columns: 1fr auto; }
+    .textzeile label { grid-column: 1 / -1; margin-bottom: -4px; }
+  }
   @media (max-width: 720px) { .wischreihe img { height: 260px; } }
 
   .modellinfo .merkmal { color: var(--leise); }
@@ -813,6 +823,21 @@ function oeffne_popup(titel, inhalt) {
   document.body.style.overflow = "hidden";
   grund.querySelector(".zu").focus();
   verdrahte_kopierknoepfe(grund);
+}
+
+/** Nach einer Änderung im Fenster: frisch laden und dasselbe Fenster an
+ *  derselben Stelle wieder zeigen - statt es zu schließen und suchen zu
+ *  lassen, wo man war. */
+async function neu_zeigen(id) {
+  const grund = document.querySelector(".popup-grund");
+  const oben = grund ? grund.scrollTop : 0;
+  gezeichnet.beitraege = null;
+  await laden();
+  const post = letzte_entwuerfe.find(x => x.id === id);
+  if (!post) { schliesse_popup(); return; }
+  zeige_beitrag(post);
+  const neuer = document.querySelector(".popup-grund");
+  if (neuer) neuer.scrollTop = oben;
 }
 
 function schliesse_popup() {
@@ -1851,9 +1876,13 @@ function zeichne_beitraege(d) {
 function bilderreihe(p) {
   const alle = [p.bild, ...(p.karussell || [])].filter(Boolean);
   if (!alle.length) return "";
+  const zurueck = stelle => p.status === "draft" && (p.verlauf || {})[String(stelle)]
+    ? `<button class="winzig" data-zurueck="${p.id}" data-stelle="${stelle}"
+         title="Das Bild wiederherstellen, das vorher hier war">vorheriges</button>` : "";
   if (alle.length === 1) {
     return `<img class="grossbild"
-       src="/media?name=${encodeURIComponent(alle[0])}${anhang}" alt="">`;
+       src="/media?name=${encodeURIComponent(alle[0])}${anhang}" alt="">
+      ${zurueck(1) ? `<div class="knopfreihe" style="margin:-8px 0 16px">${zurueck(1)}</div>` : ""}`;
   }
   return `
     <div class="wischreihe">
@@ -1863,6 +1892,7 @@ function bilderreihe(p) {
           <figcaption>${i + 1} / ${alle.length}</figcaption>
           ${p.status === "draft" ? `<button class="winzig"
              data-bildneu="${p.id}" data-stelle="${i + 1}">dieses neu</button>` : ""}
+          ${zurueck(i + 1)}
           ${p.status === "draft" && i > 0 ? `<button class="winzig"
              data-entfernen="${p.id}" data-stelle="${i + 1}">entfernen</button>` : ""}
         </figure>`).join("")}
@@ -1871,6 +1901,27 @@ function bilderreihe(p) {
       ${alle.length} Bilder zum Durchwischen – seitlich scrollen.
       So sieht es der Leser auch.
     </p>`;
+}
+
+/** Die Texte auf den Bildern - jeder für sich änderbar, ohne neue Bilder.
+ *  Geändert wird nur die Schrift auf demselben Foto; das kostet nichts. */
+function texte_bearbeiten(p) {
+  const anzahl = 1 + (p.karussell || []).length;
+  const zeilen = [{ stelle: 1, text: p.bildtext || "" }];
+  (p.karten || []).slice(0, anzahl - 1).forEach((k, i) =>
+    zeilen.push({ stelle: i + 2, text: k.text || "", akzent: k.akzentwort || "" }));
+  return `<div class="feld">
+    <div class="feldkopf"><span>Text auf den Bildern</span></div>
+    <p class="hinweis" style="margin:0 0 10px">Ändern und übernehmen: Die Schrift wird
+      auf dasselbe Foto neu gesetzt – kostenlos. „vorheriges“ am Bild holt die alte
+      Fassung zurück.</p>
+    ${zeilen.map(z => `
+      <div class="textzeile">
+        <label for="text-${p.id}-${z.stelle}">Bild ${z.stelle}</label>
+        <input id="text-${p.id}-${z.stelle}" value="${esc(z.text)}" maxlength="160">
+        <button class="winzig" data-textsetzen="${p.id}" data-stelle="${z.stelle}">übernehmen</button>
+      </div>`).join("")}
+  </div>`;
 }
 
 /** Der ganze Beitrag: Text, Bild-Prompt, Prüfbericht, Hintergedanken. */
@@ -1894,19 +1945,24 @@ function zeige_beitrag(p) {
       📷 Echte Aufnahme · ${esc(p.bildnachweis)}<br>
       Diese Zeile geht mit dem Beitrag hinaus – sie ist die Bedingung der Lizenz.
     </p>` : ""}
-    ${p.bildtext ? `<div class="feld">
+    ${p.status === "draft" ? texte_bearbeiten(p) : (p.bildtext ? `<div class="feld">
       <div class="feldkopf">
         <span>Text fürs Bild</span>
         <button class="winzig" data-text="${esc(p.bildtext)}">kopieren</button>
       </div>
       <p class="bildtext">${esc(p.bildtext)}</p>
-    </div>` : ""}
+    </div>` : "")}
     <div class="feld">
       <div class="feldkopf">
         <span>Bildunterschrift</span>
         <button class="winzig" data-text="${esc(volltext(p))}">kopieren</button>
       </div>
-      <p class="caption">${esc(p.caption)}</p>
+      ${p.status === "draft" ? `
+        <textarea class="captionfeld" id="caption-${p.id}" rows="9"
+          maxlength="2200">${esc(p.caption)}</textarea>
+        <div class="knopfreihe" style="margin:8px 0 10px">
+          <button class="winzig" data-captionsetzen="${p.id}">Bildunterschrift übernehmen</button>
+        </div>` : `<p class="caption">${esc(p.caption)}</p>`}
       <div class="tags">${p.hashtags.map(h => "#" + esc(h)).join(" ")}</div>
     </div>
     ${p.erster_kommentar ? `<div class="feld">
@@ -1924,6 +1980,9 @@ function zeige_beitrag(p) {
 
     <div class="feld">
       <div class="feldkopf"><span>Endprüfung</span></div>
+      ${p.von_hand && p.pruefung ? `<p class="hinweis warnung" style="margin:0 0 10px">
+        Du hast Text von Hand geändert – dieser Bericht gilt der Fassung davor.
+        <button class="winzig" data-pruefen="${p.id}">neu prüfen lassen</button></p>` : ""}
       ${pruef_bericht_html(p.pruefung)}
     </div>
 
@@ -2029,6 +2088,42 @@ function verdrahte_entscheidungen(bereich) {
       }
       gezeichnet.beitraege = null;
       laden();
+    };
+  }
+
+  for (const knopf of bereich.querySelectorAll("[data-zurueck]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      knopf.disabled = true;
+      const ergebnis = await sende("/api/bildneu",
+        { id: Number(knopf.dataset.zurueck), stelle: Number(knopf.dataset.stelle), zurueck: true });
+      if (!ergebnis.ok) alert(ergebnis.grund || "Das hat nicht geklappt.");
+      await neu_zeigen(Number(knopf.dataset.zurueck));
+    };
+  }
+
+  for (const knopf of bereich.querySelectorAll("[data-textsetzen]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      const id = Number(knopf.dataset.textsetzen), stelle = Number(knopf.dataset.stelle);
+      const feld = $(`text-${id}-${stelle}`);
+      knopf.disabled = true;
+      knopf.textContent = "setzt …";
+      const ergebnis = await sende("/api/bildneu", { id, stelle, text: feld.value });
+      if (!ergebnis.ok) alert(ergebnis.grund || "Das hat nicht geklappt.");
+      await neu_zeigen(id);
+    };
+  }
+
+  for (const knopf of bereich.querySelectorAll("[data-captionsetzen]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      const id = Number(knopf.dataset.captionsetzen);
+      knopf.disabled = true;
+      const ergebnis = await sende("/api/bildneu",
+        { id, caption: $(`caption-${id}`).value });
+      if (!ergebnis.ok) alert(ergebnis.grund || "Das hat nicht geklappt.");
+      await neu_zeigen(id);
     };
   }
 

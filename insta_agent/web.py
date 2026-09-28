@@ -317,6 +317,16 @@ class Steuerung:
                             for pfad in json.loads(zeile["karussell_json"] or "[]")
                         ],
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
+                        # Die Texte auf den Karten - zum Ändern von Hand.
+                        "karten": [
+                            {"text": k.get("text", ""), "akzentwort": k.get("akzentwort", "")}
+                            for k in daten.get("karten") or []
+                        ],
+                        # Wie oft sich je Bild zurückgehen lässt.
+                        "verlauf": agent.verlauf_laengen(zeile["id"]),
+                        # Text von Hand geändert: Die Prüfung galt der
+                        # vorigen Fassung.
+                        "von_hand": bool(agent.store.get_json(f"handgeaendert:{zeile['id']}")),
                         # Was die Endprüfung gefunden hat. None heißt:
                         # nicht geprüft - das ist etwas anderes als sauber.
                         "pruefung": (
@@ -927,6 +937,15 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             try:
                 if rumpf.get("entfernen"):
                     ergebnis = agent.karte_entfernen(post_id, stelle)
+                elif rumpf.get("zurueck"):
+                    ergebnis = agent.vorheriges_bild(post_id, stelle)
+                elif "caption" in rumpf:
+                    ergebnis = agent.bildunterschrift_aendern(post_id, str(rumpf.get("caption") or ""))
+                elif "text" in rumpf:
+                    ergebnis = agent.text_aendern(
+                        post_id, stelle, str(rumpf.get("text") or ""),
+                        str(rumpf.get("akzentwort") or "") or None,
+                    )
                 elif stelle <= 1:
                     ergebnis = agent.bild_neu(post_id)
                 else:

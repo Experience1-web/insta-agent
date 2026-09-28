@@ -242,11 +242,19 @@ class Store:
             return cur.rowcount > 0
 
     def setze_entwurfsdaten(self, post_id: int, draft: Any) -> None:
-        """Nur die Rohdaten des Entwurfs - Bild, Prüfung und Gestaltung bleiben."""
+        """Nur die Rohdaten des Entwurfs - Bild, Prüfung und Gestaltung bleiben.
+
+        Die Bildunterschrift steht zusätzlich in einer eigenen Spalte; sie
+        wird mitgeführt, damit beide nie auseinanderlaufen.
+        """
         with self._tx() as conn:
             conn.execute(
-                "UPDATE posts SET draft_json=? WHERE id=?",
-                (json.dumps(draft.model_dump(mode="json"), ensure_ascii=False), post_id),
+                "UPDATE posts SET draft_json=?, caption=? WHERE id=?",
+                (
+                    json.dumps(draft.model_dump(mode="json"), ensure_ascii=False),
+                    draft.caption,
+                    post_id,
+                ),
             )
 
     def setze_bildpfad(self, post_id: int, pfad: str) -> None:

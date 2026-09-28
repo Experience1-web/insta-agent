@@ -125,7 +125,7 @@ def test_nachbessern_macht_nur_geaenderte_karten_neu(agent, monkeypatch):
     monkeypatch.setattr("insta_agent.runner.ueberarbeite_beitrag", lambda *a, **k: neu)
     erneuert = []
     monkeypatch.setattr(
-        agent, "_karte_erneuern", lambda pid, d, b, versatz, i: erneuert.append(versatz)
+        agent, "_karte_erneuern", lambda pid, d, b, versatz, i, **k: erneuert.append(versatz)
     )
 
     ergebnis = agent.nachbessern(post_id)
