@@ -31,6 +31,10 @@ from .runner import Agent
 
 log = logging.getLogger(__name__)
 
+# Windows kennt .mp4 nicht immer aus der Registry - dann kaeme das Reel
+# als "application/octet-stream" an, und der Browser spielte es nicht ab.
+mimetypes.add_type("video/mp4", ".mp4")
+
 
 def _waehlbare_modelle(store=None) -> tuple[list[dict], dict]:
     """Welche Modelle sich einstellen lassen - und was sie hier kosten.
@@ -327,6 +331,7 @@ class Steuerung:
                         # Text von Hand geändert: Die Prüfung galt der
                         # vorigen Fassung.
                         "von_hand": bool(agent.store.get_json(f"handgeaendert:{zeile['id']}")),
+                        "reel": agent.reel_stand(zeile["id"], zeile),
                         # Was die Endprüfung gefunden hat. None heißt:
                         # nicht geprüft - das ist etwas anderes als sauber.
                         "pruefung": (
@@ -937,6 +942,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
             try:
                 if rumpf.get("entfernen"):
                     ergebnis = agent.karte_entfernen(post_id, stelle)
+                elif rumpf.get("reel") == "bauen":
+                    ergebnis = agent.reel_bauen(post_id)
+                elif rumpf.get("reel") in ("ja", "nein"):
+                    ergebnis = agent.veroeffentlichen_als(post_id, rumpf["reel"] == "ja")
                 elif rumpf.get("zurueck"):
                     ergebnis = agent.vorheriges_bild(post_id, stelle)
                 elif "caption" in rumpf:

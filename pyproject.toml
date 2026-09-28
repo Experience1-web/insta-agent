@@ -12,6 +12,7 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.0",
     "segno>=1.6",  # QR-Code fuers Handy, reines Python ohne Abhaengigkeiten
+    "imageio-ffmpeg>=0.4",  # bringt ffmpeg fuer die Reels mit, auch fuer Windows
 ]
 
 [project.optional-dependencies]

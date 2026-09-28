@@ -185,6 +185,25 @@ class InstagramClient:
             raise GraphAPIError(f"Kein Karussell zurückgegeben: {data}")
         return str(container_id)
 
+    def create_reel(self, video_url: str, caption: str) -> str:
+        """Ein Reel: Instagram holt das Video von der Adresse.
+
+        `share_to_feed` zeigt es zusätzlich im Profilraster - sonst liegt
+        es nur im Reels-Reiter.
+        """
+        data = self._request(
+            "POST",
+            f"{self.ig_user_id}/media",
+            media_type="REELS",
+            video_url=video_url,
+            caption=caption,
+            share_to_feed="true",
+        )
+        container_id = data.get("id")
+        if not container_id:
+            raise GraphAPIError(f"Kein Reel-Container zurückgegeben: {data}")
+        return str(container_id)
+
     def wait_until_ready(self, container_id: str, *, attempts: int = 12, delay: float = 5.0) -> None:
         """Schritt 2: warten, bis Instagram das Bild verarbeitet hat."""
         for attempt in range(attempts):

@@ -770,6 +770,14 @@ class Agent:
             bericht = self._pruefe(post_id, draft, identity, report, fund)
             bericht = self._bessere_nach(post_id, bericht, report)
 
+            # Zum Schluss das Reel - nach dem Nachbessern, damit es die
+            # fertigen Bilder zeigt. Kostet nichts; fehlt ffmpeg, eben nicht.
+            if weitere:
+                reel = self.reel_bauen(post_id)
+                report.steps.append(
+                    "Reel gebaut" if reel["ok"] else f"Kein Reel: {reel['grund']}"
+                )
+
             kosten = self.treasury.state().cycle_spent_usd - stand_vorher
             self.store.setze_kosten(post_id, kosten)
             report.steps.append(f"Beitrag fertig, Kosten {kosten:.4f} USD")
@@ -1131,6 +1139,57 @@ class Agent:
         self.store.setze_entwurfsdaten(post_id, draft)
         self._von_hand_geaendert(post_id)
         return {"ok": True}
+
+    # --- Reel -------------------------------------------------------------
+
+    def _reel_bilder(self, zeile) -> list[Path]:
+        bilder = [Path(zeile["image_path"])] if zeile["image_path"] else []
+        bilder += [Path(p) for p in json.loads(zeile["karussell_json"] or "[]")]
+        return [b for b in bilder if b.is_file()]
+
+    def reel_stand(self, post_id: int, zeile=None) -> dict:
+        """Gibt es ein Reel, ist es auf dem Stand der Bilder, und soll es hinaus?"""
+        from .imaging.reel import ist_aktuell, kann_reels
+
+        zeile = zeile if zeile is not None else self.store.get_post(post_id)
+        pfad = self.store.get_json(f"reel:{post_id}")
+        pfad = Path(pfad) if pfad else None
+        return {
+            "datei": pfad.name if pfad and pfad.is_file() else None,
+            "aktuell": bool(zeile) and ist_aktuell(pfad, self._reel_bilder(zeile)),
+            "als_reel": self.store.get_json(f"format:{post_id}") == "reel",
+            "moeglich": kann_reels(),
+        }
+
+    def reel_bauen(self, post_id: int) -> dict:
+        """Baut das Reel aus den jetzigen Bildern - kostenlos, ohne KI."""
+        from .imaging.reel import ReelFehler, baue_reel
+
+        zeile = self.store.get_post(post_id)
+        if zeile is None:
+            return {"ok": False, "grund": "Diesen Beitrag gibt es nicht."}
+        bilder = self._reel_bilder(zeile)
+        if len(bilder) < 2:
+            return {"ok": False, "grund": "Für ein Reel braucht es mindestens zwei Bilder."}
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        ziel = self.settings.media_dir / f"{stamp}-reel-{post_id}.mp4"
+        try:
+            baue_reel(bilder, ziel)
+        except ReelFehler as exc:
+            return {"ok": False, "grund": str(exc)}
+        alt = self.store.get_json(f"reel:{post_id}")
+        self.store.set_json(f"reel:{post_id}", str(ziel))
+        if alt and Path(alt) != ziel:
+            Path(alt).unlink(missing_ok=True)  # das alte Video ist überholt
+        return {"ok": True, "datei": ziel.name}
+
+    def veroeffentlichen_als(self, post_id: int, als_reel: bool) -> dict:
+        """Merkt sich, ob dieser Beitrag als Reel oder als Bilder hinausgeht."""
+        zeile = self.store.get_post(post_id)
+        if zeile is None or zeile["status"] not in ("draft", "approved"):
+            return {"ok": False, "grund": "Das lässt sich nur vor dem Veröffentlichen wählen."}
+        self.store.set_json(f"format:{post_id}", "reel" if als_reel else "bilder")
+        return {"ok": True, "als_reel": als_reel}
 
     def _von_hand_geaendert(self, post_id: int) -> None:
         """Merkt sich, dass die Prüfung die vorige Fassung betraf."""
@@ -2589,8 +2648,19 @@ class Agent:
 
             # Der Bildnachweis geht mit hinaus: Bei einem übernommenen
             # Foto ist er die Bedingung der Lizenz.
+            # Als Reel, wenn der Betreiber es so gewählt hat - mit einem
+            # Video, das auf dem Stand der Bilder ist.
+            reel = None
+            if self.store.get_json(f"format:{zeile['id']}") == "reel":
+                stand = self.reel_stand(zeile["id"], zeile)
+                if not stand["aktuell"]:
+                    self.reel_bauen(zeile["id"])
+                if pfad := self.store.get_json(f"reel:{zeile['id']}"):
+                    reel = Path(pfad) if Path(pfad).is_file() else None
+
+            extra = {"reel": reel} if reel is not None else {}
             ergebnis = self.publisher.publish(
-                draft, bild, zeile["bildnachweis"] or "", weitere=weitere
+                draft, bild, zeile["bildnachweis"] or "", weitere=weitere, **extra
             )
             if ergebnis.published and ergebnis.ig_media_id:
                 self.store.mark_published(zeile["id"], ergebnis.ig_media_id)

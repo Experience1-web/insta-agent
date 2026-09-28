@@ -462,6 +462,13 @@
   }
   .wischreihe figure { text-align: center; }
   .wischreihe figure button { display: inline-block; margin: 6px 2px 0; }
+  video.reel { display: block; width: auto; max-width: 100%; height: 420px;
+               border-radius: var(--radius-klein); background: var(--bildgrund); }
+  .reelwahl { display: flex; align-items: center; gap: 10px; margin-top: 12px;
+              font-size: 15px; cursor: pointer; }
+  .reelwahl input { width: 20px; height: 20px; min-width: 0; flex: none; padding: 0;
+                    accent-color: var(--akzent); }
+  a.winzig { display: inline-block; text-decoration: none; }
   .textzeile { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px;
                align-items: center; margin-bottom: 8px; }
   .textzeile label { font-size: 13px; color: var(--leise); font-weight: 600; }
@@ -1839,6 +1846,7 @@ function zeichne_beitraege(d) {
             ${kosten_marke(p)}
             ${(p.karussell || []).length
               ? `<span class="marke">${(p.karussell.length + 1)} Bilder</span>` : ""}
+            ${p.reel && p.reel.als_reel ? '<span class="marke">als Reel</span>' : ""}
           </div>
         </div>
         <div class="inhalt">
@@ -1924,10 +1932,47 @@ function texte_bearbeiten(p) {
   </div>`;
 }
 
+/** Das Reel zum Beitrag: ansehen, speichern, und wählen, ob es hinausgeht. */
+function reel_html(p) {
+  const r = p.reel || {};
+  if (!(p.karussell || []).length) return "";
+  const offen = p.status === "draft" || p.status === "approved";
+  if (!r.moeglich) {
+    return `<div class="feld"><div class="feldkopf"><span>Reel</span></div>
+      <p class="hinweis" style="margin:0">Für Reels einmal „6 - Neue Version holen“
+        ausführen – das installiert das Videoprogramm mit.</p></div>`;
+  }
+  if (!r.datei) {
+    return `<div class="feld"><div class="feldkopf"><span>Reel</span></div>
+      <p class="hinweis" style="margin:0 0 10px">Aus den Bildern ein kurzes Video –
+        Reels erreichen deutlich mehr Leute, die dir noch nicht folgen. Kostenlos.</p>
+      <button class="klein" data-reelbauen="${p.id}">Reel erstellen</button></div>`;
+  }
+  const quelle = `/media?name=${encodeURIComponent(r.datei)}${anhang}`;
+  return `<div class="feld">
+    <div class="feldkopf"><span>Reel</span></div>
+    <video class="reel" controls playsinline preload="metadata" src="${quelle}"
+      ${p.bild ? `poster="/media?name=${encodeURIComponent(p.bild)}${anhang}"` : ""}></video>
+    ${r.aktuell ? "" : `<p class="hinweis warnung" style="margin:8px 0 0">Die Bilder haben
+      sich seitdem geändert – das Reel zeigt noch den alten Stand.</p>`}
+    <div class="knopfreihe" style="margin-top:10px">
+      ${offen ? `<button class="winzig" data-reelbauen="${p.id}">${r.aktuell ? "neu erstellen" : "auf den neuen Stand bringen"}</button>` : ""}
+      <a class="winzig" href="${quelle}" download="${esc(r.datei)}">Reel speichern</a>
+    </div>
+    ${offen ? `<label class="reelwahl">
+      <input type="checkbox" data-reelformat="${p.id}" ${r.als_reel ? "checked" : ""}>
+      Als Reel veröffentlichen statt als Bilder
+    </label>
+    <p class="hinweis" style="margin:4px 0 0">Tipp: Wer das Reel speichert und in der
+      Instagram-App selbst hochlädt, kann einen Ton darunterlegen – das hilft der Reichweite.</p>` : ""}
+  </div>`;
+}
+
 /** Der ganze Beitrag: Text, Bild-Prompt, Prüfbericht, Hintergedanken. */
 function zeige_beitrag(p) {
   oeffne_popup(anriss(p.bildtext || p.caption, 60), `
     ${bilderreihe(p)}
+    ${reel_html(p)}
     <div>
       <span class="marke ${marke_klasse(p.status)}">${marke_text(p.status)}</span>
       ${reiz_marke(p.fund, p.status)}
@@ -2086,6 +2131,29 @@ function verdrahte_entscheidungen(bereich) {
       } else {
         alert("Fertig – das neue Bild ist da.");
       }
+      gezeichnet.beitraege = null;
+      laden();
+    };
+  }
+
+  for (const knopf of bereich.querySelectorAll("[data-reelbauen]")) {
+    knopf.onclick = async e => {
+      e.stopPropagation();
+      const id = Number(knopf.dataset.reelbauen);
+      knopf.disabled = true;
+      const fertig = arbeitet("Das Reel wird gebaut – etwa eine halbe Minute …");
+      const ergebnis = await sende("/api/bildneu", { id, reel: "bauen" }).finally(fertig);
+      if (!ergebnis.ok) alert(ergebnis.grund || "Das hat nicht geklappt.");
+      await neu_zeigen(id);
+    };
+  }
+
+  for (const feld of bereich.querySelectorAll("[data-reelformat]")) {
+    feld.onchange = async e => {
+      e.stopPropagation();
+      const id = Number(feld.dataset.reelformat);
+      const ergebnis = await sende("/api/bildneu", { id, reel: feld.checked ? "ja" : "nein" });
+      if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); feld.checked = !feld.checked; }
       gezeichnet.beitraege = null;
       laden();
     };

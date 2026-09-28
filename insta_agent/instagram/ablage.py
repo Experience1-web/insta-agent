@@ -141,6 +141,26 @@ class _CatboxArtig:
         return str(adresse)
 
 
+    def lade_datei_hoch(self, datei: Path, mime: str) -> str:
+        """Eine Datei, wie sie ist - fuer Videos, die kein JPEG werden duerfen."""
+        if not datei.is_file():
+            raise Ablagefehler(f"Die Datei gibt es nicht: {datei}")
+        felder = {"reqtype": "fileupload"}
+        if self.HALTBARKEIT:
+            felder["time"] = self.HALTBARKEIT
+        with datei.open("rb") as inhalt:
+            antwort = self.client.post(
+                self.ADRESSE, data=felder, files={"fileToUpload": (datei.name, inhalt, mime)}
+            )
+        if antwort.status_code >= 400:
+            raise Ablagefehler(_lesbar(antwort))
+        adresse = antwort.text.strip()
+        if not adresse.startswith("https://"):
+            raise Ablagefehler(f"Keine Adresse zurückbekommen: {adresse[:200]}")
+        log.info("Datei abgelegt: %s", adresse)
+        return str(adresse)
+
+
 class CatboxAblage(_CatboxArtig):
     """Bleibt liegen, bis jemand es loescht."""
 

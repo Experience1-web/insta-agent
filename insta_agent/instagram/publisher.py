@@ -120,6 +120,7 @@ class Publisher:
         image_path: Path,
         bildnachweis: str = "",
         weitere: list[Path] | None = None,
+        reel: Path | None = None,
     ) -> PublishResult:
         """Veroeffentlicht einen Beitrag - ein Bild oder ein Karussell.
 
@@ -138,6 +139,14 @@ class Publisher:
             return PublishResult(
                 published=False, draft_path=path, reason="Keine Instagram-Zugangsdaten hinterlegt"
             )
+
+        if reel is not None:
+            ergebnis = self._veroeffentliche_reel(reel, caption)
+            if ergebnis is not None:
+                return ergebnis
+            # Das Reel kam nicht zustande - dann geht der Beitrag so hinaus,
+            # wie er als Bilder gebaut ist.
+            log.warning("Reel nicht moeglich - es geht als Bildbeitrag hinaus.")
 
         if weitere:
             ergebnis = self._veroeffentliche_karussell(
@@ -225,6 +234,49 @@ class Publisher:
 
         log.info("Karussell mit %s Bildern veroeffentlicht als %s", len(alle), media_id)
         return PublishResult(published=True, ig_media_id=media_id)
+
+    def _video_adressen(self, video: Path) -> Iterator[str]:
+        """Öffentliche Adressen für ein Video: eigener Ordner, dann Ablagen."""
+        if self.public_base_url:
+            try:
+                relativ = video.resolve().relative_to(self.media_dir.resolve())
+                yield f"{self.public_base_url}/{relativ.as_posix()}"
+            except ValueError:
+                pass
+        for ablage in self.ablagen:
+            hochladen = getattr(ablage, "lade_datei_hoch", None)
+            if hochladen is None:
+                continue  # z.B. imgbb nimmt nur Bilder
+            try:
+                yield hochladen(video, "video/mp4")
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört ins Protokoll
+                log.warning(
+                    "Video konnte nicht bei %s abgelegt werden: %s",
+                    getattr(ablage, "name", ablage),
+                    exc,
+                )
+
+    def _veroeffentliche_reel(self, reel: Path, caption: str) -> PublishResult | None:
+        """Das Reel hochladen und veröffentlichen. None heißt: hat nicht geklappt.
+
+        Instagram verarbeitet ein Video spürbar länger als ein Bild -
+        deshalb wird bis zu vier Minuten auf "fertig" gewartet.
+        """
+        if not reel.is_file():
+            return None
+        for adresse in self._video_adressen(reel):
+            try:
+                container = self.client.create_reel(adresse, caption)
+                self.client.wait_until_ready(container, attempts=40, delay=6.0)
+                media_id = self.client.publish_container(container)
+            except GraphAPIError as exc:
+                log.error("Reel fehlgeschlagen: %s (Video: %s)", exc, adresse)
+                if _liegt_an_der_adresse(exc):
+                    continue
+                return None
+            log.info("Reel veroeffentlicht als %s", media_id)
+            return PublishResult(published=True, ig_media_id=media_id)
+        return None
 
     @staticmethod
     def full_caption(draft: PostDraft, bildnachweis: str = "") -> str:
