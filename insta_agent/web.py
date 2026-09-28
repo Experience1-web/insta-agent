@@ -267,6 +267,22 @@ class Steuerung:
 
     # -- Daten für die Anzeige --------------------------------------------
 
+    def _sparmodus(self, agent, modellwahl: dict) -> dict[str, Any]:
+        """Der Schalter, was er spart und worauf die Zahlen beruhen."""
+        from .economy.sparmodus import DAS_BLEIBT, schaetze, so_spart_er
+
+        schaetzung = schaetze(self.settings, modellwahl, agent.store.zyklen())
+        return {
+            "an": agent.sparmodus,
+            "normal_usd": schaetzung.normal_usd,
+            "spar_usd": schaetzung.spar_usd,
+            "normal_grundlage": schaetzung.normal_grundlage,
+            "spar_grundlage": schaetzung.spar_grundlage,
+            "ersparnis": round(schaetzung.ersparnis, 3),
+            "so_spart_er": so_spart_er(self.settings, modellwahl),
+            "das_bleibt": list(DAS_BLEIBT),
+        }
+
     def zustand(self) -> dict[str, Any]:
         agent = Agent(self.settings)
         try:
@@ -278,6 +294,7 @@ class Steuerung:
             strategie = agent.strategy
             plan = agent.monetization
             vorbilder = agent.vorbilder
+            sparmodus = self._sparmodus(agent, modellwahl)
 
             farben = {"hintergrund": "#111318", "akzent": "#E4572E"}
             entwuerfe = []
@@ -315,6 +332,8 @@ class Steuerung:
                         # Text, Bild, Pruefung und jede Nachbesserung
                         # zusammen. None heisst: von vor dieser Zaehlung.
                         "kosten_usd": zeile["kosten_usd"],
+                        # Im Sparmodus entstanden - das steht am Beitrag.
+                        "sparversion": bool(zeile["sparmodus"]),
                         # Die weiteren Bilder zum Durchwischen, in der
                         # Reihenfolge. Leer heisst: ein Bild genuegte.
                         "karussell": [
@@ -394,6 +413,7 @@ class Steuerung:
                 "modellkosten": agent.store.kosten_je_modell(),
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
                 "vorbilder": vorbilder.model_dump(mode="json") if vorbilder else None,
+                "sparmodus": sparmodus,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
                 "farben": farben,
@@ -969,6 +989,22 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
 
+        def _setze_sparmodus(self, rumpf: dict) -> None:
+            """Schaltet den Sparmodus an oder aus - gilt ab dem nächsten Zyklus."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            an = rumpf.get("an")
+            if not isinstance(an, bool):
+                self._json({"ok": False, "grund": "Gib an, ob an oder aus."}, 400)
+                return
+            agent = Agent(steuerung.settings)
+            try:
+                agent.setze_sparmodus(an)
+            finally:
+                agent.close()
+            self._json({"ok": True, "an": an, "laeuft": steuerung.laeuft})
+
         def _vorbilder_neu(self) -> None:
             """Lässt den Agenten die Vorbilder jetzt neu ansehen - ein Aufruf mit Websuche."""
             if steuerung.nur_lesen:
@@ -1187,6 +1223,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/bildneu",
                 "/api/rechte",
                 "/api/vorbilder",
+                "/api/sparmodus",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -1244,6 +1281,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/vorbilder":
                 self._vorbilder_neu()
+                return
+
+            if pfad == "/api/sparmodus":
+                self._setze_sparmodus(rumpf)
                 return
 
             if pfad == "/api/rechte":

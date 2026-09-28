@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from .config import LLMConfig
 from .economy.ledger import Mode, Treasury
-from .economy.pricing import cost_of_usage
+from .economy.pricing import cost_of_usage, websuchen
 
 log = logging.getLogger(__name__)
 
@@ -203,6 +203,7 @@ class Brain:
                 "cache_gelesen": getattr(response.usage, "cache_read_input_tokens", 0) or 0,
                 "cache_geschrieben": getattr(response.usage, "cache_creation_input_tokens", 0)
                 or 0,
+                "websuchen": websuchen(response.usage),
             },
         )
         log.debug("%s auf %s: %.5f USD", label, model, cost)

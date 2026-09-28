@@ -37,6 +37,7 @@ from .brain import (
 )
 from .config import Settings
 from .economy.ledger import BudgetExhausted, CycleBudgetExceeded, Mode, Treasury
+from .economy.sparmodus import KEY_SPARMODUS, guenstiger, spar_config
 from .imaging import FEED, STORY, lege_hook_auf, render_post_image
 from .imaging.generator import KontingentErschoepft, baue_generator
 from .instagram import InstagramClient, Publisher
@@ -197,6 +198,10 @@ class Bildprobe:
         return self.stufe < 0 or self.stufe >= ZEIGT_DIE_SACHE_AB
 
 class Agent:
+    # Ob dieser Lauf im Sparmodus arbeitet. Als Klassenwert, damit auch ein
+    # Agent ohne vollen Aufbau (die Tests bauen solche) im Normalbetrieb ist.
+    _spar = False
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.store = Store(settings.db_path)
@@ -208,6 +213,10 @@ class Agent:
         # nur ungenauer.
         self.abrechnung = baue_abrechnung(settings.abrechnung_schluessel)
         self.brain = Brain(settings.llm, self.treasury, settings.anthropic_api_key)
+        # Der Sparmodus stellt das Modellwerkzeug um - gelesen beim Anlegen
+        # und noch einmal zu Beginn jedes Zyklus.
+        self._spar = False
+        self._wende_sparmodus_an()
 
         self.ig: InstagramClient | None = None
         if settings.instagram_ready:
@@ -320,6 +329,31 @@ class Agent:
         )
 
     # -- Kennzahlen --------------------------------------------------------
+
+    @property
+    def sparmodus(self) -> bool:
+        """Ob der Betreiber den Sparmodus eingeschaltet hat."""
+        return bool(self.store.get_json(KEY_SPARMODUS))
+
+    def setze_sparmodus(self, an: bool) -> None:
+        """Schaltet den Sparmodus - gilt ab dem nächsten Zyklus und für jeden Knopf."""
+        an = bool(an)
+        if an != self.sparmodus:
+            self.store.set_json(KEY_SPARMODUS, an)
+            self.store.log(
+                "sparmodus", "Sparmodus eingeschaltet" if an else "Sparmodus ausgeschaltet"
+            )
+        self._wende_sparmodus_an()
+
+    def _wende_sparmodus_an(self) -> None:
+        """Stellt Modell, Aufwand und Websuchen auf den Schalter ein.
+
+        Im Sparmodus bekommt das Modellwerkzeug eine eigene, günstigere
+        Fassung der Einstellungen; die Einstellungen selbst bleiben, wie
+        sie sind - ausgeschaltet gilt wieder das Gewohnte.
+        """
+        self._spar = self.sparmodus
+        self.brain.config = spar_config(self.settings.llm) if self._spar else self.settings.llm
 
     def collect_metrics(self, cycle: int) -> str:
         """Holt die aktuellen Zahlen und schreibt sie ins Gedächtnis."""
@@ -504,6 +538,16 @@ class Agent:
         report = CycleReport(started_at=datetime.now(timezone.utc))
         self.treasury.begin_cycle()
         self._kasse_nachfuehren()
+        # Der Schalter gilt für den ganzen Zyklus: Wer ihn mittendrin
+        # umlegt, meint den nächsten - kein Beitrag halb so, halb so.
+        self._wende_sparmodus_an()
+        report.sparmodus = self._spar
+        if self._spar:
+            report.steps.append(
+                f"Sparmodus: {self.brain.config.model.replace('claude-', '')}, "
+                f"höchstens {self.brain.config.max_web_searches} Websuchen, "
+                "ohne Nebenarbeiten"
+            )
         # Gilt nur fuer diesen Lauf: Morgen ist das Kontingent wieder da.
         self._bilder_heute_aus: str | None = None
 
@@ -544,7 +588,8 @@ class Agent:
         report.cost_usd = self.treasury.state().cycle_spent_usd
         self.store.log(
             "cycle",
-            f"Zyklus {cycle} beendet, Kosten {report.cost_usd:.4f} USD",
+            f"Zyklus {cycle} beendet, Kosten {report.cost_usd:.4f} USD"
+            + (" (Sparmodus)" if report.sparmodus else ""),
             cycle,
             payload=report.model_dump(mode="json"),
         )
@@ -575,7 +620,10 @@ class Agent:
             self.store.set_json(KEY_ZAHLEN_BEI_REFLEXION, performance)
         neue_zahlen = performance != (self.store.get_json(KEY_ZAHLEN_BEI_REFLEXION) or "")
         reflektiert = False
-        if self.store.published_count() > 0 and (neue_zahlen or reflection is None):
+        if self._spar and self.store.published_count() > 0:
+            # Im Sparmodus zählt der Beitrag, nicht das Nachdenken darüber.
+            report.steps.append("Reflexion ruht - Sparmodus")
+        elif self.store.published_count() > 0 and (neue_zahlen or reflection is None):
             reflection = reflect(
                 self.brain,
                 identity=identity,
@@ -597,7 +645,7 @@ class Agent:
         due = cycle % RESEARCH_EVERY == 0
         wants_change = bool(reflektiert and reflection and reflection.strategy_should_change)
         recherchiert = False
-        if (due or wants_change) and state.mode is Mode.NORMAL:
+        if (due or wants_change) and state.mode is Mode.NORMAL and not self._spar:
             analysis = run_market_research(self.brain, identity=identity)
             self.store.set_json(KEY_ANALYSIS, analysis)
             report.steps.append(f"Marktrecherche ({len(analysis.sources)} Quellen)")
@@ -614,6 +662,10 @@ class Agent:
             letzte = cycle
             self.store.set_json(KEY_STRATEGIE_ZYKLUS, cycle)
         faellig = not isinstance(letzte, int) or cycle - letzte >= STRATEGIE_EVERY
+        if self._spar and strategy is not None:
+            # Ohne Kurs geht es nicht - aber einen bestehenden neu
+            # herzuleiten, kann bis nach dem Sparmodus warten.
+            faellig = False
         if strategy is None or reflektiert or recherchiert or faellig:
             strategy = update_strategy(
                 self.brain,
@@ -631,13 +683,13 @@ class Agent:
             report.steps.append(f"Kurs unverändert: {strategy.current_goal}")
 
         # Lohnt sich der Kurs noch? Nicht in jedem Zyklus - das kostet.
-        if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL:
+        if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL and not self._spar:
             identity = self._pruefe_kurs(cycle, identity, performance, report)
 
         # Das Handwerk der Besten, selten nachgesehen - es liegt danach bei
         # jedem Beitrag mit auf dem Schreibtisch.
         letzte_vorbilder = self.store.get_json(KEY_VORBILDER_ZYKLUS)
-        if state.mode is Mode.NORMAL and (
+        if state.mode is Mode.NORMAL and not self._spar and (
             self.vorbilder is None
             or not isinstance(letzte_vorbilder, int)
             or cycle - letzte_vorbilder >= VORBILDER_EVERY
@@ -647,7 +699,11 @@ class Agent:
         self._veroeffentliche_freigegebenes(report)
         self._produce_posts(cycle, identity, strategy, performance, report)
 
-        # Geschäftsplanung in großem Takt - oder sofort, wenn das Geld knapp wird.
+        # Geschäftsplanung in großem Takt - oder sofort, wenn das Geld knapp
+        # wird. Im Sparmodus ruht sie: Das Geld ist dann nicht knapp, der
+        # Betreiber will nur keins für Nebenarbeit ausgeben.
+        if self._spar:
+            return
         if cycle % MONETIZATION_EVERY == 0 or self.treasury.state().mode is Mode.FRUGAL:
             self._plan_monetization(cycle, identity, performance, report)
 
@@ -719,6 +775,10 @@ class Agent:
                 fund=fund,
                 persona=self._persona_chef(),
                 vorbilder=self.vorbilder,
+                # Die Wahl im Dashboard gilt auch fürs Schreiben - bisher
+                # nur fürs Nachbessern, geschrieben wurde immer mit der
+                # Voreinstellung.
+                modell=self._modell("chef"),
             )
             if not draft.visual.footer.strip():
                 draft.visual.footer = f"@{identity.handle}"
@@ -750,6 +810,8 @@ class Agent:
             if erzeugt:
                 image_path = erzeugt
             post_id = self.store.add_draft(draft, str(image_path))
+            if self._spar:
+                self.store.setze_sparversion(post_id)
             self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
             self.store.setze_bildnachweis(post_id, getattr(self, "_letzter_nachweis", ""))
             if fund is not None:
@@ -899,7 +961,12 @@ class Agent:
             "bild_neu",
             f"Entwurf {post_id}: Bild {stelle} neu ({kosten:.4f} USD)",
         )
-        return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": []}
+        schritte = (
+            []
+            if roh is not None or self._darf_malen()
+            else ["Kein Foto gefunden - im Sparmodus wird nicht bezahlt gemalt"]
+        )
+        return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": schritte}
 
     def karte_entfernen(self, post_id: int, stelle: int) -> dict:
         """Nimmt ein Bild aus dem Karussell heraus - kostenlos.
@@ -1711,8 +1778,19 @@ class Agent:
         return self.store.get_json(KEY_MODELLWAHL) or {}
 
     def _modell(self, schluessel: str) -> str | None:
-        """Das gewählte Modell einer Rolle, oder None für die Voreinstellung."""
-        return self.modellwahl.get(schluessel)
+        """Das gewählte Modell einer Rolle, oder None für die Voreinstellung.
+
+        Im Sparmodus nie teurer als das Sparmodell: Aus Opus wird Sonnet,
+        ein schon günstigeres Modell bleibt.
+        """
+        gewaehlt = self.modellwahl.get(schluessel)
+        if not self._spar:
+            return gewaehlt
+        from .mannschaft import NACH_SCHLUESSEL, standardmodell
+
+        rolle = NACH_SCHLUESSEL.get(schluessel)
+        standard = standardmodell(rolle, self.settings.llm) if rolle else self.settings.llm.model
+        return guenstiger(gewaehlt or standard)
 
     @property
     def mannschaft(self) -> dict:
@@ -1968,7 +2046,15 @@ class Agent:
             # Bildern. Einmal wird nachgesetzt - aber nicht zusaetzlich zu
             # einem Nachschlag wegen zu wenig Reiz: Jede Runde kostet so
             # viel wie die erste.
-            if not self._bildprobe(fund, report) and mit_suche and not nachgesetzt:
+            foto = self._bildprobe(fund, report)
+            if not foto and self._spar:
+                # Ein zweiter Fund kostet so viel wie der erste. Im
+                # Sparmodus nimmt er lieber ein Archivbild oder die Schrift.
+                report.steps.append(
+                    f"Kein freies Foto, das die Sache zeigt: {fund.titel} "
+                    "- im Sparmodus wird nicht nachgesetzt"
+                )
+            elif not foto and mit_suche and not nachgesetzt:
                 report.steps.append(
                     f"Kein freies Foto, das die Sache zeigt: {fund.titel} "
                     "- noch einmal gesucht"
@@ -2067,6 +2153,11 @@ class Agent:
         geändert hat.
         """
         if not self.settings.posting.gestaltung_noetig:
+            return None
+        if self._spar:
+            # Sie verbessert den Auftrag fürs Malen - Verbesserung, nicht
+            # Voraussetzung. Das ist genau, was der Sparmodus weglässt.
+            report.steps.append("Bildsprache ausgelassen - Sparmodus")
             return None
         if getattr(self, "_bilder_heute_aus", None):
             # Ihr Ergebnis ist ein ueberarbeiteter Bildprompt. Ohne Bild
@@ -2439,10 +2530,18 @@ class Agent:
 
         # Sonst gemalt, mit dem Prompt dieser Karte.
         wunsch = (karte.bildwunsch or "").strip()
-        if self.bildgenerator is not None and wunsch and not self._bilder_heute_aus:
+        if (
+            self.bildgenerator is not None
+            and wunsch
+            and not self._bilder_heute_aus
+            and self._darf_malen()
+        ):
             ziel = self.settings.media_dir / f"{stamm}-roh.png"
             try:
                 self.bildgenerator.erzeuge(wunsch, ziel)
+                # Auch eine gemalte Karte kostet - das fehlte hier, gebucht
+                # wurde nur das erste Bild eines Beitrags.
+                self._buche_bild()
                 return ziel, ""
             except KontingentErschoepft as exc:
                 self._bilder_heute_aus = str(exc)
@@ -2633,6 +2732,13 @@ class Agent:
             report.steps.append("Kein Bild-Prompt geschrieben - Typografie bleibt")
             return None, None
 
+        if not self._darf_malen():
+            report.steps.append(
+                "Kein Foto gefunden - im Sparmodus wird nicht bezahlt gemalt, "
+                "es bleibt bei der Schrift"
+            )
+            return None, None
+
         roh = self.settings.media_dir / f"{basis}-roh.png"
         try:
             self.bildgenerator.erzeuge(draft.image_generation_prompt, roh)
@@ -2651,14 +2757,7 @@ class Agent:
             self.store.log("image_error", str(exc))
             return None, None
 
-        # Erst buchen, wenn wirklich ein Bild da ist - und nur, wenn es
-        # etwas gekostet hat. Auf dem eigenen Rechner ist der Preis null.
-        if (preis := self.settings.bild.kosten_pro_bild_usd) > 0:
-            self.treasury.charge(
-                preis,
-                category="image",
-                note=f"Bild ({self.settings.bild.modell or self.settings.bild.anbieter})",
-            )
+        self._buche_bild()
 
         fertig = self.settings.media_dir / f"{basis}-fertig.png"
         try:
@@ -2677,6 +2776,23 @@ class Agent:
 
         report.steps.append("Bild erzeugt und beschriftet")
         return fertig, roh
+
+    def _darf_malen(self) -> bool:
+        """Ob gemalt werden darf: immer - außer bezahlt im Sparmodus."""
+        return not (self._spar and self.settings.bild.kosten_pro_bild_usd > 0)
+
+    def _buche_bild(self) -> None:
+        """Bucht ein gemaltes Bild - erst, wenn es da ist, und nur, wenn es kostet.
+
+        Auf dem eigenen Rechner und bei den kostenlosen Diensten ist der
+        Preis null, dann gibt es nichts zu buchen.
+        """
+        if (preis := self.settings.bild.kosten_pro_bild_usd) > 0:
+            self.treasury.charge(
+                preis,
+                category="image",
+                note=f"Bild ({self.settings.bild.modell or self.settings.bild.anbieter})",
+            )
 
     def veroeffentliche_jetzt(self) -> CycleReport:
         """Schickt raus, was freigegeben ist - ohne einen Denkzyklus.

@@ -32,6 +32,7 @@ from .brain import (
     STOFF_NAME,
     STOFF_ROLLE,
 )
+from .economy.sparmodus import guenstiger
 
 # Wo die Modellwahl des Betreibers liegt.
 KEY_MODELLWAHL = "modellwahl"
@@ -242,6 +243,8 @@ def aufstellung(
                 "bildwunsch": eigen["bildwunsch"],
                 "rang": rolle.rang,
                 "modell": modell_fuer(rolle.schluessel, wahl, settings.llm),
+                # Womit sie im Sparmodus arbeitet: nie teurer als Sonnet 5.
+                "spar_modell": guenstiger(modell_fuer(rolle.schluessel, wahl, settings.llm)),
                 "standard": standardmodell(rolle, settings.llm),
                 "aktiv": aktiv,
             }

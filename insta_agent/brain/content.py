@@ -173,6 +173,7 @@ def create_post_draft(
     fund: Fund | None = None,
     persona: str | None = None,
     vorbilder=None,
+    modell: str | None = None,
 ) -> PostDraft:
     from .vorbilder import vorbilder_block
 
@@ -188,6 +189,7 @@ def create_post_draft(
         schema=PostDraft,
         system=persona or PERSONA,
         label="Post schreiben",
+        modell=modell,
         prompt=with_context(
             identity_block(identity),
             strategy_block(strategy),

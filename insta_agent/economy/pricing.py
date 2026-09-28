@@ -34,6 +34,12 @@ PRICING: dict[str, ModelPrice] = {
 # billig - eine Unterschätzung würde die Budgetbremse aushebeln.
 _FALLBACK_PRICE = ModelPrice(10.00, 50.00, 1.00, 12.50)
 
+# Jede Websuche kostet zusätzlich zu den Token, die ihre Treffer
+# verbrauchen: 10 USD je 1.000 Suchen. Das stand hier lange nicht drin -
+# bei bis zu vier Suchen je Stoffsuche und Prüfung fehlten so gut zehn
+# Cent je Beitrag in der Kasse.
+WEBSUCHE_USD = 0.01
+
 
 def price_for(model: str) -> ModelPrice:
     return PRICING.get(model, _FALLBACK_PRICE)
@@ -56,4 +62,13 @@ def cost_of_usage(model: str, usage: object) -> float:
         + output * price.output_per_mtok
         + cache_read * price.cache_read_per_mtok
         + cache_write * price.cache_write_per_mtok
-    ) / 1_000_000
+    ) / 1_000_000 + websuchen(usage) * WEBSUCHE_USD
+
+
+def websuchen(usage: object) -> int:
+    """Wie viele Websuchen dieser Aufruf gestellt hat - steht im usage-Objekt."""
+    werkzeuge = getattr(usage, "server_tool_use", None)
+    try:
+        return int(getattr(werkzeuge, "web_search_requests", 0) or 0)
+    except (TypeError, ValueError):
+        return 0

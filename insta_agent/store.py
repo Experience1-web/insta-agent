@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS posts (
     rohbild_path    TEXT,
     bildnachweis    TEXT,
     kosten_usd      REAL,
-    karussell_json  TEXT
+    karussell_json  TEXT,
+    sparmodus       INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -104,6 +105,7 @@ class Store:
             "bildnachweis": "TEXT",
             "kosten_usd": "REAL",
             "karussell_json": "TEXT",
+            "sparmodus": "INTEGER",
         }
     }
 
@@ -194,6 +196,13 @@ class Store:
             conn.execute(
                 "UPDATE posts SET kosten_usd = COALESCE(kosten_usd, 0) + ? WHERE id=?",
                 (float(usd), post_id),
+            )
+
+    def setze_sparversion(self, post_id: int, spar: bool = True) -> None:
+        """Merkt am Beitrag, dass er im Sparmodus entstanden ist."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE posts SET sparmodus=? WHERE id=?", (1 if spar else 0, post_id)
             )
 
     def get_post(self, post_id: int) -> sqlite3.Row | None:
@@ -499,6 +508,32 @@ class Store:
         return self._conn.execute(
             "SELECT * FROM journal ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
+
+    def zyklen(self, limit: int = 30) -> list[dict]:
+        """Die letzten Zyklen mit Kosten und Beiträgen, neueste zuerst.
+
+        Daraus rechnet das Dashboard, was ein Beitrag wirklich kostet -
+        getrennt nach Normalbetrieb und Sparmodus.
+        """
+        zeilen = self._conn.execute(
+            "SELECT payload FROM journal WHERE kind='cycle' AND payload IS NOT NULL "
+            "ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        ergebnis = []
+        for zeile in zeilen:
+            try:
+                daten = json.loads(zeile["payload"]) or {}
+            except (TypeError, ValueError):
+                continue
+            ergebnis.append(
+                {
+                    "kosten": float(daten.get("cost_usd") or 0.0),
+                    "beitraege": len(daten.get("drafts_written") or []),
+                    "spar": bool(daten.get("sparmodus")),
+                }
+            )
+        return ergebnis
 
     def last_cycle_at(self) -> datetime | None:
         """Ende des letzten abgeschlossenen Zyklus.

@@ -682,3 +682,4 @@ class CycleReport(BaseModel):
     published_media_ids: list[str] = Field(default_factory=list)
     drafts_written: list[str] = Field(default_factory=list)
     halted_reason: str | None = None
+    sparmodus: bool = False

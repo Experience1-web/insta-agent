@@ -88,9 +88,32 @@ Der Browser öffnet sich von selbst. Dort siehst du:
 - seine **Chancenbewertung**: jetziger Weg gegen Alternativen, nach
   Erwartungswert
 - ein Feld, um **Einnahmen einzutragen**, sobald welche ankommen
+- den **Sparmodus** – siehe unten
 
 Den Agenten startest du per Knopfdruck; während er arbeitet, läuft sein
 Protokoll live mit.
+
+### Sparmodus
+
+Über dem Startknopf liegt ein Schalter. Daneben steht, was ein Beitrag
+kostet – normal und im Sparmodus. Solange es keine eigenen Zahlen gibt,
+ist das eine Beispielrechnung. Danach zählt der Schnitt deiner letzten
+Zyklen. Im Sparmodus:
+
+- arbeitet keine Rolle mit einem teureren Modell als Sonnet 5 – der Text
+  entsteht also mit Sonnet 5 statt Opus 5, bei mittlerem statt hohem Aufwand
+- stellt er höchstens zwei statt vier Websuchen je Stoffsuche und Prüfung
+- sucht er keinen zweiten Fund, nur weil ein Foto fehlt – wohl aber, wenn der Fund zu schwach ist
+- lässt er die Bildsprache-Runde weg und malt nur, wenn es nichts kostet
+- ruhen Marktrecherche, Reflexion, Vorbilder, Kursprüfung und Geschäftsplanung
+
+Was einen Beitrag trägt, bleibt: der Fund mit Quellen, die Endprüfung
+mit Websuche samt einer Nachbesserung und das Ansehen jedes Fotos. Jeder
+so entstandene Beitrag trägt im Dashboard die Marke **Sparversion**.
+
+Der Sparmodus ist nicht der **Notbetrieb**. Der springt von selbst an,
+wenn die Kasse fast leer ist, und arbeitet dann nur noch mit Haiku und
+ohne Websuche.
 
 Das Portrait ist bewusst eine **Grafik und kein Foto**. Der Account wird
 von fremden Menschen gesehen; ein fotorealistisches Gesicht einer Person,
