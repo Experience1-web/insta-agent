@@ -75,6 +75,12 @@ KEY_STRATEGIE_ZYKLUS = "strategie_zyklus"
 # Wie oft der Kurs ohne neuen Anlass trotzdem ueberprueft wird.
 STRATEGIE_EVERY = 7
 
+# Wie oft die Machart der besten Wissens-Accounts neu angesehen wird. Sie
+# aendert sich langsam; eine Recherche mit Websuche kostet etwa 15-30 Cent.
+KEY_VORBILDER = "vorbilder"
+KEY_VORBILDER_ZYKLUS = "vorbilder_zyklus"
+VORBILDER_EVERY = 14
+
 # Was sich am Profil über das Dashboard ändern lässt. Handle und
 # Anzeigename gehören dazu, weil sie auf Instagram stehen; `agent_why`
 # und `why_this_works` sind Begründungen und ändern nichts am Betrieb.
@@ -628,6 +634,16 @@ class Agent:
         if cycle % ASSESS_EVERY == 0 and state.mode is Mode.NORMAL:
             identity = self._pruefe_kurs(cycle, identity, performance, report)
 
+        # Das Handwerk der Besten, selten nachgesehen - es liegt danach bei
+        # jedem Beitrag mit auf dem Schreibtisch.
+        letzte_vorbilder = self.store.get_json(KEY_VORBILDER_ZYKLUS)
+        if state.mode is Mode.NORMAL and (
+            self.vorbilder is None
+            or not isinstance(letzte_vorbilder, int)
+            or cycle - letzte_vorbilder >= VORBILDER_EVERY
+        ):
+            self._sieh_vorbilder_an(identity, report, cycle)
+
         self._veroeffentliche_freigegebenes(report)
         self._produce_posts(cycle, identity, strategy, performance, report)
 
@@ -675,6 +691,11 @@ class Agent:
             try:
                 self.treasury.check()
             except (BudgetExhausted, CycleBudgetExceeded) as exc:
+                # Reicht es nicht einmal für den ersten Beitrag, hält der
+                # Zyklus an - das soll oben im Bericht stehen, nicht nur
+                # als Randnotiz.
+                if index == 0:
+                    raise
                 report.steps.append(f"Weitere Posts abgebrochen: {exc}")
                 break
 
@@ -697,6 +718,7 @@ class Agent:
                 performance_note=performance,
                 fund=fund,
                 persona=self._persona_chef(),
+                vorbilder=self.vorbilder,
             )
             if not draft.visual.footer.strip():
                 draft.visual.footer = f"@{identity.handle}"
@@ -1190,6 +1212,52 @@ class Agent:
             return {"ok": False, "grund": "Das lässt sich nur vor dem Veröffentlichen wählen."}
         self.store.set_json(f"format:{post_id}", "reel" if als_reel else "bilder")
         return {"ok": True, "als_reel": als_reel}
+
+    # --- Vorbilder ----------------------------------------------------------
+
+    @property
+    def vorbilder(self):
+        from .models import Vorbilder
+
+        roh = self.store.get_json(KEY_VORBILDER)
+        try:
+            return Vorbilder.model_validate(roh) if roh else None
+        except Exception:  # noqa: BLE001 - ein alter Stand ist kein Grund zum Absturz
+            return None
+
+    def _sieh_vorbilder_an(self, identity, report: CycleReport, cycle: int | None = None):
+        from .brain.vorbilder import beobachte_vorbilder
+
+        try:
+            vorbilder = beobachte_vorbilder(self.brain, identity=identity)
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - ohne Vorbilder wird trotzdem geschrieben
+            log.warning("Vorbilder nicht angesehen: %s", exc)
+            report.steps.append(f"Vorbilder nicht angesehen: {exc}")
+            return None
+        self.store.set_json(KEY_VORBILDER, vorbilder)
+        self.store.set_json(
+            KEY_VORBILDER_ZYKLUS,
+            cycle if cycle is not None else max(self.store.next_cycle_number() - 1, 0),
+        )
+        report.steps.append(
+            f"Vorbilder angesehen: {len(vorbilder.accounts)} Accounts, "
+            f"{len(vorbilder.fuer_uns)} Regeln für uns"
+        )
+        return vorbilder
+
+    def vorbilder_neu(self) -> dict:
+        """Auf Knopfdruck aus dem Dashboard: die Vorbilder jetzt neu ansehen."""
+        identity = self.identity
+        if identity is None:
+            return {"ok": False, "grund": "Es gibt noch kein Profil."}
+        self.treasury.check()
+        lauf = CycleReport(started_at=datetime.now(timezone.utc))
+        vorbilder = self._sieh_vorbilder_an(identity, lauf)
+        if vorbilder is None:
+            return {"ok": False, "grund": " ".join(lauf.steps) or "Das hat nicht geklappt."}
+        return {"ok": True}
 
     def _von_hand_geaendert(self, post_id: int) -> None:
         """Merkt sich, dass die Prüfung die vorige Fassung betraf."""

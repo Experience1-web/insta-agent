@@ -21,6 +21,8 @@ from insta_agent.models import (
     Reflection,
     StrategyUpdate,
     VisualSpec,
+    Vorbild,
+    Vorbilder,
 )
 from insta_agent.runner import Agent
 
@@ -229,7 +231,16 @@ def _geschaeftsplan() -> MonetizationPlan:
     )
 
 
+def _vorbilder() -> Vorbilder:
+    return Vorbilder(
+        accounts=[Vorbild(name="@beispielkonto", warum="Erster Satz ist eine Frage.")],
+        einstiege=["Zahl zuerst: „3.000 Jahre lag es unter dem Acker.“"],
+        fuer_uns=["Den Fund im ersten Satz nennen."],
+    )
+
+
 _ANTWORTEN = {
+    Vorbilder: _vorbilder,
     MarketAnalysis: _analyse,
     Fund: _fund,
     Identity: _identitaet,
@@ -326,7 +337,6 @@ def test_leere_kasse_haelt_den_agenten_an(agent):
 def test_zyklusbudget_bremst_einen_ausreisser(agent, settings):
     settings.economy.max_cost_per_cycle_usd = 0.05  # reicht nur für zwei Aufrufe
     report = agent.run_cycle()
-
     assert report.halted_reason is not None
     assert "Zyklusbudget" in report.halted_reason
 

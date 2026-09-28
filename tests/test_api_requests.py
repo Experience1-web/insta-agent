@@ -35,6 +35,9 @@ ANTWORTEN = {
     "MonetizationPlan": _geschaeftsplan,
     "Pruefbericht": _pruefbericht,
     "Gestaltungsurteil": _gestaltungsurteil,
+    "Vorbilder": lambda: __import__("insta_agent.models").models.Vorbilder(
+        fuer_uns=["Die Zahl zuerst"], einstiege=["Frage statt Aussage"]
+    ),
 }
 
 
@@ -151,12 +154,12 @@ def test_die_websuche_geht_an_das_guenstige_modell(agent_mit_mitschrift):
     agent.run_cycle()
 
     mit_suche = [a for a in client.anfragen if a.get("tools")]
-    # Zweimal wird nachgeschlagen: Stoffsuche und Endprüfung. Die
-    # Marktrecherche entfällt, seit das Profil vorgegeben ist, und die
-    # Bildsprache, sobald ein echtes Foto bereitliegt - sie verbessert nur
-    # die Vorlage fürs Malen. Beide gehen an das Recherchemodell, nicht an
-    # das teure.
-    assert len(mit_suche) == 2, "Stoff und Endprüfung suchen je einmal"
+    # Dreimal wird nachgeschlagen: Vorbilder (nur im ersten Zyklus und
+    # dann alle zwei Wochen), Stoffsuche und Endprüfung. Die Marktrecherche
+    # entfällt, seit das Profil vorgegeben ist, und die Bildsprache, sobald
+    # ein echtes Foto bereitliegt - sie verbessert nur die Vorlage fürs
+    # Malen. Alle gehen an das Recherchemodell, nicht an das teure.
+    assert len(mit_suche) == 3, "Vorbilder, Stoff und Endprüfung suchen je einmal"
     for anfrage in mit_suche:
         assert anfrage["model"] == agent.settings.llm.research_model
         assert anfrage["tools"][0]["type"] == "web_search_20260209"
@@ -202,3 +205,27 @@ def test_gespeicherte_token_werden_richtig_berechnet():
     )
     # Sonnet 5: 1.000 frisch zu 2 $/Mio + 10.000 gelesen zu 0,20 $/Mio
     assert cost_of_usage("claude-sonnet-5", usage) == pytest.approx(0.002 + 0.002)
+
+
+def test_im_zweiten_zyklus_werden_die_vorbilder_nicht_wieder_angesehen(agent_mit_mitschrift):
+    """Sie ändern sich langsam - alle zwei Wochen reicht, sonst ist es Geld für nichts."""
+    agent, client = agent_mit_mitschrift
+    agent.run_cycle()
+    vorher = len([a for a in client.anfragen if a.get("tools")])
+    agent.run_cycle()
+    danach = len([a for a in client.anfragen if a.get("tools")])
+    assert danach - vorher == 2  # nur Stoff und Endprüfung
+    assert agent.vorbilder is not None
+
+
+def test_die_vorbilder_liegen_beim_schreiben_auf_dem_tisch(agent_mit_mitschrift):
+    agent, client = agent_mit_mitschrift
+    agent.run_cycle()
+    agent.run_cycle()
+    schreiben = [
+        a for a in client.anfragen
+        if "Was bei den besten Wissens-Accounts funktioniert"
+        in a["messages"][0]["content"][0]["text"]
+    ]
+    assert schreiben, "der Schreibauftrag kennt die Vorbilder nicht"
+    assert "Die Zahl zuerst" in schreiben[-1]["messages"][0]["content"][0]["text"]

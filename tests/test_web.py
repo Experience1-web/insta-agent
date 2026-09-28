@@ -750,3 +750,65 @@ def test_die_nur_lese_ansicht_darf_die_kasse_nicht_anfassen(settings):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_die_vorbilder_stehen_im_zustand_und_lassen_sich_neu_holen(settings, monkeypatch):
+    """Der Knopf im Dashboard ruft genau einen Blick auf die Vorbilder aus."""
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from insta_agent.models import Vorbild, Vorbilder
+    from insta_agent.runner import KEY_VORBILDER, Agent
+    from insta_agent.web import _handler_klasse
+
+    assert Steuerung(settings).zustand()["vorbilder"] is None
+
+    aufrufe = []
+
+    def neu_ansehen(self):
+        aufrufe.append(True)
+        self.store.set_json(
+            KEY_VORBILDER,
+            Vorbilder(
+                accounts=[Vorbild(name="@beispiel", warum="Zahl im ersten Satz.")],
+                fuer_uns=["Den Fund im ersten Satz nennen."],
+            ),
+        )
+        return {"ok": True}
+
+    monkeypatch.setattr(Agent, "vorbilder_neu", neu_ansehen)
+    settings.anthropic_api_key = "sk-ant-test"
+    steuerung = Steuerung(settings)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_klasse(steuerung, None))
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        anfrage = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/vorbilder",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+            assert json.loads(antwort.read())["ok"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert aufrufe == [True]
+    vorbilder = steuerung.zustand()["vorbilder"]
+    assert vorbilder["fuer_uns"] == ["Den Fund im ersten Satz nennen."]
+    assert vorbilder["accounts"][0]["name"] == "@beispiel"
+
+
+def test_ohne_profil_gibt_es_nichts_anzusehen(settings):
+    from insta_agent.runner import Agent
+
+    agent = Agent(settings)
+    try:
+        ergebnis = agent.vorbilder_neu()
+    finally:
+        agent.close()
+    assert ergebnis["ok"] is False
+    assert "Profil" in ergebnis["grund"]

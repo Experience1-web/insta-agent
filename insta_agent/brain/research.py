@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from ..economy.ledger import BudgetExhausted, CycleBudgetExceeded
 from ..llm import Brain
 from ..models import MarketAnalysis
 from .prompts import PERSONA, identity_block, with_context
@@ -83,6 +84,8 @@ dazu, was nicht im Text steht.
 # Gefundene Quellen
 {chr(10).join(research.sources) or "keine"}""",
         )
+    except (BudgetExhausted, CycleBudgetExceeded):
+        raise
     except Exception as exc:  # noqa: BLE001 - die Recherche war teuer
         # Das Ordnen ist der billige Schritt, die Recherche der teure. Sie
         # wegzuwerfen, weil das Sortieren hakt, wäre die schlechteste

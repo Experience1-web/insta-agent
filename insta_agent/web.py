@@ -277,6 +277,7 @@ class Steuerung:
             identitaet = agent.identity
             strategie = agent.strategy
             plan = agent.monetization
+            vorbilder = agent.vorbilder
 
             farben = {"hintergrund": "#111318", "akzent": "#E4572E"}
             entwuerfe = []
@@ -392,6 +393,7 @@ class Steuerung:
                 # Und was jedes Modell hier tatsaechlich schon gekostet hat.
                 "modellkosten": agent.store.kosten_je_modell(),
                 "strategie": strategie.model_dump(mode="json") if strategie else None,
+                "vorbilder": vorbilder.model_dump(mode="json") if vorbilder else None,
                 "plan": plan.model_dump(mode="json") if plan else None,
                 "entwuerfe": entwuerfe,
                 "farben": farben,
@@ -967,6 +969,23 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
 
+        def _vorbilder_neu(self) -> None:
+            """Lässt den Agenten die Vorbilder jetzt neu ansehen - ein Aufruf mit Websuche."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+
+            agent = Agent(steuerung.settings)
+            try:
+                ergebnis = agent.vorbilder_neu()
+            except Exception as exc:  # noqa: BLE001 - der Grund gehört auf die Seite
+                log.warning("Vorbilder nicht angesehen: %s", exc)
+                self._json({"ok": False, "grund": _verstaendlich(exc)}, 500)
+                return
+            finally:
+                agent.close()
+            self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
+
         def _erneuere_bildsprache(self) -> None:
             """Lässt den Agenten seine Bildsprache neu schreiben.
 
@@ -1167,6 +1186,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/portraitneu",
                 "/api/bildneu",
                 "/api/rechte",
+                "/api/vorbilder",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -1220,6 +1240,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/bildneu":
                 self._bild_neu(rumpf)
+                return
+
+            if pfad == "/api/vorbilder":
+                self._vorbilder_neu()
                 return
 
             if pfad == "/api/rechte":

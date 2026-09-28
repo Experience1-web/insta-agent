@@ -172,7 +172,10 @@ def create_post_draft(
     performance_note: str = "",
     fund: Fund | None = None,
     persona: str | None = None,
+    vorbilder=None,
 ) -> PostDraft:
+    from .vorbilder import vorbilder_block
+
     already_used = (
         "\n".join(f"- {c[:120]}" for c in recent_captions)
         if recent_captions
@@ -191,6 +194,7 @@ def create_post_draft(
             fund_block(fund),
             f"# Deine letzten Posts, wiederhole dich nicht\n{already_used}",
             f"# Was deine Zahlen sagen\n{performance_note}" if performance_note else "",
+            vorbilder_block(vorbilder),
             f"""\
 {auftrag}
 

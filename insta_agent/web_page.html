@@ -615,6 +615,7 @@
   </p>
 </div>
 <div id="vorhabenbox"></div>
+<div id="vorbilderbox"></div>
 
 <div id="mannschaftbox"></div>
 <div id="ideenbox"></div>
@@ -1556,6 +1557,7 @@ function zeichne(d) {
            () => zeichne_kopf(d));
   wenn_neu("mannschaft", d.mannschaft, () => zeichne_mannschaft(d));
   wenn_neu("vorhaben", d.strategie, () => zeichne_vorhaben(d));
+  wenn_neu("vorbilder", [d.vorbilder, !!d.identitaet], () => zeichne_vorbilder(d));
   wenn_neu("beitraege", d.entwuerfe, () => zeichne_beitraege(d));
   wenn_neu("ideen", d.plan, () => zeichne_ideen(d));
   wenn_neu("chancen", d.bewertung, () => zeichne_chancen(d));
@@ -1738,6 +1740,66 @@ function zeichne_vorhaben(d) {
     <p class="ziel">${esc(s.current_goal)}</p>
     <p class="begruendung">${esc(s.reasoning)}</p>
     ${fakten_html(s)}`);
+}
+
+/** Wie die besten Wissens-Accounts ihre Beiträge bauen - und was er
+ *  daraus für sich mitnimmt. Er sieht das alle zwei Wochen von selbst
+ *  nach; der Knopf holt es sofort. */
+function zeichne_vorbilder(d) {
+  const v = d.vorbilder;
+  if (!d.identitaet) { $("vorbilderbox").innerHTML = ""; return; }
+  const knopf = `<button class="klein" id="vorbilderneu">${v ? "Neu ansehen" : "Jetzt ansehen"}</button>`;
+  if (!v) {
+    $("vorbilderbox").innerHTML = `
+      <h2>Vorbilder. <span class="grau">Wie es die Besten machen.</span></h2>
+      <div class="karte">
+        <p style="margin:0 0 12px">Er hat sich die erfolgreichsten Wissens-Accounts noch nicht
+          angesehen. Das passiert im nächsten Zyklus von selbst – oder gleich hier
+          (ein Aufruf mit Websuche, einige Cent).</p>
+        ${knopf}
+      </div>`;
+  } else {
+    const namen = v.accounts.map(a => a.name).filter(Boolean);
+    const regel = v.fuer_uns[0] || v.einstiege[0] || "";
+    $("vorbilderbox").innerHTML = `
+      <h2>Vorbilder. <span class="grau">Wie es die Besten machen.</span></h2>
+      <div class="karte vorhaben klickbar" id="vorbilderkarte">
+        <p class="ziel">${esc(erster_satz(regel))}</p>
+        <div class="vorhabenfuss">
+          ${namen.slice(0, 3).map(n => `<span class="marke">${esc(anriss(n, 30))}</span>`).join("")}
+          <span class="mehr">Alles, was er mitnimmt</span>
+        </div>
+      </div>
+      <div style="margin-top:12px">${knopf}</div>`;
+    const liste = w => `<ul>${w.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    const teil = (titel, w) => w && w.length ? `<dt>${titel}</dt><dd>${liste(w)}</dd>` : "";
+    $("vorbilderkarte").onclick = () => oeffne_popup("Vorbilder", `
+      <dl class="fakten">
+        ${teil("Was er daraus macht", v.fuer_uns)}
+        ${v.accounts.length ? `<dt>Accounts</dt><dd><ul>${v.accounts.map(a =>
+          `<li><b>${esc(a.name)}</b> – ${esc(a.warum)}</li>`).join("")}</ul></dd>` : ""}
+        ${teil("Erste Sätze, die tragen", v.einstiege)}
+        ${teil("Karussell", v.karussell)}
+        ${teil("Bildunterschrift", v.bildunterschrift)}
+        ${teil("Was dort nicht funktioniert", v.vermeiden)}
+        ${v.quellen.length ? `<dt>Quellen</dt><dd><ul>${v.quellen.map(q =>
+          `<li><a href="${esc(q)}" target="_blank" rel="noopener">${esc(anriss(q, 60))}</a></li>`
+        ).join("")}</ul></dd>` : ""}
+      </dl>`);
+  }
+  const neu = $("vorbilderneu");
+  neu.onclick = async () => {
+    neu.disabled = true;
+    const fertig = arbeitet("Er sieht sich die Vorbilder an …");
+    try {
+      const ergebnis = await sende("/api/vorbilder");
+      if (!ergebnis.ok) { alert(ergebnis.grund || "Das hat nicht geklappt."); return; }
+      laden();
+    } finally {
+      fertig();
+      neu.disabled = false;
+    }
+  };
 }
 
 function zeichne_protokoll(d) {

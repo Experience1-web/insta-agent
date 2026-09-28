@@ -66,6 +66,43 @@ class MarketAnalysis(BaseModel):
     sources: list[str] = Field(default_factory=list, description="URLs der Webrecherche")
 
 
+class Vorbild(BaseModel):
+    name: str = Field(description="Handle oder Name des Accounts")
+    warum: str = Field(description="Was genau dort funktioniert, in einem Satz")
+
+
+class Vorbilder(BaseModel):
+    """Das Handwerk erfolgreicher Wissens-Accounts - nicht der Markt, die Machart.
+
+    Die Marktrecherche sagt, wer das Feld besetzt und wo eine Lücke ist.
+    Hier geht es darum, wie die Besten ihre Beiträge bauen: den ersten
+    Satz, das Karussell, die Bildunterschrift. Das gehört nicht in die
+    Wochenstrategie, sondern an den Schreibtisch.
+    """
+
+    accounts: list[Vorbild] = Field(
+        default_factory=list, description="Drei bis sechs erfolgreiche Wissens- oder Fund-Accounts"
+    )
+    einstiege: list[str] = Field(
+        default_factory=list,
+        description="Muster für den ersten Satz auf dem Bild, die dort tragen - je mit Beispiel",
+    )
+    karussell: list[str] = Field(
+        default_factory=list, description="Wie sie ihre Karussells aufbauen"
+    )
+    bildunterschrift: list[str] = Field(
+        default_factory=list, description="Wie ihre Bildunterschriften gebaut sind"
+    )
+    vermeiden: list[str] = Field(
+        default_factory=list, description="Was dort erkennbar nicht funktioniert"
+    )
+    fuer_uns: list[str] = Field(
+        default_factory=list,
+        description="Drei bis fünf konkrete Regeln für diesen Account, sofort umsetzbar",
+    )
+    quellen: list[str] = Field(default_factory=list, description="URLs der Recherche")
+
+
 # --------------------------------------------------------------------------
 # Strategie und Inhalte
 # --------------------------------------------------------------------------
