@@ -307,6 +307,12 @@ Nimm das, woran die Sache hängt: die Zahl, die Tiefe, das Alter, den
 Namen. Ein Wort, höchstens zwei - wer alles hervorhebt, hebt nichts
 hervor. Es muss wörtlich so im Hook stehen, sonst findet es niemand.
 
+`schrift` ist die Schriftfamilie des Beitrags: `ernst` (Serifen) für
+Geschichte und Grabungen, `technisch` (gleich breite Zeichen) für Weltall
+und Geräte, `wucht` (sehr fett) für eine große Zahl, `klar` sonst. Nimm
+nicht in jedem Beitrag dieselbe - ein Feed, in dem alles gleich gesetzt
+ist, sieht nach Vorlage aus.
+
 ## karten - die Bilder zum Durchwischen
 {KARUSSELL}""",
         ),

@@ -264,6 +264,17 @@ class VisualSpec(BaseModel):
         ),
     )
     footer: str = Field(default="", description="Kleiner Fußtext, meist der Handle")
+    schrift: Literal["klar", "ernst", "wucht", "technisch"] = Field(
+        default="klar",
+        description=(
+            "Die Schriftfamilie dieses Beitrags - alle seine Bilder tragen "
+            "dieselbe. klar: neutrale Grotesk, passt immer. ernst: mit Serifen, "
+            "für Geschichte, Grabungen, alte Dinge. wucht: sehr fett, für eine "
+            "große Zahl oder einen lauten Satz. technisch: gleich breite "
+            "Zeichen, für Weltall, Geräte, Messwerte. Wechsle von Beitrag zu "
+            "Beitrag, damit der Feed nicht eintönig wird."
+        ),
+    )
 
 
 class Karte(BaseModel):

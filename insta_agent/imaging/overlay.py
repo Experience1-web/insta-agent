@@ -150,8 +150,10 @@ def lege_hook_auf(
     textfarbe = _hex_to_rgb(spec.text_hex, (247, 245, 239))
     akzent = _hex_to_rgb(spec.accent_hex, (228, 87, 46))
 
+    familie = getattr(spec, "schrift", "klar")
     schrift, zeilen = _fit_text(
-        zeichnung, text, innen, int(hoehe * 0.34), start_size=104, min_size=48
+        zeichnung, text, innen, int(hoehe * 0.34), start_size=104, min_size=48,
+        familie=familie,
     )
     zeilenhoehe = int(getattr(schrift, "size", 80) * 1.16)
     blockhoehe = len(zeilen) * zeilenhoehe
@@ -187,7 +189,7 @@ def lege_hook_auf(
 
     fuss = (handle or spec.footer).strip()
     if fuss:
-        fussschrift = _load_font(32, bold=False)
+        fussschrift = _load_font(32, bold=False, familie=familie)
         zeichnung.text(
             (RAND, hoehe - RAND), fuss, font=fussschrift, fill=textfarbe, anchor="ls"
         )

@@ -30,25 +30,106 @@ STORY = (1080, 1920)  # 9:16
 WIDTH, HEIGHT = FEED  # Voreinstellung, für Aufrufer ohne Formatwunsch
 MARGIN = 96
 
-# Reihenfolge nach Präferenz; die erste vorhandene Schrift gewinnt.
-FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "C:/Windows/Fonts/arialbd.ttf",
-]
-FONT_CANDIDATES_REGULAR = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "C:/Windows/Fonts/arial.ttf",
-]
+# Vier Schriftfamilien, damit nicht jeder Beitrag gleich aussieht. Der
+# Agent waehlt eine je Beitrag (`VisualSpec.schrift`), alle Karten eines
+# Karussells tragen dieselbe. Je Familie eine Reihe nach Praeferenz; die
+# erste vorhandene Datei gewinnt. Windows, Mac und Linux stehen nebeneinander,
+# weil das Programm beim Betreiber auf Windows laeuft und hier auf Linux
+# geprueft wird - die Bilder sollen auf beiden gleich gut aussehen.
+SCHRIFTEN: dict[str, dict[str, list[str]]] = {
+    # Klar und neutral - die Grotesk, mit der alles begann.
+    "klar": {
+        "fett": [
+            "C:/Windows/Fonts/segoeuib.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ],
+        "normal": [
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ],
+    },
+    # Ernst, mit Serifen - fuer Geschichte, Grabungen, alte Dinge.
+    "ernst": {
+        "fett": [
+            "C:/Windows/Fonts/georgiab.ttf",
+            "C:/Windows/Fonts/timesbd.ttf",
+            "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+        ],
+        "normal": [
+            "C:/Windows/Fonts/georgia.ttf",
+            "C:/Windows/Fonts/times.ttf",
+            "/System/Library/Fonts/Supplemental/Georgia.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        ],
+    },
+    # Wuchtig, sehr fett - fuer grosse Zahlen und laute Saetze.
+    "wucht": {
+        "fett": [
+            "C:/Windows/Fonts/ariblk.ttf",
+            "C:/Windows/Fonts/verdanab.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ],
+        "normal": [
+            "C:/Windows/Fonts/verdana.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ],
+    },
+    # Technisch, gleich breite Zeichen - fuer Weltall, Geraete, Messwerte.
+    "technisch": {
+        "fett": [
+            "C:/Windows/Fonts/consolab.ttf",
+            "C:/Windows/Fonts/lucon.ttf",
+            "/System/Library/Fonts/Menlo.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+        ],
+        "normal": [
+            "C:/Windows/Fonts/consola.ttf",
+            "C:/Windows/Fonts/lucon.ttf",
+            "/System/Library/Fonts/Menlo.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        ],
+    },
+}
+STANDARDSCHRIFT = "klar"
+
+# Die alten Namen bleiben fuer alles, was sie noch importiert.
+FONT_CANDIDATES = SCHRIFTEN["klar"]["fett"]
+FONT_CANDIDATES_REGULAR = SCHRIFTEN["klar"]["normal"]
 
 
-def _load_font(size: int, *, bold: bool = True) -> ImageFont.FreeTypeFont:
-    candidates = FONT_CANDIDATES if bold else FONT_CANDIDATES_REGULAR
-    for path in candidates:
+def schriftdatei(familie: str, *, bold: bool = True) -> str | None:
+    """Welche Datei fuer diese Familie hier vorhanden ist - oder None."""
+    reihe = SCHRIFTEN.get(familie or STANDARDSCHRIFT, SCHRIFTEN[STANDARDSCHRIFT])
+    for path in reihe["fett" if bold else "normal"]:
         if Path(path).exists():
+            return path
+    return None
+
+
+def _load_font(
+    size: int, *, bold: bool = True, familie: str = STANDARDSCHRIFT
+) -> ImageFont.FreeTypeFont:
+    # Erst die gewuenschte Familie, dann die Standardfamilie: Fehlt auf
+    # einem Rechner die Serifenschrift, wird der Beitrag nicht haesslich,
+    # sondern nur gewoehnlich.
+    for name in dict.fromkeys([familie or STANDARDSCHRIFT, STANDARDSCHRIFT]):
+        if (path := schriftdatei(name, bold=bold)) is not None:
             try:
                 return ImageFont.truetype(path, size)
             except OSError:
@@ -202,16 +283,17 @@ def _fit_text(
     start_size: int,
     min_size: int,
     bold: bool = True,
+    familie: str = STANDARDSCHRIFT,
 ) -> tuple[ImageFont.FreeTypeFont, list[str]]:
     """Verkleinert die Schrift so lange, bis der Text in den Kasten passt."""
     for size in range(start_size, min_size - 1, -4):
-        font = _load_font(size, bold=bold)
+        font = _load_font(size, bold=bold, familie=familie)
         lines = _wrap_to_width(draw, text, font, max_width) or [text]
         line_height = int(size * 1.25)
         widest = max((draw.textlength(line, font=font) for line in lines), default=0)
         if widest <= max_width and len(lines) * line_height <= max_height:
             return font, lines
-    font = _load_font(min_size, bold=bold)
+    font = _load_font(min_size, bold=bold, familie=familie)
     return font, _wrap_to_width(draw, text, font, max_width) or [text]
 
 
@@ -257,7 +339,9 @@ def render_post_image(
         headline_budget,
         start_size=start_size,
         min_size=40,
+        familie=getattr(spec, "schrift", STANDARDSCHRIFT),
     )
+    familie = getattr(spec, "schrift", STANDARDSCHRIFT)
 
     line_height = int(font.size * 1.25) if hasattr(font, "size") else 40
     block_height = len(lines) * line_height
@@ -280,14 +364,16 @@ def render_post_image(
         y += line_height
 
     if spec.subline.strip():
-        sub_font = _load_font(max(int(getattr(font, "size", 60) * 0.42), 28), bold=False)
+        sub_font = _load_font(
+            max(int(getattr(font, "size", 60) * 0.42), 28), bold=False, familie=familie
+        )
         y += 16
         for line in _wrap_to_width(draw, spec.subline, sub_font, inner_width)[:3]:
             draw.text((MARGIN, y), line, font=sub_font, fill=accent)
             y += int(sub_font.size * 1.3)
 
     if body_lines:
-        body_font = _load_font(38, bold=False)
+        body_font = _load_font(38, bold=False, familie=familie)
         y += 36
         for line in body_lines:
             draw.ellipse([(MARGIN, y + 14), (MARGIN + 14, y + 28)], fill=accent)
@@ -296,7 +382,7 @@ def render_post_image(
             y += 64
 
     if spec.footer.strip():
-        footer_font = _load_font(30, bold=False)
+        footer_font = _load_font(30, bold=False, familie=familie)
         draw.text((MARGIN, hoehe - MARGIN), spec.footer, font=footer_font, fill=accent, anchor="ls")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
