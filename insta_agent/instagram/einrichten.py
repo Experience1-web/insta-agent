@@ -193,6 +193,16 @@ def richte_ein(kurzer_token: str, app_id: str, app_secret: str) -> Zugang:
     )
 
 
+def fehlende_rechte(erteilt) -> list[str]:
+    """Welche der nötigen Berechtigungen fehlen - gleichwertige zählen mit."""
+    erteilt = set(erteilt)
+    return [
+        recht
+        for recht in NOETIGE_RECHTE
+        if recht not in erteilt and not erteilt & set(GLEICHWERTIG.get(recht, ()))
+    ]
+
+
 def pruefe_rechte(token: str, app_id: str, app_secret: str) -> tuple[tuple[str, ...], str]:
     """Sieht nach, was ein schon eingerichteter Zugang wirklich darf.
 

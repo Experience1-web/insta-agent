@@ -1543,8 +1543,49 @@ function zeichne_warnung(d) {
     inhalt = `<div class="karte"><h3 class="schlecht">Abgebrochen</h3>
       <p style="margin:6px 0 0">${text}</p></div>`;
   }
-  $("warnbox").innerHTML = inhalt;
+  inhalt += rechte_hinweis(d.rechte);
+  if ($("warnbox").innerHTML !== inhalt) $("warnbox").innerHTML = inhalt;
 }
+
+/** Fehlt dem Instagram-Zugang eine Berechtigung, steht das hier - von
+ *  selbst. Vorher erfuhr man es nur über eine eigene Datei zum
+ *  Doppelklicken, von der man wissen musste, dass es sie gibt. */
+function rechte_hinweis(r) {
+  if (!r) return "";
+  if (r.grund) {
+    return `<div class="karte" style="margin-top:12px"><h3 class="warnung">Instagram-Zugang
+      ließ sich nicht prüfen</h3><p style="margin:6px 0 0">${esc(r.grund)}</p>
+      <p class="hinweis" style="margin:6px 0 0">Stand ${esc(r.geprueft)} ·
+      <button class="winzig" data-rechteneu>jetzt neu prüfen</button></p></div>`;
+  }
+  if (!r.fehlt.length) return "";
+  const liste = r.fehlt.map(f => `<li><code>${esc(f.recht)}</code> – ${esc(f.wozu)}</li>`).join("");
+  return `<div class="karte" style="margin-top:12px">
+    <h3 class="warnung">Dem Instagram-Zugang fehlt eine Berechtigung</h3>
+    <ul style="margin:8px 0">${liste}</ul>
+    <p style="margin:6px 0 0">Ohne sie sieht er nicht, wie seine Beiträge ankommen, und
+      lernt nichts daraus. So trägst du sie nach:</p>
+    <ol style="margin:8px 0">
+      <li><a href="https://developers.facebook.com/apps/" target="_blank"
+        rel="noopener noreferrer">developers.facebook.com</a> → deine App →
+        links „App-Überprüfung“ → „Berechtigungen und Funktionen“</li>
+      <li>Oben ins Suchfeld den Namen eintippen → rechts „Standardzugriff anfordern“</li>
+      <li>Danach „11 - Instagram verbinden“ noch einmal durchlaufen und beim
+        Schlüssel die Berechtigung mit anhaken</li>
+    </ol>
+    <p class="hinweis" style="margin:6px 0 0">Geprüft ${esc(r.geprueft)} – das Dashboard
+      sieht alle paar Stunden von selbst nach ·
+      <button class="winzig" data-rechteneu>jetzt neu prüfen</button></p></div>`;
+}
+
+document.addEventListener("click", async e => {
+  const knopf = e.target.closest("[data-rechteneu]");
+  if (!knopf) return;
+  knopf.disabled = true;
+  knopf.textContent = "prüft …";
+  await sende("/api/rechte");
+  laden();
+});
 
 /** Der Kopf der Seite: das Vorhaben, nicht eine Person.
  *

@@ -16,6 +16,7 @@ import mimetypes
 import secrets
 import socket
 import threading
+import time
 import webbrowser
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -96,6 +97,49 @@ class Steuerung:
         self.protokoll = LaufProtokoll()
         self.letzter_bericht: dict[str, Any] | None = None
         self.letzter_fehler: str | None = None
+        self._rechte: dict[str, Any] | None = None
+        self._rechte_um = 0.0
+        self._rechte_laeuft = False
+
+    # Wie oft das Dashboard von selbst bei Meta nachsieht, was der Zugang
+    # darf. Vorher ging das nur über eine eigene Datei zum Doppelklicken -
+    # und wer nicht wusste, dass es sie gibt, erfuhr nie, dass etwas fehlt.
+    RECHTE_ALLE_SEKUNDEN = 6 * 3600
+
+    def rechte_stand(self) -> dict[str, Any] | None:
+        """Was der Instagram-Zugang darf - aus dem Zwischenspeicher.
+
+        Ist der Stand älter als ein paar Stunden, wird im Hintergrund neu
+        nachgesehen; die Seite wartet darauf nicht. Ohne hinterlegten
+        Zugang gibt es nichts zu prüfen.
+        """
+        e = self.settings
+        if not (e.ig_access_token and e.meta_app_id and e.meta_app_secret):
+            return None
+        veraltet = time.monotonic() - self._rechte_um > self.RECHTE_ALLE_SEKUNDEN
+        if (self._rechte is None or veraltet) and not self._rechte_laeuft:
+            self._rechte_laeuft = True
+            threading.Thread(target=self.pruefe_rechte_jetzt, daemon=True).start()
+        return self._rechte
+
+    def pruefe_rechte_jetzt(self) -> dict[str, Any]:
+        """Fragt Meta sofort, was der Zugang darf, und merkt es sich."""
+        from .instagram.einrichten import NOETIGE_RECHTE, fehlende_rechte, pruefe_rechte
+
+        e = self.settings
+        try:
+            erteilt, grund = pruefe_rechte(e.ig_access_token, e.meta_app_id, e.meta_app_secret)
+            fehlt = [] if grund else fehlende_rechte(erteilt)
+        except Exception as exc:  # noqa: BLE001 - dann eben später noch einmal
+            grund, fehlt = f"Meta war nicht erreichbar ({type(exc).__name__})", []
+        self._rechte = {
+            "fehlt": [{"recht": r, "wozu": NOETIGE_RECHTE[r]} for r in fehlt],
+            "grund": grund,
+            "geprueft": datetime.now().strftime("%d.%m. %H:%M"),
+        }
+        self._rechte_um = time.monotonic()
+        self._rechte_laeuft = False
+        return self._rechte
 
     @property
     def laeuft(self) -> bool:
@@ -317,6 +361,7 @@ class Steuerung:
                     "traegt_sich": kasse.self_sustaining,
                 },
                 "identitaet": identitaet.model_dump(mode="json") if identitaet else None,
+                "rechte": self.rechte_stand(),
                 "mannschaft": aufstellung(identitaet, self.settings, modellwahl, mannschaft),
                 "modelle": modelle,
                 # Worauf die Rechnung beruht: der eigene Durchschnitt,
@@ -1086,6 +1131,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/person",
                 "/api/portraitneu",
                 "/api/bildneu",
+                "/api/rechte",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -1139,6 +1185,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/bildneu":
                 self._bild_neu(rumpf)
+                return
+
+            if pfad == "/api/rechte":
+                self._json({"ok": True, "rechte": steuerung.pruefe_rechte_jetzt()})
                 return
 
             zyklen = max(1, min(int(rumpf.get("zyklen", 1)), 20))
