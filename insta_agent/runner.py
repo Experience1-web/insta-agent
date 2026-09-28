@@ -236,6 +236,32 @@ class Agent:
         self._bilder_heute_aus: str | None = None
         self._bildthema = ""
         self._quellbilder: list = []
+        # Fingerabdrücke der Bilder, die dieser Beitrag schon hat oder
+        # hatte - "Bild neu" soll etwas anderes bringen, nicht dasselbe.
+        self._ausschluss: list[int] = []
+        self._benutzte_abdruecke: list[int] = []
+
+    def _abdruecke_des_beitrags(self, post_id: int, zeile=None) -> list[int]:
+        """Alles, was dieser Beitrag schon an Bildern hatte - samt dem jetzigen."""
+        from .imaging.abdruck import abdruck
+
+        bekannt = list(self.store.get_json(f"abdruecke:{post_id}") or [])
+        zeile = zeile if zeile is not None else self.store.get_post(post_id)
+        if zeile is not None and zeile["rohbild_path"]:
+            if (jetzt := abdruck(zeile["rohbild_path"])) is not None:
+                bekannt.append(jetzt)
+        return bekannt
+
+    def _merke_abdruecke(self, post_id: int, *pfade) -> None:
+        """Hängt die Abdrücke neuer Bilder an die Liste dieses Beitrags an."""
+        from .imaging.abdruck import abdruck
+
+        bekannt = list(self.store.get_json(f"abdruecke:{post_id}") or [])
+        neu = [a for p in pfade if p and (a := abdruck(p)) is not None]
+        neu += list(self._benutzte_abdruecke)
+        self._benutzte_abdruecke = []
+        if neu:
+            self.store.set_json(f"abdruecke:{post_id}", list(dict.fromkeys(bekannt + neu)))
 
     def _bildthema_fuer(self, fund) -> str:
         """Worum es auf allen Bildern gehen muss - der Fund, nicht ein Suchwort."""
@@ -709,9 +735,11 @@ class Agent:
                 self.store.set_gestaltung(post_id, gestaltung)
             # Die weiteren Bilder zum Durchwischen. Erst jetzt, nach dem
             # ersten Bild: Sie richten sich in Farbe und Stil danach.
+            self._benutzte_abdruecke = []
             weitere, karten_nachweise, ersatz = self._baue_karussell(
                 draft, basis, identity, report, erstes_roh=rohbild
             )
+            self._merke_abdruecke(post_id, rohbild)
             # Was aus der Quelle uebrig ist, gehoert zu diesem Beitrag und
             # zu keinem anderen. Liegen gelassen, taucht es sonst beim
             # naechsten "Bild neu" in einem fremden Beitrag auf.
@@ -818,9 +846,13 @@ class Agent:
                 Fund.model_validate(json.loads(zeile["fund_json"]))
             )
 
+        self._ausschluss = self._abdruecke_des_beitrags(post_id, zeile)
+        self._benutzte_abdruecke = []
+
         self.treasury.check()
         vorher = self.treasury.state().cycle_spent_usd
         roh = self._karte_erneuern(post_id, draft, bilder, versatz, identity)
+        self._merke_abdruecke(post_id)
         kosten = self._mitrechnen(post_id, vorher)
         self.store.log(
             "bild_neu",
@@ -959,6 +991,10 @@ class Agent:
         # teuerste Teil von "Bild neu" -, und der ist umsonst bezahlt, wenn
         # am Ende ein Foto genommen wird. Die Suche wird aufgehoben, damit
         # sie beim Malen nicht ein zweites Mal läuft.
+        # Nicht noch einmal dasselbe: Alles, was dieser Beitrag schon an
+        # Bildern hatte, ist bei der Suche ausgeschlossen.
+        self._ausschluss = self._abdruecke_des_beitrags(post_id, zeile)
+
         gestaltung = None
         echtes_foto = False
         if fund is not None:
@@ -982,6 +1018,7 @@ class Agent:
 
         self.store.setze_bild(post_id, draft, str(bild))
         self.store.setze_rohbild(post_id, str(rohbild) if rohbild else None)
+        self._merke_abdruecke(post_id, rohbild)
         self.store.setze_bildnachweis(post_id, getattr(self, "_letzter_nachweis", ""))
         if gestaltung is not None:
             self.store.set_gestaltung(post_id, gestaltung)
@@ -1113,10 +1150,13 @@ class Agent:
         bilder = json.loads(zeile["karussell_json"] or "[]")
         if fund is not None:
             self._bildthema = self._bildthema_fuer(fund)
+        self._ausschluss = self._abdruecke_des_beitrags(post_id, zeile)
+        self._benutzte_abdruecke = []
         for versatz, (vorige, jetzt) in enumerate(zip(alt.karten, neu.karten)):
             if versatz < len(bilder) and vorige.text.strip() != jetzt.text.strip():
                 self._karte_erneuern(post_id, neu, bilder, versatz, identity)
                 bericht_lauf.steps.append(f"Bild {versatz + 2}: neuer Text, neues Bild")
+        self._merke_abdruecke(post_id)
 
         # Und noch einmal geprüft - sonst wäre die Nachbesserung nur eine
         # Behauptung. Aber als Nachprüfung gegen den ersten Bericht, ohne
@@ -1923,6 +1963,24 @@ class Agent:
         das Bild passen soll, und eine Frage ohne Vergleichsmassstab
         kostet Geld und bringt nichts.
         """
+        hinsehen = Agent._nur_hinsehen(self, thema)
+        ausschluss = list(getattr(self, "_ausschluss", None) or [])
+        if not ausschluss:
+            return hinsehen
+
+        from .imaging.abdruck import schon_verwendet
+        from .imaging.blick import UNGEPRUEFT
+
+        # Vor dem Hinsehen, weil es nichts kostet: Ist es ein Bild, das
+        # dieser Beitrag schon hat oder hatte, fliegt es gleich raus.
+        def mit_ausschluss(pfad, herkunft=""):
+            if schon_verwendet(pfad, ausschluss):
+                return 0, "schon in diesem Beitrag verwendet"
+            return hinsehen(pfad, herkunft) if hinsehen else (UNGEPRUEFT, "")
+
+        return mit_ausschluss
+
+    def _nur_hinsehen(self, thema: str):
         thema = (thema or "").strip()
         if not thema:
             return None
@@ -1947,6 +2005,15 @@ class Agent:
 
         return hinsehen
 
+    def _merke_fuer_beitrag(self, pfad) -> None:
+        """Merkt sich den Abdruck eines genommenen Fotos, bis der Beitrag feststeht."""
+        from .imaging.abdruck import abdruck
+
+        if (wert := abdruck(pfad)) is not None:
+            if not isinstance(getattr(self, "_benutzte_abdruecke", None), list):
+                self._benutzte_abdruecke = []
+            self._benutzte_abdruecke.append(wert)
+
     def _karte_rohbild(self, karte, basis: str, nummer: int):
         """Das nackte Bild einer Karte - echt oder gemalt, noch ohne Schrift.
 
@@ -1968,6 +2035,11 @@ class Agent:
                 )
             )
             if bild.pfad is not None and Path(bild.pfad).exists():
+                from .imaging.abdruck import schon_verwendet
+
+                if schon_verwendet(bild.pfad, getattr(self, "_ausschluss", None)):
+                    continue
+                self._merke_fuer_beitrag(bild.pfad)
                 return bild.pfad, bild.nachweis
 
         # Eine echte Aufnahme schlaegt jedes gemalte Bild - wenn sie die
@@ -1990,6 +2062,7 @@ class Agent:
                 log.info("Kartensuche fehlgeschlagen: %s", exc)
                 gefunden = None
             if gefunden is not None and gefunden.pfad is not None:
+                self._merke_fuer_beitrag(gefunden.pfad)
                 return gefunden.pfad, gefunden.nachweis
 
         # Sonst gemalt, mit dem Prompt dieser Karte.

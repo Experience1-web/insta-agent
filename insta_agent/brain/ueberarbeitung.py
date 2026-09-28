@@ -51,7 +51,7 @@ def ueberarbeite_beitrag(
     strategy,
     draft: PostDraft,
     bericht: Pruefbericht,
-    max_hashtags: int = 20,
+    max_hashtags: int = 5,
     modell: str | None = None,
     fund: Fund | None = None,
     persona: str | None = None,

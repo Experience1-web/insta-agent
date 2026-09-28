@@ -355,7 +355,7 @@ class PostDraft(BaseModel):
     )
     call_to_action: str = Field(description="Was der Leser tun soll")
 
-    hashtags: list[str] = Field(description="Ohne #, gemischt aus groß, mittel und klein")
+    hashtags: list[str] = Field(description="Ohne #, drei bis fünf, die genau beschreiben, worum es geht")
 
     first_comment_prompt: str = Field(
         default="",

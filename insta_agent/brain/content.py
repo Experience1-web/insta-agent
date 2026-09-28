@@ -284,9 +284,12 @@ darin - nicht "folge mir", sondern warum genau dieser Beitrag es wert
 ist, aufgehoben oder jemandem geschickt zu werden.
 
 ## hashtags
-Höchstens {max_hashtags}, ohne Raute. Misch bewusst: ein paar große für
-Volumen, mehr mittlere, einige kleine und spitze, in denen du tatsächlich
-sichtbar bleibst. Reine Reichweiten-Tags ohne Bezug zum Inhalt schaden dir.
+Drei bis {max_hashtags}, ohne Raute. Instagram ordnet Beiträge heute nach
+Inhalt ein, und Hashtags helfen nur, wenn sie genau beschreiben, worum es
+geht: die Sache, das Gebiet, der Ort - auf Deutsch, wenn Deutschsprachige
+danach suchen. Also "goldschatz", "archaeologie", "russland", nicht
+"wow", "rarefind" oder "fund2025". Allgemeine Reichweiten-Tags ohne Bezug
+wirken wie Werbung und schaden. Die Marke des Accounts gehört nicht dazu.
 
 ## first_comment_prompt
 Eine offene Frage, die du selbst als ersten Kommentar setzt. Nicht mit ja
