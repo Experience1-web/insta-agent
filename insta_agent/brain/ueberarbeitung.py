@@ -129,6 +129,11 @@ Achte darauf:
 - Der Text auf dem Bild und die Bildunterschrift müssen zueinander
   passen. Eine korrigierte Zahl in der Unterschrift nützt nichts, wenn im
   Bild die alte steht.
+- Die Prüfung ist Arbeit hinter den Kulissen und kommt im Beitrag nicht
+  vor. Kein Satz über Wortwahl, Korrekturen oder darüber, ob ein Wort
+  passt - auch nicht im Aufruf am Ende. Einmal stand dort "sag uns, ob
+  dich das Wort 'versteckt' mehr überzeugt als 'übersehen'". Der Aufruf
+  bleibt eine Frage zur Sache selbst.
 
 Höchstens {max_hashtags} Hashtags.
 
