@@ -16,8 +16,9 @@ Gespart wird an allem anderen, in dieser Reihenfolge der Wirkung:
 3. Die zweite Stoffsuche wegen des Fotos. Nachgesetzt wird nur noch,
    wenn der Fund zu schwach ist - ohne freies Foto nimmt er ein
    Archivbild oder die Schriftfassung.
-4. Die Bildsprache. Sie verbessert den Auftrag fürs Malen. Gemalt wird
-   im Sparmodus nur, wenn es nichts kostet, und dann ohne ihren Rat.
+4. Die Bildsprache und das Malen. Im Sparmodus wird nicht gemalt: Ohne
+   echtes Foto bleibt es bei der Schrift. Gemalte Funde gaben vor, die
+   Sache zu zeigen, und kosteten Zeit.
 5. Die Nebenarbeiten des Zyklus: Marktrecherche, Reflexion, Vorbilder,
    Kursprüfung und Geschäftsplanung. Sie ruhen; es gilt der letzte Stand.
 

@@ -825,6 +825,13 @@ class Agent:
             weitere, karten_nachweise, ersatz = self._baue_karussell(
                 draft, basis, identity, report, erstes_roh=rohbild
             )
+            if weitere and ersatz is None and not getattr(self, "_letzter_nachweis", ""):
+                tausch = self._echtes_foto_nach_vorn(draft, basis, identity, weitere)
+                if tausch is not None:
+                    image_path, rohbild = tausch
+                    self.store.setze_bildpfad(post_id, str(image_path))
+                    self.store.setze_rohbild(post_id, str(rohbild))
+                    report.steps.append("Echtes Foto aus einer Karte aufs Titelbild geholt")
             self._merke_abdruecke(post_id, rohbild)
             if weitere:
                 roh_liste = list(self._letzte_kartenroh or [])
@@ -964,7 +971,7 @@ class Agent:
         schritte = (
             []
             if roh is not None or self._darf_malen()
-            else ["Kein Foto gefunden - im Sparmodus wird nicht bezahlt gemalt"]
+            else ["Kein Foto gefunden - im Sparmodus wird nicht gemalt"]
         )
         return {"ok": True, "gemalt": roh is not None, "stelle": stelle, "schritte": schritte}
 
@@ -2631,6 +2638,9 @@ class Agent:
         rohbilder: list[Path | None] = []
         nachweise: list[str] = []
         genommen: list = []
+        # Je Karte: ob ihr Bild eine echte Aufnahme ist (mit Nachweis)
+        # oder gemalt. Gebraucht, wenn das Titelbild keine hat.
+        self._letzte_kartennachweise: list[str] = []
         for nummer, karte in enumerate(karten, start=2):
             try:
                 self.treasury.check()
@@ -2640,6 +2650,7 @@ class Agent:
             roh, nachweis = self._karte_rohbild(karte, basis, nummer)
             rohbilder.append(roh)
             genommen.append(karte)
+            self._letzte_kartennachweise.append(nachweis if roh is not None else "")
             if nachweis:
                 nachweise.append(nachweis)
 
@@ -2672,6 +2683,47 @@ class Agent:
             + (f", davon {len(nachweise)} echte Aufnahmen" if nachweise else "")
         )
         return bilder, nachweise, None
+
+    def _echtes_foto_nach_vorn(self, draft, basis: str, identity, weitere: list):
+        """Holt ein echtes Foto aus einer Karte aufs Titelbild - oder None.
+
+        Das Titelbild ist das, was im Feed erscheint. Bei den Schädeln
+        eines ausgestorbenen Beuteltiers war es gemalt - menschenähnliche
+        Schädel aus Bonbonmasse -, während zwei Karten weiter echte
+        Aufnahmen lagen. Dann gehört eine davon nach vorn, und die Karte
+        bekommt die ruhige Schriftfassung; dasselbe Foto zweimal wäre
+        ein Versehen.
+
+        Ändert `weitere` und die aufgehobenen Kartenbilder an Ort und
+        Stelle. Gibt das neue Titelbild und sein Grundbild zurück.
+        """
+        nachweise = list(getattr(self, "_letzte_kartennachweise", []) or [])
+        roh_liste = list(getattr(self, "_letzte_kartenroh", []) or [])
+        karten = list(getattr(draft, "karten", None) or [])[: len(weitere)]
+        for stelle, nachweis in enumerate(nachweise):
+            roh = roh_liste[stelle] if stelle < len(roh_liste) else None
+            if not nachweis or not roh or not Path(roh).is_file() or stelle >= len(karten):
+                continue
+            try:
+                titel = lege_hook_auf(
+                    Path(roh),
+                    self.settings.media_dir / f"{basis}-titel.png",
+                    text=draft.bildtext,
+                    spec=draft.visual,
+                    handle=f"@{identity.handle}",
+                    groesse=self._bildformat,
+                )
+            except Exception as exc:  # noqa: BLE001 - dann bleibt es, wie es war
+                log.warning("Foto liess sich nicht aufs Titelbild legen: %s", exc)
+                return None
+            weitere[stelle] = self._beschrifte_karte(
+                karten[stelle], None, basis, stelle + 2, draft, identity
+            )
+            roh_liste[stelle] = None
+            self._letzte_kartenroh = roh_liste
+            self._letzter_nachweis = nachweis
+            return titel, Path(roh)
+        return None
 
     def _erzeuge_bild(
         self, draft, basis: str, identity, report: CycleReport, fund=None
@@ -2741,7 +2793,7 @@ class Agent:
 
         if not self._darf_malen():
             report.steps.append(
-                "Kein Foto gefunden - im Sparmodus wird nicht bezahlt gemalt, "
+                "Kein Foto gefunden - im Sparmodus wird nicht gemalt, "
                 "es bleibt bei der Schrift"
             )
             return None, None
@@ -2785,8 +2837,17 @@ class Agent:
         return fertig, roh
 
     def _darf_malen(self) -> bool:
-        """Ob gemalt werden darf: immer - außer bezahlt im Sparmodus."""
-        return not (self._spar and self.settings.bild.kosten_pro_bild_usd > 0)
+        """Ob gemalt werden darf: nicht im Sparmodus.
+
+        Erst hiess es "nur nicht bezahlt". Die ersten echten Laeufe haben
+        gezeigt, dass auch das kostenlose Malen hier schadet: Pollinations
+        liefert ohne Konto nur noch ein schwaches Modell, und heraus kamen
+        Dinosaurierspuren wie Menschenfuesse im Eis und Beuteltierschaedel
+        aus Bonbonmasse - Bilder, die vorgeben, den Fund zu zeigen. Dazu
+        bis zu einer halben Minute je Bild und oft eine Absage (402). Eine
+        ruhige Schriftkarte ist ehrlicher und schneller.
+        """
+        return not self._spar
 
     def _buche_bild(self) -> None:
         """Bucht ein gemaltes Bild - erst, wenn es da ist, und nur, wenn es kostet.

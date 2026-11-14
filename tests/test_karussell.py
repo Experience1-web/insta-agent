@@ -331,3 +331,55 @@ def test_die_stuecke_sind_nicht_verzerrt(tmp_path):
             f"{breite}x{hoehe} in {zahl} Stuecke braucht {noetige_hoehe:.0f} "
             f"Pixel Hoehe, hat aber nur {hoehe}"
         )
+
+
+# --- Ein echtes Foto gehört nach vorn ----------------------------------------
+
+
+def test_ein_echtes_kartenfoto_wandert_aufs_titelbild(tmp_path):
+    """Gemalte Bonbon-Schädel vorn, echte Aufnahmen zwei Karten weiter - nie wieder."""
+    from types import SimpleNamespace
+
+    from insta_agent.models import PostDraft, VisualSpec
+    from insta_agent.runner import Agent
+
+    agent = object.__new__(Agent)
+    agent.settings = SimpleNamespace(media_dir=tmp_path)
+    gemalt = _bild(tmp_path / "k2-roh.png", (200, 100, 50))
+    echt = _bild(tmp_path / "k3-echt.jpg", (40, 60, 80), groesse=(1080, 1350))
+    agent._letzte_kartenroh = [str(gemalt), str(echt)]
+    agent._letzte_kartennachweise = ["", "Bild: Jane Doe · CC BY 4.0"]
+
+    draft = PostDraft.model_construct(
+        hook_text_on_screen="Drei Schädel",
+        visual=VisualSpec(headline="Drei Schädel"),
+        karten=[Karte(text="Eins"), Karte(text="Zwei")],
+    )
+    weitere = [tmp_path / "k2.png", tmp_path / "k3.png"]
+    identitaet = SimpleNamespace(handle="probe")
+
+    titel, roh = agent._echtes_foto_nach_vorn(draft, "b", identitaet, weitere)
+
+    assert roh == echt
+    assert titel.exists()
+    # Die Karte, deren Foto nach vorn ging, ist jetzt eine Schriftkarte.
+    assert agent._letzte_kartenroh[1] is None
+    assert weitere[1] != tmp_path / "k3.png"
+    assert agent._letzter_nachweis == "Bild: Jane Doe · CC BY 4.0"
+
+
+def test_ohne_echtes_kartenfoto_bleibt_alles_wie_es_ist(tmp_path):
+    from types import SimpleNamespace
+
+    from insta_agent.models import PostDraft, VisualSpec
+    from insta_agent.runner import Agent
+
+    agent = object.__new__(Agent)
+    agent.settings = SimpleNamespace(media_dir=tmp_path)
+    agent._letzte_kartenroh = [str(_bild(tmp_path / "k2-roh.png", (1, 2, 3)))]
+    agent._letzte_kartennachweise = [""]
+    draft = PostDraft.model_construct(
+        hook_text_on_screen="x", visual=VisualSpec(headline="x"), karten=[Karte(text="Eins")]
+    )
+
+    assert agent._echtes_foto_nach_vorn(draft, "b", SimpleNamespace(handle="p"), [tmp_path / "k2.png"]) is None

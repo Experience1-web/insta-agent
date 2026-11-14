@@ -354,8 +354,17 @@ def test_im_sparmodus_wird_nicht_bezahlt_gemalt(tmp_path):
     assert agent.bildgenerator.auftraege == []
 
 
-def test_kostenlos_gemalt_wird_auch_im_sparmodus(tmp_path):
+def test_im_sparmodus_wird_auch_kostenlos_nicht_gemalt(tmp_path):
+    """Gemalte Funde gaben vor, die Sache zu zeigen - eine Schriftkarte ist ehrlicher."""
     agent = _malagent(tmp_path, 0.0, spar=True)
+    roh, _ = agent._karte_rohbild(Karte(text="Gold", bildwunsch="gold coins"), "b", 2)
+
+    assert roh is None
+    assert agent.bildgenerator.auftraege == []
+
+
+def test_ohne_sparmodus_wird_kostenlos_gemalt(tmp_path):
+    agent = _malagent(tmp_path, 0.0, spar=False)
     roh, _ = agent._karte_rohbild(Karte(text="Gold", bildwunsch="gold coins"), "b", 2)
 
     assert roh is not None and roh.exists()
