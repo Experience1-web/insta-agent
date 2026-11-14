@@ -304,7 +304,23 @@ def render_post_image(
 
     `groesse` ist FEED oder STORY. Im Story-Format bekommt die Headline
     mehr Höhe, weil sie dort allein wirken muss.
+
+    Mit `marke` zeichnet das Gestaltungssystem: ein Titel ohne Foto oder
+    eine Karte ohne Foto (große Zahl oder große Aussage).
     """
+    if marke is not None:
+        from . import gestalt
+
+        if marke.seite:
+            return gestalt.karte_ohne_foto(
+                out_path, text=spec.headline, akzentwort=spec.akzentwort,
+                rubrik=marke.etikett, seite=marke.seite, groesse=groesse,
+            )
+        return gestalt.titel(
+            None, out_path, ueberschrift=spec.headline, unterzeile=spec.subline,
+            akzentwort=spec.akzentwort, rubrik=marke.etikett, handle=spec.footer,
+            wischen=marke.wischen, groesse=groesse,
+        )
     breite, hoehe = groesse
     background = _hex_to_rgb(spec.background_hex, (17, 19, 24))
     text_color = _ensure_readable(_hex_to_rgb(spec.text_hex, (245, 245, 240)), background)
@@ -384,11 +400,6 @@ def render_post_image(
     if spec.footer.strip():
         footer_font = _load_font(30, bold=False, familie=familie)
         draw.text((MARGIN, hoehe - MARGIN), spec.footer, font=footer_font, fill=accent, anchor="ls")
-
-    if marke is not None:
-        from .marke import zeichne_marke
-
-        zeichne_marke(image, marke, textfarbe=text_color, akzent=accent, familie=familie, oben=60)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(out_path, "PNG", optimize=True)

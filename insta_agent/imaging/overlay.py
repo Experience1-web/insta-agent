@@ -187,7 +187,25 @@ def lege_hook_auf(
     `groesse` muss dasselbe Format sein, in dem der Beitrag erscheint -
     sonst wird das Bild auf ein Format gebracht, das Instagram danach
     noch einmal beschneidet.
+
+    Mit `marke` zeichnet das Gestaltungssystem im Magazin-Stil: ein Titel
+    ohne Seitenzahl, eine Karte mit. Ohne `marke` bleibt es beim alten
+    Bild - für Entwürfe von früher und alles, was es so erwartet.
     """
+    if marke is not None:
+        from . import gestalt
+
+        if marke.seite:
+            return gestalt.karte_mit_foto(
+                quelle, ziel, text=text, akzentwort=spec.akzentwort,
+                rubrik=marke.etikett, seite=marke.seite, groesse=groesse,
+            )
+        return gestalt.titel(
+            quelle, ziel, ueberschrift=text, unterzeile=spec.subline,
+            akzentwort=spec.akzentwort, rubrik=marke.etikett,
+            handle=handle or spec.footer, wischen=marke.wischen, groesse=groesse,
+        )
+
     bild = _auf_format(Image.open(quelle).convert("RGB"), groesse)
 
     breite, hoehe = bild.size
@@ -268,11 +286,6 @@ def lege_hook_auf(
         zeichnung.text(
             (RAND, hoehe - RAND), fuss, font=fussschrift, fill=textfarbe, anchor="ls"
         )
-
-    if marke is not None:
-        from .marke import zeichne_marke
-
-        zeichne_marke(bild, marke, textfarbe=textfarbe, akzent=akzent, familie=familie)
 
     ziel.parent.mkdir(parents=True, exist_ok=True)
     bild.save(ziel, "PNG", optimize=True)
