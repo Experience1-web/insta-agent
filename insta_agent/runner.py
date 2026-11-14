@@ -2085,14 +2085,11 @@ class Agent:
             # einem Nachschlag wegen zu wenig Reiz: Jede Runde kostet so
             # viel wie die erste.
             foto = self._bildprobe(fund, report)
-            if not foto and self._spar:
-                # Ein zweiter Fund kostet so viel wie der erste. Im
-                # Sparmodus nimmt er lieber ein Archivbild oder die Schrift.
-                report.steps.append(
-                    f"Kein freies Foto, das die Sache zeigt: {fund.titel} "
-                    "- im Sparmodus wird nicht nachgesetzt"
-                )
-            elif not foto and mit_suche and not nachgesetzt:
+            # Auch im Sparmodus: Ohne Foto wird ein zweiter Fund gesucht.
+            # Instagram ist ein Bildmedium - ein Beitrag ganz aus Schrift
+            # (die bemalte Steinplatte) trägt nicht. Der Betreiber hat das so
+            # entschieden; es kostet rund 20 Cent und zwei Minuten.
+            if not foto and mit_suche and not nachgesetzt:
                 report.steps.append(
                     f"Kein freies Foto, das die Sache zeigt: {fund.titel} "
                     "- noch einmal gesucht"

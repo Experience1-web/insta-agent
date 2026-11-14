@@ -284,16 +284,16 @@ def test_ein_normaler_beitrag_ist_keine_sparversion(agent):
     assert agent.store.zyklen()[0]["spar"] is False
 
 
-def test_ohne_foto_wird_im_sparmodus_nicht_nachgesetzt(tmp_path, monkeypatch):
+def test_ohne_foto_wird_auch_im_sparmodus_nachgesetzt(tmp_path, monkeypatch):
+    """Ein Beitrag ganz aus Schrift trägt auf Instagram nicht - Foto geht vor."""
     koralle = _Fund("Koralle")
     gefragt = _stoffsuche(monkeypatch, koralle, _Fund("Goldschatz"))
     agent = _stoffagent(tmp_path, gefunden={"Koralle": (None, None)})
     agent._spar = True
     bericht = _Bericht()
 
-    assert agent._suche_stoff(bericht) is koralle
-    assert len(gefragt) == 1
-    assert any("im Sparmodus wird nicht nachgesetzt" in s for s in bericht.steps)
+    agent._suche_stoff(bericht)
+    assert len(gefragt) == 2
 
 
 def test_ein_zu_schwacher_fund_wird_auch_im_sparmodus_ersetzt(tmp_path, monkeypatch):
