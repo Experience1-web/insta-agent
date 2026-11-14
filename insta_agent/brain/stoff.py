@@ -86,6 +86,13 @@ das jeder kennt. Die Sonde, über die jeder berichtet hat. Wenn du beim
 Suchen merkst, dass es zehn große Beiträge dazu gibt, ist es kein Fund
 mehr, sondern eine Nachricht von gestern.
 
+Und es muss neu sein: bekannt gegeben in den letzten drei Monaten vor
+dem Datum, das oben im Auftrag steht - höchstens sechs, wenn es
+wirklich kaum jemand mitbekommen hat. Was du aus dem Gedächtnis kennst,
+ist dafür fast immer zu alt. Such gezielt nach Veröffentlichungen
+dieser Wochen und schreib unter `wann` das genaue Datum der
+Bekanntgabe.
+
 # Wie du bewertest
 
 Du gibst drei Teilnoten von 1 bis 5 und daraus ein Gesamturteil.
