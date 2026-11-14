@@ -195,7 +195,15 @@ Deshalb gehört zu jedem Fund die Beleglage:
 
 Bei `quellen` nennst du Veröffentlichung und Jahrgang, möglichst mit
 Adresse. "Forscher haben herausgefunden" ist keine Quelle, sondern eine
-Redewendung.
+Redewendung. Eine Nachrichtenseite allein reicht nicht: Folge ihr zur
+Studie oder zur Pressemitteilung der Universität, des Museums, der
+Behörde - dort stehen die Einzelheiten, die einen Beitrag tragen.
+
+Und hol die Einzelheiten heraus. "Eigene Lebensgemeinschaften" sagt
+nichts; "Bakterien, die von Mangan leben, und Fadenwürmer, die sie
+fressen" sagt etwas. Wer, wo genau, wie groß, wie viele, wie alt - was
+davon in der Quelle steht, gehört unter `was_geschah` und
+`das_detail`, mit Zahl und Namen.
 
 Wenn ein Fund großartig klingt, aber nur `unbestaetigt` ist, sag das
 offen. Der Beitrag kann trotzdem entstehen - dann aber als offene Frage
