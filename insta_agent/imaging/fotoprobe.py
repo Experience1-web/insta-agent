@@ -116,7 +116,59 @@ def wirkt_wie_foto(pfad: Path) -> tuple[bool, str]:
     if struktur is not None and struktur < MINDESTSTRUKTUR:
         return False, f"kaum Struktur ({struktur:.1f}) - eine Grafik, kein Foto"
 
+    if (linie := trennlinie(pfad)) is not None:
+        return False, f"Trennlinie bei {round(linie * 100)} Prozent - eine Abbildungstafel"
+
     return True, ""
+
+
+def _abweichung(werte: list[int]) -> tuple[float, float]:
+    mittel = sum(werte) / len(werte)
+    return mittel, (sum((v - mittel) ** 2 for v in werte) / len(werte)) ** 0.5
+
+
+def trennlinie(pfad: Path) -> float | None:
+    """Wo eine Abbildungstafel ihre Felder trennt - oder None.
+
+    Studien zeigen ihre Bilder als Tafeln: mehrere Felder, durch eine
+    gerade, einfarbige Linie getrennt, mit "a", "b", "c" in den Ecken.
+    Für einen Beitrag ist das unbrauchbar - über einer Tafel mit
+    Fadenwürmern stand einmal "Eine faustgroße Metallknolle". Das
+    Hinsehen-Modell erkennt sie nicht zuverlässig; die Linie dagegen
+    ist messbar: eine ganze Zeile oder Spalte fast ohne Farbunterschied,
+    die sich auf beiden Seiten deutlich vom Bild abhebt. Ein gleichmäßiger
+    Himmel ist auch einfarbig, hebt sich aber nicht ab.
+
+    Gibt die Lage als Anteil der Bildhöhe oder -breite zurück.
+    """
+    try:
+        with Image.open(pfad) as offen:
+            grau = offen.convert("L")
+            grau.thumbnail((480, 480))
+    except Exception as exc:  # noqa: BLE001 - im Zweifel durchlassen
+        log.info("Tafelprobe nicht moeglich (%s): %s", pfad.name, exc)
+        return None
+
+    breite, hoehe = grau.size
+    punkte = grau.load()
+
+    def zeile(k: int) -> list[int]:
+        return [punkte[x, k] for x in range(breite)]
+
+    def spalte(k: int) -> list[int]:
+        return [punkte[k, y] for y in range(hoehe)]
+
+    for lies, laenge in ((zeile, hoehe), (spalte, breite)):
+        # Die Ränder bleiben aussen vor: Dort sitzt oft ein Rahmen.
+        for k in range(int(laenge * 0.12), int(laenge * 0.88)):
+            mittel, streuung = _abweichung(lies(k))
+            if streuung > 6:
+                continue
+            davor, _ = _abweichung(lies(max(k - 4, 0)))
+            danach, _ = _abweichung(lies(min(k + 4, laenge - 1)))
+            if abs(davor - mittel) > 22 and abs(danach - mittel) > 22:
+                return k / laenge
+    return None
 
 
 def _struktur(pfad: Path) -> float | None:
@@ -147,4 +199,4 @@ def _struktur(pfad: Path) -> float | None:
         return None
 
 
-__all__ = ["wirkt_wie_foto"]
+__all__ = ["trennlinie", "wirkt_wie_foto"]

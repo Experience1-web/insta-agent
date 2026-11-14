@@ -143,3 +143,51 @@ def test_eine_kaputte_datei_wird_durchgelassen(tmp_path):
     kaputt = tmp_path / "kaputt.jpg"
     kaputt.write_bytes(b"kein Bild")
     assert wirkt_wie_foto(kaputt)[0] is True
+
+
+# --- Abbildungstafeln -------------------------------------------------------
+
+
+def _rauschen(breite: int, hoehe: int, grund: int, seed: int):
+    import random
+
+    from PIL import Image
+
+    random.seed(seed)
+    bild = Image.new("L", (breite, hoehe))
+    bild.putdata([max(0, min(255, grund + random.randint(-60, 60))) for _ in range(breite * hoehe)])
+    return bild
+
+
+def test_eine_abbildungstafel_wird_erkannt(tmp_path):
+    """Zwei Bildfelder mit einer grauen Trennlinie dazwischen - so sehen Studientafeln aus.
+
+    Über einer solchen Tafel mit Fadenwürmern stand einmal "Eine
+    faustgroße Metallknolle".
+    """
+    from PIL import Image
+
+    from insta_agent.imaging.fotoprobe import trennlinie, wirkt_wie_foto
+
+    tafel = Image.new("L", (600, 600), 150)
+    tafel.paste(_rauschen(600, 297, 60, 1), (0, 0))
+    tafel.paste(_rauschen(600, 297, 70, 2), (0, 303))
+    pfad = tmp_path / "tafel.png"
+    tafel.convert("RGB").save(pfad)
+
+    assert trennlinie(pfad) is not None
+    assert wirkt_wie_foto(pfad)[0] is False
+
+
+def test_ein_gleichmaessiger_himmel_ist_keine_trennlinie(tmp_path):
+    """Einfarbig ist auch der Himmel - aber er hebt sich nicht auf beiden Seiten ab."""
+    from PIL import Image
+
+    from insta_agent.imaging.fotoprobe import trennlinie
+
+    foto = Image.new("L", (600, 600), 200)
+    foto.paste(_rauschen(600, 300, 80, 3), (0, 300))
+    pfad = tmp_path / "himmel.png"
+    foto.convert("RGB").save(pfad)
+
+    assert trennlinie(pfad) is None

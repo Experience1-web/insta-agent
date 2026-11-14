@@ -102,6 +102,19 @@ Zwei Regeln, die schwerer wiegen als alles andere:
    Ein leuchtend blauer Meeresgrund voller Korallen ist ein Foto vom
    Meeresgrund, keine Lichtinstallation.
 
+3. Das Bild muss allein im Feed tragen, mit Schrift darueber. Deshalb
+   hoechstens 4:
+   - eine Abbildungstafel aus einer Studie: mehrere Bildfelder
+     nebeneinander oder uebereinander, Trennlinien dazwischen,
+     Buchstaben wie a, b, c in den Ecken, Massstabsbalken, Pfeile oder
+     Beschriftungen im Bild
+   - ein truebes, unscharfes oder fast leeres Bild, auf dem man ohne
+     Erklaerung nicht erkennt, was es zeigt
+   Ein einzelnes klares Foto des echten Gegenstands auf einem Tisch,
+   mit Lineal, Massband oder Etikett daneben, ist dagegen eine echte
+   Aufnahme der Sache selbst und keine Nachbildung - so werden Funde
+   und Proben fotografiert. Bewerte es nach Regel 1.
+
 Antworte in genau einer Zeile, in dieser Form:
 {form}
 
