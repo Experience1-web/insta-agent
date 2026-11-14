@@ -2030,7 +2030,7 @@ function zeichne_beitraege(d) {
             ${p.bildnachweis ? '<span class="marke gepruft">echtes Foto</span>' : ""}
             ${kosten_marke(p)}
             ${(p.karussell || []).length
-              ? `<span class="marke">${(p.karussell.length + 1)} Bilder</span>` : ""}
+              ? `<span class="marke">${(p.karussell.length + 1 + (p.abschluss ? 1 : 0))} Bilder</span>` : ""}
             ${p.reel && p.reel.als_reel ? '<span class="marke">als Reel</span>' : ""}
           </div>
         </div>
@@ -2067,7 +2067,10 @@ function zeichne_beitraege(d) {
  * Bilder zusammenpassen, muss sie nebeneinander sehen koennen.
  */
 function bilderreihe(p) {
-  const alle = [p.bild, ...(p.karussell || [])].filter(Boolean);
+  const eigene = [p.bild, ...(p.karussell || [])].filter(Boolean);
+  // Die Abschlusskarte steht am Ende, bekommt aber keine Knöpfe: Sie
+  // entsteht aus der Bildunterschrift und ändert sich mit ihr.
+  const alle = p.abschluss ? [...eigene, p.abschluss] : eigene;
   if (!alle.length) return "";
   const zurueck = stelle => p.status === "draft" && (p.verlauf || {})[String(stelle)]
     ? `<button class="winzig" data-zurueck="${p.id}" data-stelle="${stelle}"
@@ -2082,11 +2085,11 @@ function bilderreihe(p) {
       ${alle.map((name, i) => `
         <figure>
           <img src="/media?name=${encodeURIComponent(name)}${anhang}" alt="" loading="lazy">
-          <figcaption>${i + 1} / ${alle.length}</figcaption>
-          ${p.status === "draft" ? `<button class="winzig"
+          <figcaption>${i + 1} / ${alle.length}${i >= eigene.length ? " · Abschluss" : ""}</figcaption>
+          ${p.status === "draft" && i < eigene.length ? `<button class="winzig"
              data-bildneu="${p.id}" data-stelle="${i + 1}">dieses neu</button>` : ""}
-          ${zurueck(i + 1)}
-          ${p.status === "draft" && i > 0 ? `<button class="winzig"
+          ${i < eigene.length ? zurueck(i + 1) : ""}
+          ${p.status === "draft" && i > 0 && i < eigene.length ? `<button class="winzig"
              data-entfernen="${p.id}" data-stelle="${i + 1}">entfernen</button>` : ""}
         </figure>`).join("")}
     </div>

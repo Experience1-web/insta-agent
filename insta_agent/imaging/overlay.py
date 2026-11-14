@@ -180,6 +180,7 @@ def lege_hook_auf(
     spec: VisualSpec,
     handle: str = "",
     groesse: tuple[int, int] = STORY,
+    marke=None,
 ) -> Path:
     """Schreibt den Hook auf das erzeugte Bild und speichert das Ergebnis.
 
@@ -267,6 +268,11 @@ def lege_hook_auf(
         zeichnung.text(
             (RAND, hoehe - RAND), fuss, font=fussschrift, fill=textfarbe, anchor="ls"
         )
+
+    if marke is not None:
+        from .marke import zeichne_marke
+
+        zeichne_marke(bild, marke, textfarbe=textfarbe, akzent=akzent, familie=familie)
 
     ziel.parent.mkdir(parents=True, exist_ok=True)
     bild.save(ziel, "PNG", optimize=True)

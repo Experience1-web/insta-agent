@@ -793,6 +793,7 @@ class Agent:
                 draft.visual,
                 self.settings.media_dir / f"{basis}.png",
                 groesse=self._bildformat,
+                marke=self._titelmarke(draft),
             )
             # Erst die Bildsprache, dann malen: Was zählt, ist der Prompt.
             # Ein Urteil über ein fertiges Bild käme zu spät, um noch etwas
@@ -1241,6 +1242,8 @@ class Agent:
     def _reel_bilder(self, zeile) -> list[Path]:
         bilder = [Path(zeile["image_path"])] if zeile["image_path"] else []
         bilder += [Path(p) for p in json.loads(zeile["karussell_json"] or "[]")]
+        if (ende := self.abschlusskarte(zeile)) is not None:
+            bilder.append(ende)
         return [b for b in bilder if b.is_file()]
 
     def reel_stand(self, post_id: int, zeile=None) -> dict:
@@ -1435,6 +1438,7 @@ class Agent:
             draft.visual,
             self.settings.media_dir / f"{basis}.png",
             groesse=self._bildformat,
+            marke=self._titelmarke(draft),
         )
         gemalt, rohbild = self._erzeuge_bild(draft, basis, identity, lauf, fund)
         if gemalt:
@@ -1749,6 +1753,7 @@ class Agent:
                     spec=neu.visual,
                     handle=f"@{identity.handle}",
                     groesse=self._bildformat,
+                    marke=self._titelmarke(neu),
                 )
                 return neues, "neu beschriftet"
             except Exception as exc:  # noqa: BLE001 - dann eben die Typografie
@@ -1758,6 +1763,7 @@ class Agent:
             neu.visual,
             self.settings.media_dir / f"{basis}.png",
             groesse=self._bildformat,
+            marke=self._titelmarke(neu),
         )
         return typo, "typografisch neu gesetzt"
 
@@ -2409,6 +2415,7 @@ class Agent:
                 spec=draft.visual,
                 handle=f"@{identity.handle}",
                 groesse=self._bildformat,
+                marke=self._titelmarke(draft),
             )
         except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
             log.warning("Schrift auf Panoramastueck fehlgeschlagen: %s", exc)
@@ -2582,8 +2589,9 @@ class Agent:
         fertig = self.settings.media_dir / f"{basis}-k{nummer}.png"
         groesse = self._bildformat
 
+        marke = self._kartenmarke(draft, nummer)
         if roh is None:
-            return render_post_image(spec, fertig, groesse=groesse)
+            return render_post_image(spec, fertig, groesse=groesse, marke=marke)
         try:
             lege_hook_auf(
                 roh,
@@ -2592,6 +2600,7 @@ class Agent:
                 spec=spec,
                 handle=f"@{identity.handle}",
                 groesse=groesse,
+                marke=marke,
             )
         except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
             log.warning("Schrift auf Karte %s fehlgeschlagen: %s", nummer, exc)
@@ -2684,6 +2693,75 @@ class Agent:
         )
         return bilder, nachweise, None
 
+    def _titelmarke(self, draft):
+        """Der Rahmen fürs erste Bild: Etikett und, bei mehreren Bildern, "Wischen"."""
+        from .imaging.marke import Marke, etikett_fuer
+
+        return Marke(
+            etikett=etikett_fuer(getattr(draft, "pillar", "")),
+            wischen=bool(getattr(draft, "karten", None)),
+        )
+
+    def _kartenzahl(self, draft) -> int:
+        """Wie viele Bilder der Beitrag hat: Titel, Karten, Abschlusskarte."""
+        karten = list(getattr(draft, "karten", None) or [])[:4]
+        return len(karten) + 2 if karten else 1
+
+    def _kartenmarke(self, draft, nummer: int):
+        """Der Rahmen für Karte `nummer`: Etikett und Seitenzähler."""
+        from .imaging.marke import Marke, etikett_fuer
+
+        return Marke(
+            etikett=etikett_fuer(getattr(draft, "pillar", "")),
+            seite=f"{nummer}/{self._kartenzahl(draft)}",
+        )
+
+    def abschlusskarte(self, zeile) -> Path | None:
+        """Die letzte Karte des Karussells - jedes Mal frisch aus dem Text.
+
+        Frisch, weil sie aus der Bildunterschrift entsteht: Wer dort die
+        Quelle ändert, soll sie auf der Karte nicht alt stehen sehen. Das
+        Zeichnen kostet nichts und dauert einen Wimpernschlag. Ohne
+        Karussell keine Abschlusskarte - ein Einzelbild bleibt eines.
+        """
+        from .imaging.marke import Marke, etikett_fuer, frage_aus, quelle_aus, render_abschlusskarte
+
+        if zeile is None or not json.loads(zeile["karussell_json"] or "[]"):
+            return None
+        try:
+            draft = PostDraft.model_validate_json(zeile["draft_json"])
+        except Exception:  # noqa: BLE001 - ohne lesbaren Entwurf keine Karte
+            return None
+        frage = frage_aus(draft.call_to_action, draft.first_comment_prompt)
+        quelle = quelle_aus(draft.caption)
+        if not frage and not quelle:
+            return None
+        gesamt = len(json.loads(zeile["karussell_json"] or "[]")) + 2
+        handle = self.identity.handle if self.identity else draft.visual.footer.lstrip("@")
+        ziel = self.settings.media_dir / f"ende-{zeile['id']}.png"
+        neu = ziel.with_name(f".{ziel.stem}-neu.png")
+        try:
+            render_abschlusskarte(
+                draft.visual,
+                neu,
+                frage=frage,
+                quelle=quelle,
+                handle=f"@{handle}",
+                marke=Marke(etikett=etikett_fuer(draft.pillar), seite=f"{gesamt}/{gesamt}"),
+                groesse=self._bildformat,
+            )
+        except Exception as exc:  # noqa: BLE001 - dann eben ohne
+            log.warning("Abschlusskarte nicht gezeichnet: %s", exc)
+            return None
+        # Nur ersetzen, wenn sich etwas geändert hat. Sonst wäre die Datei
+        # bei jedem Blick ins Dashboard neuer als das Reel, und das Reel
+        # hieße für immer "veraltet".
+        if ziel.is_file() and ziel.read_bytes() == neu.read_bytes():
+            neu.unlink()
+        else:
+            neu.replace(ziel)
+        return ziel
+
     def _echtes_foto_nach_vorn(self, draft, basis: str, identity, weitere: list):
         """Holt ein echtes Foto aus einer Karte aufs Titelbild - oder None.
 
@@ -2712,6 +2790,7 @@ class Agent:
                     spec=draft.visual,
                     handle=f"@{identity.handle}",
                     groesse=self._bildformat,
+                    marke=self._titelmarke(draft),
                 )
             except Exception as exc:  # noqa: BLE001 - dann bleibt es, wie es war
                 log.warning("Foto liess sich nicht aufs Titelbild legen: %s", exc)
@@ -2771,6 +2850,7 @@ class Agent:
                     spec=draft.visual,
                     handle=f"@{identity.handle}",
                     groesse=self._bildformat,
+                    marke=self._titelmarke(draft),
                 )
             except Exception as exc:  # noqa: BLE001 - dann eben ohne Schrift
                 log.warning("Hook auf echtem Bild fehlgeschlagen: %s", exc)
@@ -2827,6 +2907,7 @@ class Agent:
                 spec=draft.visual,
                 handle=f"@{identity.handle}",
                 groesse=self._bildformat,
+                marke=self._titelmarke(draft),
             )
         except Exception as exc:  # noqa: BLE001 - lieber ohne Schrift als gar nicht
             log.warning("Hook konnte nicht aufgelegt werden: %s", exc)
@@ -2897,6 +2978,8 @@ class Agent:
                 for roh in json.loads(zeile["karussell_json"] or "[]")
                 if (pfad := Path(roh)).exists()
             ]
+            if weitere and (ende := self.abschlusskarte(zeile)) is not None:
+                weitere.append(ende)
 
             # Der Bildnachweis geht mit hinaus: Bei einem übernommenen
             # Foto ist er die Bedingung der Lizenz.

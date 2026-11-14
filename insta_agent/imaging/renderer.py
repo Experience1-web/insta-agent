@@ -298,7 +298,7 @@ def _fit_text(
 
 
 def render_post_image(
-    spec: VisualSpec, out_path: Path, *, groesse: tuple[int, int] = FEED
+    spec: VisualSpec, out_path: Path, *, groesse: tuple[int, int] = FEED, marke=None
 ) -> Path:
     """Rendert den Bauplan zu einer fertigen PNG-Datei.
 
@@ -384,6 +384,11 @@ def render_post_image(
     if spec.footer.strip():
         footer_font = _load_font(30, bold=False, familie=familie)
         draw.text((MARGIN, hoehe - MARGIN), spec.footer, font=footer_font, fill=accent, anchor="ls")
+
+    if marke is not None:
+        from .marke import zeichne_marke
+
+        zeichne_marke(image, marke, textfarbe=text_color, akzent=accent, familie=familie, oben=60)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(out_path, "PNG", optimize=True)

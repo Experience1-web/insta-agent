@@ -340,6 +340,12 @@ class Steuerung:
                             Path(pfad).name
                             for pfad in json.loads(zeile["karussell_json"] or "[]")
                         ],
+                        # Die feste letzte Karte: Frage, Quelle, Folgen.
+                        # Wird aus dem Text gezeichnet und nicht einzeln
+                        # bearbeitet - sie folgt der Bildunterschrift.
+                        "abschluss": (
+                            ende.name if (ende := agent.abschlusskarte(zeile)) else None
+                        ),
                         "erster_kommentar": daten.get("first_comment_prompt", ""),
                         # Die Texte auf den Karten - zum Ändern von Hand.
                         "karten": [
