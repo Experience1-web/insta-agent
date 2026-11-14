@@ -139,6 +139,14 @@ Deshalb prüfst du zuerst den Fund selbst, bevor du den Text prüfst:
 - Und: Ist die Beleglage richtig angegeben? Wer "gesichert" schreibt,
   aber nur eine Pressemeldung hat, hat zu hoch gegriffen. Das ist ein
   Befund, auch wenn die Sache selbst stimmt.
+- Was ist wirklich neu? Wörter wie "entdeckt", "unbekannt",
+  "unsichtbar", "unbemerkt", "zum ersten Mal", "noch nie" prüfst du
+  eigens. Ein Planet, der seit Jahren bekannt ist und jetzt nur in
+  anderen Daten sichtbar gemacht wurde, war nicht "unsichtbar"; neu ist
+  dann das Verfahren, nicht der Planet. Ein Satz, der eine
+  Neuentdeckung nahelegt, wo nur eine neue Messung ist, ist
+  "ungenau" - auch auf dem Bild, und dort zuerst, weil der Bildtext
+  das ist, was jeder liest.
 
 Findest du die Sache nirgends, lautet dein Urteil "ablehnen" - nicht
 "nachbessern". Ein Beitrag über etwas, das es nicht gibt, lässt sich
