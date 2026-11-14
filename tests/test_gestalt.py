@@ -79,3 +79,19 @@ def test_die_abschlusskarte_kommt_ohne_frage_aus(tmp_path):
     ziel = gestalt.abschluss(tmp_path / "e.png", frage="", quelle="Nature, 2026",
                              handle="@probe", rubrik="KURIOS", seite="5/5")
     assert Image.open(ziel).size == (1080, 1350)
+
+
+def test_was_kein_foto_ist_wird_gekennzeichnet(tmp_path):
+    """Ein 3D-Modell oder eine Künstlerdarstellung sieht aus wie ein Foto - und ist keines."""
+    assert gestalt.bildart_aus("File:Daraxonrasib 3D.png") == "Modell"
+    assert gestalt.bildart_aus("File:Exoplanet artist impression.jpg") == "Illustration"
+    assert gestalt.bildart_aus("File:Black hole simulation.png") == "Simulation"
+    assert gestalt.bildart_aus("File:Gentoo penguin nest.jpg") == ""
+    assert gestalt.bildart_aus("File:Modelling clay sculpture.jpg") == ""
+
+    bild = tmp_path / "roh.png"
+    Image.new("RGB", (1080, 1350), (40, 40, 40)).save(bild)
+    gestalt.schreibe_bildart(bild, "File:Daraxonrasib 3D.png")
+    assert gestalt.lies_bildart(bild) == "Modell"
+    gestalt.schreibe_bildart(bild, "File:Penguin.jpg")
+    assert gestalt.lies_bildart(bild) == ""

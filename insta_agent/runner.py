@@ -124,6 +124,13 @@ BILD_VOM_FUND = 10
 ZEIGT_DIE_SACHE_AB = 7
 
 
+def _bildart_merken(bild) -> None:
+    """Merkt neben der Datei, ob ein übernommenes Bild ein Foto ist oder etwas anderes."""
+    from .imaging.gestalt import schreibe_bildart
+
+    schreibe_bildart(bild.pfad, f"{getattr(bild, 'seite', '')} {getattr(bild, 'url', '')}")
+
+
 def _blickpunkte(gesehen: str) -> int:
     """Die Punkte aus "7/10: Beschreibung" - -1, wenn nicht hingesehen wurde."""
     kopf = (gesehen or "").split("/", 1)[0].strip()
@@ -2290,6 +2297,7 @@ class Agent:
         )
         self.store.log("bild_echt", f"{gefunden.seite} - {gefunden.lizenz}")
         self._letzte_bildstufe = _blickpunkte(gesehen)
+        _bildart_merken(gefunden)
         return gefunden.pfad, gefunden.nachweis
 
     def _bild_aus_der_quelle(self, fund, basis: str, report: CycleReport):
@@ -2379,6 +2387,7 @@ class Agent:
         )
         self.store.log("bild_quelle", f"{gefunden.seite} - {gefunden.lizenz}")
         self._letzte_bildstufe = BILD_VOM_FUND
+        _bildart_merken(gefunden)
         return gefunden.pfad, gefunden.nachweis
 
     def _panorama_karussell(self, draft, basis: str, identity, erstes_roh):
@@ -2540,6 +2549,7 @@ class Agent:
                 if schon_verwendet(bild.pfad, getattr(self, "_ausschluss", None)):
                     continue
                 self._merke_fuer_beitrag(bild.pfad)
+                _bildart_merken(bild)
                 return bild.pfad, bild.nachweis
 
         # Eine echte Aufnahme schlaegt jedes gemalte Bild - wenn sie die
@@ -2574,6 +2584,7 @@ class Agent:
                     log.info("Karte %s: Foto schon im Beitrag - Schriftkarte", nummer)
                     return None, ""
                 self._merke_fuer_beitrag(gefunden.pfad)
+                _bildart_merken(gefunden)
                 return gefunden.pfad, gefunden.nachweis
 
         # Sonst gemalt, mit dem Prompt dieser Karte.

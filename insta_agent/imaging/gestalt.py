@@ -227,6 +227,65 @@ def verlauf(bild: Image.Image, *, von_unten: bool, anteil: float, staerke: int =
     bild.paste(schwarz, (0, hoehe - h if von_unten else 0), maske)
 
 
+# --- Was für ein Bild es ist --------------------------------------------------
+
+_NICHT_FOTO = (
+    (re.compile(r"artist|impression|illustrat|zeichnung|painting|gemälde|drawing", re.I),
+     "Illustration"),
+    (re.compile(r"simulat|rendering|render\b", re.I), "Simulation"),
+    (re.compile(r"\b3d\b|ball.and.stick|molecul|modell?\b|model\b|reconstruct|rekonstru", re.I),
+     "Modell"),
+)
+
+
+def bildart_aus(beschreibung: str) -> str:
+    """Ob ein Bild etwas anderes ist als ein Foto - aus Dateiname und Adresse.
+
+    Ein Wissensmagazin sagt, wenn ein Bild keine Aufnahme ist. Ein
+    3D-Modell eines Wirkstoffs oder die Vorstellung eines Künstlers von
+    einem Planeten sieht aus wie ein Foto und ist keines. Leer heißt:
+    nichts deutet darauf hin, dass es kein Foto ist.
+    """
+    for muster, art in _NICHT_FOTO:
+        if muster.search(beschreibung or ""):
+            return art
+    return ""
+
+
+def schreibe_bildart(pfad, beschreibung: str) -> None:
+    """Legt die Bildart neben das Bild - so bleibt sie beim Neusetzen erhalten."""
+    if pfad is None:
+        return
+    art = bildart_aus(beschreibung)
+    ziel = Path(f"{pfad}.art")
+    try:
+        if art:
+            ziel.write_text(art, encoding="utf-8")
+        elif ziel.exists():
+            ziel.unlink()
+    except OSError:
+        pass
+
+
+def lies_bildart(pfad) -> str:
+    try:
+        return Path(f"{pfad}.art").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def bildart_marke(zeichnung, art: str, *, x_rechts: int, y_unten: int) -> None:
+    """Klein und unaufdringlich in die Ecke: "Illustration", "Modell", "Simulation"."""
+    if not art:
+        return
+    font = schrift("klein", 20)
+    text = art.upper()
+    laenge = sum(zeichnung.textlength(z, font=font) + font.size * 0.14 for z in text)
+    x, y = int(x_rechts - laenge - 20), y_unten - 40
+    zeichnung.rounded_rectangle([(x, y), (x_rechts, y_unten - 8)], radius=6, fill=(15, 16, 18))
+    gesperrt(zeichnung, (x + 10, y + 7), text, font, LEISE)
+
+
 # --- Rahmen ------------------------------------------------------------------
 
 
@@ -275,7 +334,7 @@ def titel(foto: Path | None, ziel: Path, *, ueberschrift: str, unterzeile: str =
         oben_ruhiger = False
     von_unten = not oben_ruhiger
     if foto is not None:
-        verlauf(bild, von_unten=von_unten, anteil=0.62)
+        verlauf(bild, von_unten=von_unten, anteil=0.66, staerke=245)
         verlauf(bild, von_unten=not von_unten, anteil=0.18, staerke=150)
     zeichnung = ImageDraw.Draw(bild)
     innen = breite - 2 * RAND
@@ -301,6 +360,8 @@ def titel(foto: Path | None, ziel: Path, *, ueberschrift: str, unterzeile: str =
         setze(zeichnung, (RAND, y), subzeilen, sub, (222, 219, 212), zeilenabstand=1.38)
 
     kopfzeile(zeichnung, breite, rubrik=rubrik, seite="", akzent=akzent, auf_foto=foto is not None)
+    if foto is not None:
+        bildart_marke(zeichnung, lies_bildart(foto), x_rechts=breite - RAND, y_unten=100)
     fusszeile(zeichnung, breite, hoehe, links=handle, rechts="Wischen →" if wischen else "",
               farbe=PAPIER if foto is not None else LEISE)
     return _speichern(bild, ziel)
@@ -339,6 +400,7 @@ def karte_mit_foto(foto: Path, ziel: Path, *, text: str, akzentwort: str = "",
     # Mittig in der Fläche unter dem Foto, etwas nach oben gerückt -
     # optisch mittig ist nicht rechnerisch mittig.
     frei = hoehe - fotohoehe
+    bildart_marke(zeichnung, lies_bildart(foto), x_rechts=breite - RAND, y_unten=fotohoehe - 10)
     y = fotohoehe + max(30, int((frei - textblock) * 0.42))
     setze(zeichnung, (RAND, y), zeilen, font, PAPIER, akzent=akzent,
           kerne=akzentkerne(akzentwort, text), zeilenabstand=1.18)
