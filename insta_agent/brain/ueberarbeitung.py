@@ -37,6 +37,34 @@ def _befunde_text(bericht: Pruefbericht) -> str:
     return "\n".join(zeilen) or "(keine Einzelbefunde)"
 
 
+def _pflichtstellen(draft: PostDraft, bericht: Pruefbericht) -> str:
+    """Welche Bilder sich ändern müssen, ausdrücklich beim Namen genannt.
+
+    Die Befunde nennen Behauptungen, nicht Stellen. Bei der bemalten
+    Steinplatte stand "versteckt in einer engen Felsnische" auf Karte 2;
+    das Modell änderte die Karten 4 und 5 und ließ Karte 2 stehen. Wo die
+    beanstandete Behauptung auf einem Bild steht, wird das deshalb
+    gesagt - als Liste, die abzuarbeiten ist.
+    """
+
+    def kern(text: str) -> str:
+        return " ".join(text.casefold().replace("–", "-").split())
+
+    stellen = [(1, draft.bildtext)] + [
+        (nummer, karte.text) for nummer, karte in enumerate(draft.karten, start=2)
+    ]
+    pflicht = []
+    for befund in bericht.beanstandet:
+        behauptung = kern(befund.behauptung)
+        for nummer, text in stellen:
+            if text and (kern(text) in behauptung or behauptung in kern(text)):
+                name = "Text auf dem ersten Bild" if nummer == 1 else f"Bild {nummer}"
+                pflicht.append(f'- {name}: "{text}" muss sich ändern ({befund.urteil}).')
+    if not pflicht:
+        return ""
+    return "# Diese Bilder musst du ändern\n" + "\n".join(dict.fromkeys(pflicht))
+
+
 def _karten_text(draft: PostDraft) -> str:
     karten = list(getattr(draft, "karten", None) or [])
     if not karten:
@@ -95,6 +123,7 @@ def ueberarbeite_beitrag(
 {bericht.zusammenfassung}
 
 {_befunde_text(bericht)}""",
+            _pflichtstellen(draft, bericht),
             f"""\
 # Auftrag
 Schreib diesen Beitrag neu, sodass kein Befund mehr zutrifft.

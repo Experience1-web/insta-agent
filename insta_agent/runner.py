@@ -2774,17 +2774,20 @@ class Agent:
         umgesetzt = 0
         for aenderung in bericht.aenderungen:
             neu = " ".join(aenderung.neu.split())
-            if not neu:
-                continue
             if aenderung.stelle == 0:
+                # In der Bildunterschrift darf auch gestrichen werden: Ein
+                # Satz, der nur wiederholt, wird besser weggelassen.
                 zeile = self.store.get_post(post_id)
                 jetzt = PostDraft.model_validate_json(zeile["draft_json"])
                 alt = aenderung.alt.strip()
                 if alt and alt in jetzt.caption:
-                    if self.bildunterschrift_aendern(
-                        post_id, jetzt.caption.replace(alt, aenderung.neu.strip(), 1)
-                    ).get("ok"):
+                    ersetzt = jetzt.caption.replace(alt, aenderung.neu.strip(), 1)
+                    ersetzt = re.sub(r"[ \t]+\n", "\n", ersetzt)
+                    ersetzt = re.sub(r"\n{3,}", "\n\n", ersetzt).replace("  ", " ").strip()
+                    if self.bildunterschrift_aendern(post_id, ersetzt).get("ok"):
                         umgesetzt += 1
+                continue
+            if not neu:
                 continue
             # Die Abschlusskarte entsteht aus der Bildunterschrift.
             if aenderung.stelle < 1 or aenderung.stelle >= letzte:
