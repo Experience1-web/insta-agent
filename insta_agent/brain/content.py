@@ -46,17 +46,33 @@ Datenblatt. In der richtigen Reihenfolge ist jede Karte ein Schritt, und
 jede macht Lust auf die naechste. Wer nur die Karten liest, ohne die
 Bildunterschrift, muss am Ende die ganze Sache verstanden haben.
 
-Die Reihenfolge, an der du dich orientierst - nicht jede Stufe braucht
-eine Karte, aber keine steht an der falschen Stelle:
+Die Rollen, aus denen du die Geschichte baust - nicht jede braucht
+eine Karte, und die Reihenfolge folgt der Geschichte, nicht der Liste:
 
-1. Das erste Bild: das Erstaunliche, in einem Satz (der Hook).
-2. Was ist das ueberhaupt? In Alltagsworten - "eine neue Korallenart,
-   so gross wie ein Fingernagel", nicht der lateinische Name.
-3. Wo und wie wurde es gefunden? Ein Ort, den man sich vorstellen kann.
-4. Das eine Detail, das es besonders macht - mit einem Vergleich, den
-   jeder fuehlt.
-5. Warum das wichtig ist oder was es veraendert. Oder die offene Frage,
-   die bleibt.
+- `erklaerung`: Was ist das ueberhaupt? In Alltagsworten - "eine neue
+  Korallenart, so gross wie ein Fingernagel", nicht der lateinische Name.
+- `hintergrund`: Wo und wie wurde es gefunden, wer hat gesucht?
+- `zahl`: die eine Zahl, die die Sache greifbar macht - mit einem
+  Vergleich, den jeder fuehlt.
+- `wendung`: das Detail, bei dem man stutzt. Oft die beste Karte.
+- `schluss`: was es veraendert - oder die Frage, die offen bleibt.
+
+Jede Karte bekommt das Layout, das ihren Inhalt am besten traegt, und
+die Reihe soll abwechseln - fuenf gleiche Karten sehen nach Vorlage aus:
+
+- `foto`: wenn es ein Foto der Sache geben kann. Der Satz steht unter
+  dem Bild. Dafuer `bildsuche` ausfuellen.
+- `zahl`: wenn eine Zahl die Aussage ist. `zahl` enthaelt sie kurz
+  ("2.062 m"), `text` den Satz, der sie erklaert.
+- `aussage`: ein einzelner starker Satz, gross, ohne Bild - fuer die
+  Wendung oder den Schluss.
+- `text`: wenn etwas Erklaerung braucht. `text` ist die Ueberschrift,
+  `erklaerung` sind zwei, drei Saetze (hoechstens 45 Woerter). Nicht
+  mehr als eine solche Karte je Beitrag.
+
+Eine Karte, die nur da ist, um die Zahl vollzumachen, faellt weg. Eine
+eigene Schlusskarte mit Quelle haengt das Programm selbst an - schreib
+dafuer keine.
 
 **Jede Karte muss jemand verstehen, der nichts darueber weiss.** Dieselbe
 Regel wie beim Hook, und sie gilt fuer jede Karte:
@@ -110,9 +126,10 @@ dieselbe Sache, nicht der Stil. Dieselben sieben Punkte wie beim ersten
 Prompt, dasselbe "no text, no logos, no watermark", dieselbe ruhige
 Flaeche fuer die Schrift.
 
-`text` ist, was auf der Karte steht: hoechstens zehn Woerter, ohne
-Punkt am Ende. `akzentwort` ist das Wort darin, auf das es ankommt -
-eine Zahl, wenn eine da ist, sonst das tragende Wort."""
+`text` ist, was auf der Karte steht: hoechstens vierzehn Woerter, ohne
+Punkt am Ende, als ganzer Satz und nicht im Telegrammstil. `akzentwort`
+ist das Wort darin, auf das es ankommt - eine Zahl, wenn eine da ist,
+sonst das tragende Wort."""
 
 
 MAX_CAPTION = 2200
@@ -174,8 +191,17 @@ def create_post_draft(
     persona: str | None = None,
     vorbilder=None,
     modell: str | None = None,
+    lernpunkte: list[str] | None = None,
 ) -> PostDraft:
     from .vorbilder import vorbilder_block
+
+    gelernt = (
+        "# Was die Schlussredaktion zuletzt bemängelt hat\n"
+        "Das sind Fehler aus den letzten Beiträgen. Mach sie diesmal nicht:\n"
+        + "\n".join(f"- {punkt}" for punkt in lernpunkte[:6])
+        if lernpunkte
+        else ""
+    )
 
     already_used = (
         "\n".join(f"- {c[:120]}" for c in recent_captions)
@@ -197,6 +223,7 @@ def create_post_draft(
             f"# Deine letzten Posts, wiederhole dich nicht\n{already_used}",
             f"# Was deine Zahlen sagen\n{performance_note}" if performance_note else "",
             vorbilder_block(vorbilder),
+            gelernt,
             f"""\
 {auftrag}
 
@@ -263,23 +290,28 @@ Die ersten rund 80 Zeichen der Bildunterschrift - mehr sieht niemand,
 bevor er auf "mehr" tippt.
 
 ## body_text
-Der Haupttext. Er wird nicht gelesen, er wird überflogen - also bau ihn
-danach:
+So, wie ein gutes Wissensmagazin unter ein Foto schreibt - nicht wie
+ein Werbeposting:
 
-- Kurze Absätze, zwei bis drei Zeilen. Nie ein Block.
-- Ein Emoji als Anker vor jedem Absatz, sparsam und passend. Kein
-  Konfetti.
-- Die tragenden Begriffe in GROSSBUCHSTABEN: die Zahl, der Name, das
-  Maß, das eine Wort, auf das es ankommt. Wer nur die Hälfte liest, soll
-  trotzdem wissen, worum es ging. Höchstens ein hervorgehobener Begriff
-  je Absatz - sonst hebt sich nichts mehr ab.
+- Ein Vorspann von zwei Saetzen, der sagt, was gefunden wurde und
+  warum das bemerkenswert ist. Dann zwei, drei kurze Absaetze: wie es
+  gefunden wurde, was es besonders macht, was offen ist.
+- Normale Schreibweise. Keine Woerter in Grossbuchstaben zur Betonung,
+  kein Emoji vor jedem Absatz - hoechstens eins oder zwei im ganzen
+  Text, wo sie etwas ordnen.
+- Was belegt ist, steht als Tatsache. Was die Forscher vermuten, steht
+  als Vermutung ("vermutlich", "die Forscher halten es fuer"). Was
+  offen ist, steht als offene Frage.
+- Keine Floskeln: kein "Spannend, oder?", kein "Speicher dir das", kein
+  "Das musst du wissen". Kein kuenstlich aufgebautes Raetsel, das der
+  naechste Satz aufloest.
 - Der letzte Absatz ist die Quelle, immer in dieser Form:
   "📚 Quelle: <Fachzeitschrift oder Einrichtung>, <Monat/Jahr>" -
   so genau, dass man sie findet. Nie "Quelle im ersten Kommentar" oder
   "Link in Bio": Ein erster Kommentar wird nicht automatisch gesetzt,
   und dann fehlt die Quelle ganz.
 
-Gib etwas Konkretes her. Allgemeinplätze werden weder gespeichert noch
+Gib etwas Konkretes her. Allgemeinplaetze werden weder gespeichert noch
 geteilt.
 
 ## caption
@@ -287,12 +319,13 @@ Hook-Zeile und body_text zusammen, wie sie unter dem Beitrag stehen.
 Höchstens {MAX_CAPTION} Zeichen.
 
 ## call_to_action
-Steht ganz am Ende, nach der Quelle. Eine offene Frage zur Sache, die
-man nicht mit ja oder nein beantwortet und zu der jeder etwas sagen
-kann ("Welches Tier hättest du hier zuerst erwartet?"), gern mit einem
-kurzen Grund zum Speichern oder Weiterschicken davor. Nicht "folge mir",
-keine Frage nach der Meinung zur Forschung im Allgemeinen. Wiederhol
-sie nicht in body_text oder caption - sie wird automatisch angehängt.
+Steht ganz am Ende, nach der Quelle, und ist meistens eine Frage zur
+Sache, auf die jeder eine Antwort hat ("Welches Tier haettest du hier
+zuerst erwartet?") - nicht mit ja oder nein zu beantworten, keine
+Frage nach der Meinung zur Forschung im Allgemeinen und kein Quiz,
+dessen Antwort niemand kennen kann. Ergibt sich keine echte Frage aus
+der Sache, lass das Feld leer - eine erzwungene Frage ist schlechter
+als keine. Wiederhol sie nicht in body_text oder caption.
 
 ## hashtags
 Drei bis {max_hashtags}, ohne Raute. Instagram ordnet Beiträge heute nach

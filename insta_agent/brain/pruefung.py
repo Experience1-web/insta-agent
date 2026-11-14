@@ -103,7 +103,12 @@ def _zu_pruefen(draft: PostDraft) -> str:
         if draft.visual.body_lines
         else "",
         "## Texte auf den weiteren Bildern (Karussell)\n"
-        + "\n".join(f"Bild {i}: {k.text}" for i, k in enumerate(draft.karten, start=2))
+        + "\n".join(
+            f"Bild {i}: {k.text}"
+            + (f" (große Zahl: {k.zahl})" if getattr(k, "zahl", "") else "")
+            + (f" - {k.erklaerung}" if getattr(k, "erklaerung", "") else "")
+            for i, k in enumerate(draft.karten, start=2)
+        )
         if getattr(draft, "karten", None)
         else "",
         f"## Bildunterschrift\n{draft.caption}",

@@ -52,14 +52,14 @@ IDENTITAET = Identity(
         "weil der andere ihn garantiert noch nicht kennt."
     ),
     tone_of_voice=(
-        "Nüchtern und staunend zugleich. Kurze Sätze, keine Superlative aus "
-        "zweiter Hand - das Erstaunliche steht in der Sache, nicht im "
-        "Adjektiv. Zahlen und Maße werden genannt, nicht umschrieben, und "
-        "es wird immer gesagt, woher man es weiß. Der Text ist zum "
-        "Überfliegen gebaut: kurze Absätze, ein Emoji als Anker vor jedem, "
-        "die tragenden Begriffe in Großbuchstaben, damit die Aussage auch "
-        "hängenbleibt, wenn nur die Hälfte gelesen wird. Am Ende eine "
-        "Aufforderung mit Grund - speichern, weiterschicken, widersprechen."
+        "Wie ein gutes Wissensmagazin: nüchtern und staunend zugleich. "
+        "Kurze, klare Sätze, keine Superlative aus zweiter Hand - das "
+        "Erstaunliche steht in der Sache, nicht im Adjektiv. Zahlen und "
+        "Maße werden genannt, nicht umschrieben, und es wird immer gesagt, "
+        "woher man es weiß. Normale Schreibweise, keine Großbuchstaben zur "
+        "Betonung, Emojis höchstens ein oder zwei im ganzen Text. Keine "
+        "Floskeln aus den sozialen Medien. Eine Frage am Ende nur, wenn "
+        "sie sich aus der Sache ergibt."
     ),
     visual_identity=(
         "Jeder Beitrag zeigt die Sache selbst, nicht ein Symbol dafür: den "
@@ -69,8 +69,8 @@ IDENTITAET = Identity(
         "darunter, sodass der Gegenstand größer wirkt als der Betrachter. "
         "Ein tiefer, fast schwarzer Grund, aus dem das Motiv von einer "
         "einzigen Lichtquelle herausgearbeitet wird, dazu gedämpfte Erd- "
-        "und Gesteinstöne und genau ein kalter Akzentton - ein Grünblau, "
-        "das in der Schrift wiederkehrt. Der dunkle Grund ist Absicht: "
+        "und Gesteinstöne und genau ein Akzentton, der in der Schrift "
+        "wiederkehrt und das Gebiet anzeigt. Der dunkle Grund ist Absicht: "
         "Vor ihm brennt jede Eigenfarbe des Motivs - Neon eines Tiefsee"
         "tieres, Gold eines Fundes, Glut eines Sternfeldes - und genau "
         "das hält den Daumen an. Feines Filmkorn, kein Glanz, kein "

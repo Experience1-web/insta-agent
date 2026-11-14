@@ -187,6 +187,15 @@ def _gestaltungsurteil() -> Gestaltungsurteil:
     )
 
 
+def _schlussbericht():
+    from insta_agent.brain.schlussredaktion import Schlussbericht
+
+    return Schlussbericht(
+        sprache=4, roter_faden=4, bild_und_text=4, gestaltung=4, gesamt=4,
+        staerke="Klare Reihe.", aenderungen=[], lernpunkt="",
+    )
+
+
 def _pruefbericht() -> Pruefbericht:
     """Die Endprüfung findet nichts - das ist der Normalfall im Test.
 
@@ -250,6 +259,9 @@ _ANTWORTEN = {
     MonetizationPlan: _geschaeftsplan,
     Pruefbericht: _pruefbericht,
     Gestaltungsurteil: _gestaltungsurteil,
+    __import__("insta_agent.brain.schlussredaktion").brain.schlussredaktion.Schlussbericht: (
+        _schlussbericht
+    ),
 }
 
 

@@ -332,11 +332,47 @@ class Karte(BaseModel):
     text: str = Field(
         description=(
             "Was auf diesem Bild steht: genau eine der wichtigen Tatsachen "
-            "des Fundes, als Schritt der Geschichte - hoechstens zehn "
+            "des Fundes, als Schritt der Geschichte - hoechstens vierzehn "
             "Woerter, ohne Punkt am Ende. In Alltagsworten, "
             "die jeder ohne Vorwissen versteht - kein Fachwort, kein "
-            "lateinischer Name, keine Zahl, die man erst nachschlagen muss."
+            "lateinischer Name, keine Zahl, die man erst nachschlagen muss. "
+            "Beim Layout 'text' ist das die Ueberschrift der Karte."
         )
+    )
+    rolle: Literal["einstieg", "erklaerung", "hintergrund", "zahl", "wendung", "schluss"] = (
+        Field(
+            default="erklaerung",
+            description=(
+                "Welchen Schritt der Geschichte diese Karte traegt: was es "
+                "ist (erklaerung), woher es kommt (hintergrund), die Zahl, "
+                "die es greifbar macht (zahl), die Ueberraschung (wendung), "
+                "was bleibt oder offen ist (schluss)."
+            ),
+        )
+    )
+    layout: Literal["foto", "zahl", "aussage", "text"] = Field(
+        default="foto",
+        description=(
+            "Wie die Karte gesetzt wird. foto: ein Foto der Sache, darunter "
+            "der Satz. zahl: eine grosse Zahl, darunter der Satz. aussage: "
+            "ein einzelner starker Satz gross, ohne Bild. text: Ueberschrift "
+            "plus zwei, drei erklaerende Saetze - fuer das, was Erklaerung "
+            "braucht."
+        ),
+    )
+    zahl: str = Field(
+        default="",
+        description=(
+            "Nur bei layout 'zahl': die Zahl, wie sie gross dasteht, kurz - "
+            "'2.062 m', '3 Schaedel', '15-mal'. Sie muss im Fund belegt sein."
+        ),
+    )
+    erklaerung: str = Field(
+        default="",
+        description=(
+            "Nur bei layout 'text': zwei bis drei Saetze, hoechstens 45 "
+            "Woerter, die erklaeren, was die Ueberschrift behauptet."
+        ),
     )
     akzentwort: str = Field(
         default="",

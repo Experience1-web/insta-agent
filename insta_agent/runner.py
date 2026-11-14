@@ -779,6 +779,7 @@ class Agent:
                 # nur fürs Nachbessern, geschrieben wurde immer mit der
                 # Voreinstellung.
                 modell=self._modell("chef"),
+                lernpunkte=list(self.store.get_json("redaktion_lernen") or []),
             )
             if not draft.visual.footer.strip():
                 draft.visual.footer = f"@{identity.handle}"
@@ -865,6 +866,7 @@ class Agent:
 
             bericht = self._pruefe(post_id, draft, identity, report, fund)
             bericht = self._bessere_nach(post_id, bericht, report)
+            self._schlussredaktion(post_id, report)
 
             # Zum Schluss das Reel - nach dem Nachbessern, damit es die
             # fertigen Bilder zeigt. Kostet nichts; fehlt ffmpeg, eben nicht.
@@ -875,7 +877,12 @@ class Agent:
                 )
 
             kosten = self.treasury.state().cycle_spent_usd - stand_vorher
-            self.store.setze_kosten(post_id, kosten)
+            # Nachbessern und Nachprüfen haben unterwegs schon auf den
+            # Beitrag gebucht. Hier nur noch, was fehlt - sonst stand ein
+            # nachgebesserter Beitrag mit seinen Korrekturen doppelt da.
+            gebucht = (self.store.get_post(post_id) or {"kosten_usd": 0})["kosten_usd"] or 0.0
+            if kosten - gebucht > 0:
+                self.store.setze_kosten(post_id, kosten - gebucht)
             report.steps.append(f"Beitrag fertig, Kosten {kosten:.4f} USD")
 
             if zeile := self.store.get_post(post_id):
@@ -2512,6 +2519,11 @@ class Agent:
         """
         stamm = f"{basis}-k{nummer}"
 
+        # Eine Zahl, eine Aussage, eine Erklärung brauchen kein Foto -
+        # sie werden gesetzt, nicht bebildert. Das spart auch die Suche.
+        if getattr(karte, "layout", "foto") in ("zahl", "aussage", "text"):
+            return None, ""
+
         # Weitere Aufnahmen vom Fund selbst gehen vor jeder Suche. Sie
         # stammen aus derselben Studie wie das erste Bild und zeigen
         # dieselbe Sache - ein Archivbild passt nur zum Thema.
@@ -2708,6 +2720,82 @@ class Agent:
         )
         return bilder, nachweise, None
 
+    def _schlussredaktion(self, post_id: int, report: CycleReport) -> None:
+        """Lässt den fertigen Beitrag ansehen und setzt die Verbesserungen um.
+
+        Nach der Endprüfung, weil es um den fertigen Beitrag geht: Bilder,
+        Texte, Reihenfolge. Umgesetzt wird nur, was den Text kürzer oder
+        klarer macht; jede Änderung geht danach durch die Nachprüfung, die
+        ohne Websuche gegen die Belege der Endprüfung liest.
+        """
+        from .brain.schlussredaktion import kontaktbogen, schlussredaktion
+
+        zeile = self.store.get_post(post_id)
+        if zeile is None or zeile["status"] != "draft":
+            return
+        draft = PostDraft.model_validate_json(zeile["draft_json"])
+        bilder = [Path(zeile["image_path"])] if zeile["image_path"] else []
+        bilder += [Path(b) for b in json.loads(zeile["karussell_json"] or "[]")]
+        if (ende := self.abschlusskarte(zeile)) is not None:
+            bilder.append(ende)
+        bilder = [b for b in bilder if b.is_file()]
+        if not bilder:
+            return
+        try:
+            bogen = kontaktbogen(bilder, self.settings.media_dir / f".bogen-{post_id}.jpg")
+            bericht = schlussredaktion(
+                self.brain, draft=draft, bogen=bogen, modell=self._modell("pruefung")
+            )
+        except (BudgetExhausted, CycleBudgetExceeded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - ohne Schlussredaktion geht es auch
+            log.warning("Schlussredaktion ausgefallen: %s", exc)
+            report.steps.append(f"Schlussredaktion ausgefallen: {exc}")
+            return
+
+        umgesetzt = self._setze_redaktion_um(post_id, draft, bericht, letzte=len(bilder))
+        self.store.set_json(f"schlussredaktion:{post_id}", bericht.model_dump(mode="json"))
+        if bericht.lernpunkt.strip():
+            gelernt = list(self.store.get_json("redaktion_lernen") or [])
+            gelernt = [bericht.lernpunkt.strip(), *[g for g in gelernt if g != bericht.lernpunkt]]
+            self.store.set_json("redaktion_lernen", gelernt[:8])
+        report.steps.append(
+            f"Schlussredaktion: {bericht.gesamt}/5 (Sprache {bericht.sprache}, "
+            f"roter Faden {bericht.roter_faden}, Bild/Text {bericht.bild_und_text}, "
+            f"Gestaltung {bericht.gestaltung}), {umgesetzt} Änderungen umgesetzt"
+        )
+        if umgesetzt:
+            nach = self.pruefe_nach(post_id)
+            if nach.get("ok"):
+                report.steps.append(f"Nach der Schlussredaktion geprüft: {nach['urteil']}")
+
+    def _setze_redaktion_um(self, post_id: int, draft, bericht, *, letzte: int) -> int:
+        """Setzt die Änderungen der Schlussredaktion um - nur, was sicher passt."""
+        umgesetzt = 0
+        for aenderung in bericht.aenderungen:
+            neu = " ".join(aenderung.neu.split())
+            if not neu:
+                continue
+            if aenderung.stelle == 0:
+                zeile = self.store.get_post(post_id)
+                jetzt = PostDraft.model_validate_json(zeile["draft_json"])
+                alt = aenderung.alt.strip()
+                if alt and alt in jetzt.caption:
+                    if self.bildunterschrift_aendern(
+                        post_id, jetzt.caption.replace(alt, aenderung.neu.strip(), 1)
+                    ).get("ok"):
+                        umgesetzt += 1
+                continue
+            # Die Abschlusskarte entsteht aus der Bildunterschrift.
+            if aenderung.stelle < 1 or aenderung.stelle >= letzte:
+                continue
+            hoechstens = 7 if aenderung.stelle == 1 else 14
+            if len(neu.split()) > hoechstens:
+                continue
+            if self.text_aendern(post_id, aenderung.stelle, neu).get("ok"):
+                umgesetzt += 1
+        return umgesetzt
+
     def _titelmarke(self, draft):
         """Der Rahmen fürs erste Bild: Etikett und, bei mehreren Bildern, "Wischen"."""
         from .imaging.marke import Marke, etikett_fuer
@@ -2726,9 +2814,14 @@ class Agent:
         """Der Rahmen für Karte `nummer`: Etikett und Seitenzähler."""
         from .imaging.marke import Marke, etikett_fuer
 
+        karten = list(getattr(draft, "karten", None) or [])
+        karte = karten[nummer - 2] if 0 <= nummer - 2 < len(karten) else None
         return Marke(
             etikett=etikett_fuer(getattr(draft, "pillar", "")),
             seite=f"{nummer}/{self._kartenzahl(draft)}",
+            layout=getattr(karte, "layout", "") or "",
+            zahl=getattr(karte, "zahl", "") or "",
+            erklaerung=getattr(karte, "erklaerung", "") or "",
         )
 
     def abschlusskarte(self, zeile) -> Path | None:

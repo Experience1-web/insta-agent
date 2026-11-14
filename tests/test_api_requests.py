@@ -22,6 +22,7 @@ from test_cycle import (
     _identitaet,
     _pruefbericht,
     _reflexion,
+    _schlussbericht,
     _strategie,
 )
 
@@ -35,6 +36,7 @@ ANTWORTEN = {
     "MonetizationPlan": _geschaeftsplan,
     "Pruefbericht": _pruefbericht,
     "Gestaltungsurteil": _gestaltungsurteil,
+    "Schlussbericht": _schlussbericht,
     "Vorbilder": lambda: __import__("insta_agent.models").models.Vorbilder(
         fuer_uns=["Die Zahl zuerst"], einstiege=["Frage statt Aussage"]
     ),

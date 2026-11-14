@@ -40,6 +40,10 @@ class Marke:
     # "2/6" - leer auf dem ersten Bild, dort steht der Wisch-Hinweis.
     seite: str = ""
     wischen: bool = False
+    # Wie die Karte gesetzt wird - aus dem Entwurf: foto, zahl, aussage, text.
+    layout: str = ""
+    zahl: str = ""
+    erklaerung: str = ""
 
 
 def etikett_fuer(saeule: str) -> str:

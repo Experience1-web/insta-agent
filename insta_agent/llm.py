@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, TypeVar
 
 import anthropic
@@ -122,7 +123,7 @@ def _heute() -> str:
     return f"Heute ist der {tag.day}. {_MONATE[tag.month - 1]} {tag.year}."
 
 
-def _erste_nachricht(prompt: str, *, mit_suche: bool) -> dict[str, Any]:
+def _erste_nachricht(prompt: str, *, mit_suche: bool, bild=None) -> dict[str, Any]:
     """Der Auftrag - bei einer Websuche ebenfalls gemerkt, sonst nicht.
 
     Ohne Suche wird der Auftrag genau einmal gelesen; ein Merkzeichen
@@ -132,7 +133,18 @@ def _erste_nachricht(prompt: str, *, mit_suche: bool) -> dict[str, Any]:
     block: dict[str, Any] = {"type": "text", "text": f"{_heute()}\n\n{prompt}"}
     if mit_suche:
         block["cache_control"] = dict(ZWISCHENSPEICHER)
-    return {"role": "user", "content": [block]}
+    inhalt: list[dict[str, Any]] = [block]
+    if bild is not None:
+        # Hinter dem Text, damit der Auftrag immer an erster Stelle steht -
+        # darauf verlassen sich Protokoll und Zwischenspeicher.
+        import base64
+
+        daten = base64.standard_b64encode(Path(bild).read_bytes()).decode("ascii")
+        typ = "image/png" if str(bild).lower().endswith(".png") else "image/jpeg"
+        inhalt.append(
+            {"type": "image", "source": {"type": "base64", "media_type": typ, "data": daten}}
+        )
+    return {"role": "user", "content": inhalt}
 
 class Brain:
     def __init__(self, config: LLMConfig, treasury: Treasury, api_key: str | None = None) -> None:
@@ -245,6 +257,7 @@ class Brain:
         web_search: bool = False,
         max_rounds: int = 6,
         modell: str | None = None,
+        bild=None,
     ) -> T:
         """Holt eine validierte Antwort nach dem Pydantic-Schema.
 
@@ -275,6 +288,7 @@ class Brain:
                         attempt_model=attempt_model,
                         tools=werkzeuge,
                         max_rounds=max_rounds,
+                        bild=bild,
                     )
                 except _KeinErgebnis:
                     break
@@ -304,9 +318,10 @@ class Brain:
         attempt_model: str,
         tools: list[dict[str, Any]],
         max_rounds: int,
+        bild=None,
     ) -> T:
         """Ein Modell, ein Werkzeugsatz. Wirft _KeinErgebnis, wenn nichts kam."""
-        messages: list[dict[str, Any]] = [_erste_nachricht(prompt, mit_suche=bool(tools))]
+        messages: list[dict[str, Any]] = [_erste_nachricht(prompt, mit_suche=bool(tools), bild=bild)]
         response = None
 
         # Ein Aufruf dauert Minuten. Ohne diese Zeile steht im Protokoll

@@ -312,9 +312,17 @@ def render_post_image(
         from . import gestalt
 
         if marke.seite:
+            if marke.layout == "text" and marke.erklaerung:
+                return gestalt.karte_text(
+                    out_path, ueberschrift=spec.headline, erklaerung=marke.erklaerung,
+                    akzentwort=spec.akzentwort, rubrik=marke.etikett, seite=marke.seite,
+                    groesse=groesse,
+                )
+            zahl = {"zahl": marke.zahl, "aussage": "", "text": ""}.get(marke.layout)
             return gestalt.karte_ohne_foto(
                 out_path, text=spec.headline, akzentwort=spec.akzentwort,
                 rubrik=marke.etikett, seite=marke.seite, groesse=groesse,
+                zahl=zahl if marke.layout != "zahl" or marke.zahl else None,
             )
         return gestalt.titel(
             None, out_path, ueberschrift=spec.headline, unterzeile=spec.subline,

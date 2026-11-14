@@ -350,8 +350,13 @@ _ZAHL = re.compile(r"\d[\d.,]*(?:\s?(?:-?[Ff]ache|%|Prozent|Meter|Jahre|km|Milli
 
 
 def karte_ohne_foto(ziel: Path, *, text: str, akzentwort: str = "", rubrik: str = "",
-                    seite: str = "", groesse=(1080, 1350)) -> Path:
-    """Ohne Foto: eine große Zahl, wenn eine da ist - sonst eine große Aussage."""
+                    seite: str = "", groesse=(1080, 1350), zahl: str | None = None) -> Path:
+    """Ohne Foto: eine große Zahl, wenn eine da ist - sonst eine große Aussage.
+
+    `zahl` legt die Zahl fest ("" heißt: ausdrücklich keine, eine Aussage).
+    Ohne Angabe wird im Text nach einer gesucht - für Karten von früher,
+    die noch kein Layout kannten.
+    """
     breite, hoehe = groesse
     akzent = akzent_fuer(rubrik)
     bild = Image.new("RGB", groesse, GRUND)
@@ -359,15 +364,18 @@ def karte_ohne_foto(ziel: Path, *, text: str, akzentwort: str = "", rubrik: str 
     innen = breite - 2 * RAND
     text = feinsatz(text)
 
-    zahl = _ZAHL.search(text)
-    if zahl and len(zahl.group(0)) <= 14:
-        gross, _ = passend(zeichnung, zahl.group(0), "titel", innen, gross=230, klein=120,
+    if zahl is None:
+        treffer = _ZAHL.search(text)
+        zahl = treffer.group(0) if treffer and len(treffer.group(0)) <= 14 else ""
+    zahl = feinsatz(zahl)
+    if zahl:
+        gross, _ = passend(zeichnung, zahl, "titel", innen, gross=230, klein=110,
                            hoechstens=1)
         font, zeilen = passend(zeichnung, text, "aussage", innen, gross=52, klein=40,
                                hoechstens=5)
         block = int(gross.size * 1.05) + 40 + len(zeilen) * int(font.size * 1.2)
         y = (hoehe - block) // 2
-        zeichnung.text((RAND - 6, y), zahl.group(0), font=gross, fill=akzent)
+        zeichnung.text((RAND - 6, y), zahl, font=gross, fill=akzent)
         y += int(gross.size * 1.05) + 40
         setze(zeichnung, (RAND, y), zeilen, font, PAPIER, zeilenabstand=1.2)
     else:
@@ -378,6 +386,34 @@ def karte_ohne_foto(ziel: Path, *, text: str, akzentwort: str = "", rubrik: str 
         setze(zeichnung, (RAND, y), zeilen, font, PAPIER, akzent=akzent,
               kerne=akzentkerne(akzentwort, text), zeilenabstand=1.14)
 
+    kopfzeile(zeichnung, breite, rubrik=rubrik, seite=seite, akzent=akzent, auf_foto=False)
+    return _speichern(bild, ziel)
+
+
+def karte_text(ziel: Path, *, ueberschrift: str, erklaerung: str, akzentwort: str = "",
+               rubrik: str = "", seite: str = "", groesse=(1080, 1350)) -> Path:
+    """Die Erklärkarte: eine Überschrift, darunter zwei, drei Sätze.
+
+    Für das, was nicht in einen Satz passt. Gesetzt wie ein Absatz im
+    Magazin - Grotesk, großzügiger Zeilenabstand, schmale Spalte.
+    """
+    breite, hoehe = groesse
+    akzent = akzent_fuer(rubrik)
+    bild = Image.new("RGB", groesse, GRUND)
+    zeichnung = ImageDraw.Draw(bild)
+    innen = breite - 2 * RAND
+    ueberschrift, erklaerung = feinsatz(ueberschrift), feinsatz(erklaerung)
+
+    kopf, kopfzeilen = passend(zeichnung, ueberschrift, "titel", innen, gross=68, klein=50,
+                               hoechstens=3)
+    lauf, laufzeilen = passend(zeichnung, erklaerung, "text", innen - 40, gross=40, klein=32,
+                               hoechstens=8)
+    block = len(kopfzeilen) * int(kopf.size * 1.12) + 56 + len(laufzeilen) * int(lauf.size * 1.5)
+    y = max(190, (hoehe - block) // 2 - 30)
+    y = setze(zeichnung, (RAND, y), kopfzeilen, kopf, PAPIER, akzent=akzent,
+              kerne=akzentkerne(akzentwort, ueberschrift), zeilenabstand=1.12)
+    y += 56
+    setze(zeichnung, (RAND, y), laufzeilen, lauf, (214, 211, 204), zeilenabstand=1.5)
     kopfzeile(zeichnung, breite, rubrik=rubrik, seite=seite, akzent=akzent, auf_foto=False)
     return _speichern(bild, ziel)
 
@@ -426,6 +462,7 @@ __all__ = [
     "akzent_fuer",
     "karte_mit_foto",
     "karte_ohne_foto",
+    "karte_text",
     "schrift",
     "titel",
 ]

@@ -169,6 +169,10 @@ Bildwünsche und Suchbegriffe der Karten übernimmt das Programm von selbst.""",
                 update={
                     "text": jetzt.text,
                     "akzentwort": jetzt.akzentwort if jetzt.text != vorher.text else vorher.akzentwort,
+                    # Zahl und Erklärsätze sind Behauptungen wie der Text:
+                    # Eine Korrektur muss sie erreichen.
+                    "zahl": jetzt.zahl if vorher.layout == "zahl" else vorher.zahl,
+                    "erklaerung": jetzt.erklaerung if vorher.layout == "text" else vorher.erklaerung,
                 }
             )
             for vorher, jetzt in zip(draft.karten, neu.karten)
