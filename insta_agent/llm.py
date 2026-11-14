@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, TypeVar
 
 import anthropic
@@ -103,6 +104,24 @@ def _system_bloecke(system: str) -> list[dict[str, Any]]:
     return [{"type": "text", "text": system, "cache_control": dict(ZWISCHENSPEICHER)}]
 
 
+_MONATE = (
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+)
+
+
+def _heute() -> str:
+    """Das heutige Datum, ausgeschrieben.
+
+    Ohne diese Zeile weiß das Modell nicht, welcher Tag ist, und hält
+    für neu, was es aus seinen Trainingsdaten kennt. So kam ein Fund vom
+    Januar 2025 im November 2026 als "neu" in den Beitrag - nachdem er
+    längst durch alle Nachrichten gegangen war.
+    """
+    tag = datetime.now().date()
+    return f"Heute ist der {tag.day}. {_MONATE[tag.month - 1]} {tag.year}."
+
+
 def _erste_nachricht(prompt: str, *, mit_suche: bool) -> dict[str, Any]:
     """Der Auftrag - bei einer Websuche ebenfalls gemerkt, sonst nicht.
 
@@ -110,7 +129,7 @@ def _erste_nachricht(prompt: str, *, mit_suche: bool) -> dict[str, Any]:
     kostete dort nur den Aufschlag. Mit Suche liest das Modell ihn nach
     jedem Suchschritt wieder.
     """
-    block: dict[str, Any] = {"type": "text", "text": prompt}
+    block: dict[str, Any] = {"type": "text", "text": f"{_heute()}\n\n{prompt}"}
     if mit_suche:
         block["cache_control"] = dict(ZWISCHENSPEICHER)
     return {"role": "user", "content": [block]}

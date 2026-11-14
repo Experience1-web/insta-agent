@@ -70,6 +70,52 @@ def _lege_schleier(bild: Image.Image, oben: int, unten: int, staerke: int = 190)
     bild.paste(dunkel, (0, oben), schleier)
 
 
+def _aufhellen_bis_lesbar(
+    farbe: tuple[int, int, int], grund: tuple[int, int, int] = (22, 22, 24)
+) -> tuple[int, int, int]:
+    """Hebt eine Akzentfarbe an, bis sie auf dem dunklen Verlauf trägt.
+
+    Die Bildsprache wählt ihre Akzente für die Schriftfassung; ein
+    dunkles Petrol, das dort auf Schwarz noch geht, versinkt auf einem
+    Foto. Der Farbton bleibt, nur die Helligkeit steigt.
+    """
+    r, g, b = farbe
+    for _ in range(12):
+        if _contrast_ratio((r, g, b), grund) >= 5.5:
+            break
+        r, g, b = (min(255, int(c + (255 - c) * 0.18)) for c in (r, g, b))
+    return (r, g, b)
+
+
+def _lege_verlauf_oben(bild: Image.Image, bis: int, staerke: int = 160) -> None:
+    """Ein Verlauf von oben: am Rand am dunkelsten, nach unten offen.
+
+    Bis ungefähr zur Hälfte der Strecke bleibt er fast voll, damit der
+    ganze Textblock auf ruhigem Grund steht, und läuft dann weich aus.
+    """
+    breite, hoehe = bild.size
+    bis = max(1, min(bis, hoehe))
+    maske = Image.new("L", (1, bis))
+    for y in range(bis):
+        anteil = y / bis
+        wert = 1.0 if anteil < 0.55 else max(0.0, 1.0 - (anteil - 0.55) / 0.45)
+        # Weiches Auslaufen statt einer Geraden - sonst sieht man die Kante.
+        maske.putpixel((0, y), int(staerke * (wert ** 1.6)))
+    maske = maske.resize((breite, bis))
+    bild.paste(Image.new("RGB", (breite, bis), (0, 0, 0)), (0, 0), maske)
+
+
+def _lege_verlauf_unten(bild: Image.Image, hoehe_verlauf: int, staerke: int = 120) -> None:
+    """Ein leichter Verlauf am unteren Rand, damit der Name lesbar bleibt."""
+    breite, hoehe = bild.size
+    h = max(1, min(hoehe_verlauf, hoehe))
+    maske = Image.new("L", (1, h))
+    for y in range(h):
+        maske.putpixel((0, y), int(staerke * ((y / h) ** 1.4)))
+    maske = maske.resize((breite, h))
+    bild.paste(Image.new("RGB", (breite, h), (0, 0, 0)), (0, hoehe - h), maske)
+
+
 def _nachschaerfen(bild: Image.Image, faktor: float) -> Image.Image:
     """Die Schaerfe zurueckholen, die das Skalieren gekostet hat.
 
@@ -148,7 +194,7 @@ def lege_hook_auf(
     innen = breite - 2 * RAND
 
     textfarbe = _hex_to_rgb(spec.text_hex, (247, 245, 239))
-    akzent = _hex_to_rgb(spec.accent_hex, (228, 87, 46))
+    akzent = _aufhellen_bis_lesbar(_hex_to_rgb(spec.accent_hex, (228, 87, 46)))
 
     familie = getattr(spec, "schrift", "klar")
     schrift, zeilen = _fit_text(
@@ -162,13 +208,41 @@ def lege_hook_auf(
     # und der Prompt hat genau dort Platz gelassen.
     oben = int(hoehe * 0.14)
 
+    # Immer ein Verlauf vom oberen Rand bis unter den Text - so machen es
+    # die großen Wissens-Accounts. Ein Foto ist nie gleichmäßig, und ein
+    # Verlauf sieht nach Absicht aus, nicht nach Notbehelf. Wie stark,
+    # hängt vom Grund ab: Auf hellem Grund braucht es mehr.
     grund = _mittlere_helligkeit(bild, (0, oben, breite, oben + blockhoehe))
-    if _contrast_ratio(textfarbe, grund) < MINDESTKONTRAST:
-        _lege_schleier(bild, max(oben - 90, 0), min(oben + blockhoehe + 90, hoehe))
-        log.debug("Schleier gelegt, der Bildgrund war zu unruhig")
+    unruhig = _contrast_ratio(textfarbe, grund) < MINDESTKONTRAST
+    _lege_verlauf_oben(bild, oben + blockhoehe + 140, staerke=215 if unruhig else 150)
+    # Unten ein leichter Verlauf für den Namen des Accounts.
+    _lege_verlauf_unten(bild, int(hoehe * 0.16), staerke=120)
+    zeichnung = ImageDraw.Draw(bild)
 
     kerne = _akzentkerne(spec, text)
-    kontur = max(2, round(getattr(schrift, "size", 80) * KONTUR))
+    groesse_px = getattr(schrift, "size", 80)
+
+    # Ein weicher Schatten statt einer harten schwarzen Kontur: Die Kontur
+    # trägt zwar überall, sieht aber nach Meme aus. Der Schatten trägt
+    # genauso - auch auf einem hellen Fleck mitten im Wort -, und die
+    # Buchstaben bleiben sauber.
+    schatten = Image.new("L", bild.size, 0)
+    schattenzeichnung = ImageDraw.Draw(schatten)
+    y = oben
+    for zeile in zeilen:
+        schattenzeichnung.text(
+            (RAND + 2, y + 4),
+            zeile,
+            font=schrift,
+            fill=255,
+            stroke_width=max(2, round(groesse_px * KONTUR * 0.7)),
+            stroke_fill=255,
+        )
+        y += zeilenhoehe
+    schatten = schatten.filter(ImageFilter.GaussianBlur(max(4, groesse_px // 9)))
+    schatten = schatten.point(lambda v: min(255, int(v * 0.85)))
+    bild.paste(Image.new("RGB", bild.size, (0, 0, 0)), (0, 0), schatten)
+    zeichnung = ImageDraw.Draw(bild)
 
     y = oben
     for zeile in zeilen:
@@ -180,7 +254,7 @@ def lege_hook_auf(
             textfarbe=textfarbe,
             akzent=akzent,
             kerne=kerne,
-            kontur=kontur,
+            kontur=0,
         )
         y += zeilenhoehe
 

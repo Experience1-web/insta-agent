@@ -1547,6 +1547,13 @@ class Agent:
         # anderer Fisch über einem Text, der von etwas anderem handelt.
         # Wer das Motiv wechseln will, drückt "Bild neu".
         neu.image_generation_prompt = alt.image_generation_prompt
+        # Dasselbe gilt für Schrift und Farben: Neu gesetzt werden nur die
+        # Karten mit geändertem Text. Wechselt dabei die Schriftfamilie,
+        # stehen in einem Karussell auf einmal drei verschiedene Schriften.
+        neu.visual.schrift = alt.visual.schrift
+        neu.visual.background_hex = alt.visual.background_hex
+        neu.visual.text_hex = alt.visual.text_hex
+        neu.visual.accent_hex = alt.visual.accent_hex
 
         bericht_lauf = CycleReport(started_at=datetime.now(timezone.utc))
         bild, wie = self._schrift_erneuern(zeile, neu, identity, post_id)

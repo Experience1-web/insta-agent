@@ -273,8 +273,11 @@ danach:
   Maß, das eine Wort, auf das es ankommt. Wer nur die Hälfte liest, soll
   trotzdem wissen, worum es ging. Höchstens ein hervorgehobener Begriff
   je Absatz - sonst hebt sich nichts mehr ab.
-- Ein Satz sagt, woher man es weiß: Veröffentlichung, Jahr, wer es
-  gefunden hat.
+- Der letzte Absatz ist die Quelle, immer in dieser Form:
+  "📚 Quelle: <Fachzeitschrift oder Einrichtung>, <Monat/Jahr>" -
+  so genau, dass man sie findet. Nie "Quelle im ersten Kommentar" oder
+  "Link in Bio": Ein erster Kommentar wird nicht automatisch gesetzt,
+  und dann fehlt die Quelle ganz.
 
 Gib etwas Konkretes her. Allgemeinplätze werden weder gespeichert noch
 geteilt.
@@ -284,10 +287,12 @@ Hook-Zeile und body_text zusammen, wie sie unter dem Beitrag stehen.
 Höchstens {MAX_CAPTION} Zeichen.
 
 ## call_to_action
-Dezent, aber bestimmt, und immer auf eine bestimmte Handlung gerichtet:
-speichern, weiterschicken oder kommentieren. Ein Satz mit einem Grund
-darin - nicht "folge mir", sondern warum genau dieser Beitrag es wert
-ist, aufgehoben oder jemandem geschickt zu werden.
+Steht ganz am Ende, nach der Quelle. Eine offene Frage zur Sache, die
+man nicht mit ja oder nein beantwortet und zu der jeder etwas sagen
+kann ("Welches Tier hättest du hier zuerst erwartet?"), gern mit einem
+kurzen Grund zum Speichern oder Weiterschicken davor. Nicht "folge mir",
+keine Frage nach der Meinung zur Forschung im Allgemeinen. Wiederhol
+sie nicht in body_text oder caption - sie wird automatisch angehängt.
 
 ## hashtags
 Drei bis {max_hashtags}, ohne Raute. Instagram ordnet Beiträge heute nach

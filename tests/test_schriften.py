@@ -25,8 +25,10 @@ def test_jede_familie_hat_hier_eine_eigene_datei():
     klar, ernst, technisch = (schriftdatei(f) for f in ("klar", "ernst", "technisch"))
     assert klar and ernst and technisch
     assert len({klar, ernst, technisch}) == 3
-    assert "Serif" in ernst
-    assert "Mono" in technisch
+    # Unter Linux heißen sie DejaVu Serif und Mono, unter Windows Georgia
+    # und Consolas - beides ist richtig.
+    assert "Serif" in ernst or "georgia" in ernst.casefold()
+    assert "Mono" in technisch or "consola" in technisch.casefold()
 
 
 def test_unbekannte_familie_faellt_auf_klar_zurueck():
@@ -36,7 +38,9 @@ def test_unbekannte_familie_faellt_auf_klar_zurueck():
 
 def test_wucht_faellt_ohne_arial_black_auf_die_grotesk_zurueck():
     """Auf Linux gibt es keine Arial Black - dann eben fett gesetzt, nicht kaputt."""
-    assert _load_font(40, familie="wucht").path.endswith(("Bold.ttf", ".ttc"))
+    pfad = _load_font(40, familie="wucht").path
+    # Unter Windows ist Arial Black da, sonst eine fette Grotesk.
+    assert pfad.endswith(("Bold.ttf", ".ttc", "ariblk.ttf"))
 
 
 def test_jede_familie_kennt_windows_und_linux():
