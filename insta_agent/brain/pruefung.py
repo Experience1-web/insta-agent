@@ -147,6 +147,11 @@ Deshalb prüfst du zuerst den Fund selbst, bevor du den Text prüfst:
   Neuentdeckung nahelegt, wo nur eine neue Messung ist, ist
   "ungenau" - auch auf dem Bild, und dort zuerst, weil der Bildtext
   das ist, was jeder liest.
+- Bekannt ist nicht dasselbe wie vorhanden. "Nur ein Exemplar existiert
+  auf der Welt" ist falsch, wenn bisher nur ein Exemplar gefunden wurde;
+  richtig ist "Man kennt bisher nur ein einziges Exemplar". Dasselbe
+  bei "der einzige", "der älteste", "der größte": belegt ist immer nur
+  "der bisher bekannte".
 
 Findest du die Sache nirgends, lautet dein Urteil "ablehnen" - nicht
 "nachbessern". Ein Beitrag über etwas, das es nicht gibt, lässt sich

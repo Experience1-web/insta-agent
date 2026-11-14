@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -290,6 +291,8 @@ class Publisher:
         cta = draft.call_to_action.strip()
         if cta and not _schon_gesagt(draft.caption, cta):
             parts.append(cta)
+        if (frage := _schlussfrage(draft, "\n\n".join(parts))) is not None:
+            parts.append(frage)
         if nachweis := (bildnachweis or "").strip():
             parts.append(nachweis)
         if draft.hashtags:
@@ -355,6 +358,27 @@ def _entkleidet(text: str) -> str:
     for hin, her in (("\u2013", "-"), ("\u2014", "-"), ("\u2019", "'"), ("\u201e", ""), ("\u201c", "")):
         text = text.replace(hin, her)
     return " ".join(text.split())
+
+
+def _schlussfrage(draft: PostDraft, bisher: str) -> str | None:
+    """Die offene Frage für den Schluss - wenn noch keine dasteht.
+
+    Eine Frage am Ende bringt Kommentare, und Kommentare zählen bei
+    Instagram mehr als alles andere. Der Auftrag verlangt sie, das Modell
+    schreibt trotzdem oft nur "Speicher dir das". Die Frage steht dann
+    meist schon im ersten Kommentar - und der wird nicht automatisch
+    gesetzt. Also kommt sie von dort hierher.
+    """
+    if "?" in bisher.strip()[-300:]:
+        return None
+    vorschlag = (draft.first_comment_prompt or "").strip()
+    fragen = [s.strip() for s in re.findall(r"[^.!?\n]*\?", vorschlag) if s.strip()]
+    if not fragen:
+        return None
+    frage = fragen[-1]
+    if _entkleidet(frage) in _entkleidet(bisher):
+        return None
+    return frage
 
 
 def _schon_gesagt(caption: str, cta: str) -> bool:

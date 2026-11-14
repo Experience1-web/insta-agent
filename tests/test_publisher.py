@@ -269,3 +269,23 @@ def test_ein_eigener_aufruf_kommt_weiterhin_dazu(draft):
     draft.call_to_action = "Speichere das für den nächsten Streit am Küchentisch."
 
     assert "Küchentisch" in Publisher.full_caption(draft)
+
+
+def test_ohne_frage_am_ende_kommt_die_frage_aus_dem_ersten_kommentar(draft):
+    """Der erste Kommentar wird nicht automatisch gesetzt - die Frage gehört nach unten."""
+    draft.caption = "Ein Fund.\n\n📚 Quelle: Nature, November 2026"
+    draft.call_to_action = "Speicher dir das."
+    draft.first_comment_prompt = "Quelle: Nature. Welches Tier hättest du dort erwartet?"
+
+    caption = Publisher.full_caption(draft)
+
+    assert "Welches Tier hättest du dort erwartet?" in caption
+    assert caption.index("Speicher dir das.") < caption.index("Welches Tier")
+
+
+def test_steht_schon_eine_frage_am_ende_bleibt_es_dabei(draft):
+    draft.caption = "Ein Fund."
+    draft.call_to_action = "Was hättest du gedacht?"
+    draft.first_comment_prompt = "Welches Tier hättest du dort erwartet?"
+
+    assert "Welches Tier" not in Publisher.full_caption(draft)
