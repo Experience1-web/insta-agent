@@ -321,7 +321,7 @@ def karte_mit_foto(foto: Path, ziel: Path, *, text: str, akzentwort: str = "",
     innen = breite - 2 * RAND
 
     text = feinsatz(text)
-    font, zeilen = passend(zeichnung, text, "aussage", innen, gross=60, klein=42, hoechstens=4)
+    font, zeilen = passend(zeichnung, text, "aussage", innen, gross=66, klein=48, hoechstens=4)
     textblock = len(zeilen) * int(font.size * 1.18)
     # Das Foto bekommt so viel Fläche, wie der Satz übrig lässt - mindestens
     # gut die Hälfte, höchstens zwei Drittel.

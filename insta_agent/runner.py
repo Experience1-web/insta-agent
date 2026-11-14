@@ -822,6 +822,10 @@ class Agent:
             # Die weiteren Bilder zum Durchwischen. Erst jetzt, nach dem
             # ersten Bild: Sie richten sich in Farbe und Stil danach.
             self._benutzte_abdruecke = []
+            # Das Titelfoto gehört dazu: Sonst darf eine Karte es noch
+            # einmal zeigen.
+            if rohbild is not None:
+                self._merke_fuer_beitrag(rohbild)
             self._letzte_kartenroh = []
             weitere, karten_nachweise, ersatz = self._baue_karussell(
                 draft, basis, identity, report, erstes_roh=rohbild
@@ -2546,6 +2550,17 @@ class Agent:
                 log.info("Kartensuche fehlgeschlagen: %s", exc)
                 gefunden = None
             if gefunden is not None and gefunden.pfad is not None:
+                # Hart ausschließen, was der Beitrag schon zeigt. Das
+                # Hinsehen wertet ein Doppel nur ab - und findet sich nichts
+                # Besseres, gewinnt es trotzdem: Bei der Höhlenschnecke stand
+                # so auf allen fünf Bildern dasselbe Foto.
+                from .imaging.abdruck import schon_verwendet
+
+                bekannt = list(getattr(self, "_benutzte_abdruecke", None) or [])
+                bekannt += list(getattr(self, "_ausschluss", None) or [])
+                if schon_verwendet(gefunden.pfad, bekannt):
+                    log.info("Karte %s: Foto schon im Beitrag - Schriftkarte", nummer)
+                    return None, ""
                 self._merke_fuer_beitrag(gefunden.pfad)
                 return gefunden.pfad, gefunden.nachweis
 

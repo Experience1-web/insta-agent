@@ -383,3 +383,35 @@ def test_ohne_echtes_kartenfoto_bleibt_alles_wie_es_ist(tmp_path):
     )
 
     assert agent._echtes_foto_nach_vorn(draft, "b", SimpleNamespace(handle="p"), [tmp_path / "k2.png"]) is None
+
+
+def test_ein_foto_kommt_im_beitrag_nur_einmal_vor(tmp_path, monkeypatch):
+    """Bei der Höhlenschnecke stand auf allen fünf Bildern dasselbe Foto."""
+    import random
+    from types import SimpleNamespace
+
+    from insta_agent.imaging import echtbild
+    from insta_agent.imaging.abdruck import abdruck
+    from insta_agent.runner import Agent
+
+    random.seed(9)
+    foto = tmp_path / "schnecke.png"
+    bild = Image.new("RGB", (600, 800))
+    bild.putdata([(random.randint(0, 255),) * 3 for _ in range(600 * 800)])
+    bild.save(foto)
+
+    agent = object.__new__(Agent)
+    agent.settings = SimpleNamespace(media_dir=tmp_path)
+    agent._quellbilder = []
+    agent._bilder_heute_aus = None
+    agent._spar = True
+    agent.bildgenerator = None
+    agent._benutzte_abdruecke = [abdruck(foto)]
+    monkeypatch.setattr(
+        echtbild, "finde_und_hole",
+        lambda *a, **k: SimpleNamespace(pfad=foto, nachweis="Bild: X · CC BY"),
+    )
+
+    roh, nachweis = agent._karte_rohbild(Karte(text="Eins", bildsuche="snail"), "b", 2)
+
+    assert roh is None and nachweis == ""
