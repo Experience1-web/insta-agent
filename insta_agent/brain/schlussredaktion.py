@@ -56,7 +56,12 @@ ohne Bildunterschrift versteht? Steht etwas doppelt? Fehlt der Schritt,
 der das Ganze verständlich macht? Trägt jedes Bild etwas Eigenes?
 
 Bild und Text: Zeigt das Foto, wovon der Satz darunter spricht? Steht
-auf einem Bild ein Satz, der zu einem anderen Bild gehört?
+auf einem Bild ein Satz, der zu einem anderen Bild gehört? Ein Foto,
+das etwas anderes zeigt, lässt sich nicht wegformulieren - trag die
+Karte unter `foto_passt_nicht` ein, dann wird sie ohne Foto gesetzt.
+
+Eine Karte mit großer Zahl (Layout zahl) lebt von dieser Zahl: Wenn du
+ihren Satz änderst, bleibt die Zahl darin stehen.
 
 Gestaltung: Ist alles gut lesbar? Ist ein Text zu lang für sein Bild?
 Wiederholt sich ein Foto?
@@ -95,6 +100,15 @@ class Schlussbericht(BaseModel):
     gesamt: int = Field(ge=1, le=5, description="Würde eine Redaktion das veröffentlichen?")
     staerke: str = Field(description="Was gut ist, in einem Satz")
     aenderungen: list[Aenderung] = Field(default_factory=list, max_length=4)
+    foto_passt_nicht: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Nummern der Karten (ab 2), deren Foto nicht zeigt, wovon der Satz "
+            "spricht - etwa eine Galaxie unter einem Satz über eine Staubwolke. "
+            "Diese Karten werden ohne Foto als Schriftkarte gesetzt. Leer, wenn "
+            "alle passen."
+        ),
+    )
     lernpunkt: str = Field(
         default="",
         description=(
@@ -149,6 +163,13 @@ def _texte(draft: PostDraft) -> str:
     return "\n".join(zeilen)
 
 
+def _bildunterschrift(draft: PostDraft) -> str:
+    """Genau so, wie sie erscheint - sonst sieht die Redaktion Doppeltes, das es nicht gibt."""
+    from ..instagram.publisher import Publisher
+
+    return Publisher.full_caption(draft)
+
+
 def schlussredaktion(
     brain: Brain,
     *,
@@ -166,7 +187,7 @@ def schlussredaktion(
         prompt=with_context(
             "# Die Bilder\nAngehängt: alle Bilder des Beitrags in ihrer Reihenfolge, nummeriert.",
             f"# Die Texte auf den Bildern\n{_texte(draft)}",
-            f"# Die Bildunterschrift\n{draft.caption}\n\n{draft.call_to_action}",
+            f"# Die Bildunterschrift, so wie sie erscheint\n{_bildunterschrift(draft)}",
             "# Auftrag\nBewerte den Beitrag und nenne die Änderungen, die ihn am meisten "
             "verbessern - oder keine, wenn er gut ist.",
         ),

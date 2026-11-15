@@ -107,3 +107,25 @@ def test_zu_lange_bildtexte_und_die_abschlusskarte_bleiben_unangetastet():
     )
     assert umgesetzt == 1
     assert agent.geaendert == [(3, "So alt ist die Farbe")]
+
+
+def test_die_zahl_einer_kennzahlkarte_bleibt_stehen():
+    """Bei der Katzennebel-Karte verschwand die Zahl mit dem umformulierten Satz."""
+    entwurf = _entwurf(karten=[
+        Karte(text="7.500 Lichtjahre ist die Katze entfernt", layout="zahl"),
+        Karte(text="So alt ist die Bemalung"),
+    ])
+    agent = _agent_mit(entwurf)
+    umgesetzt = agent._setze_redaktion_um(
+        1, entwurf,
+        _bericht(Aenderung(stelle=2, alt="x", neu="So weit entfernt steht die Katze", grund="")),
+        letzte=4,
+    )
+    assert umgesetzt == 0
+
+
+def test_eine_kennzahlkarte_ohne_zahl_bekommt_sie_beim_schreiben():
+    from insta_agent.imaging.gestalt import _ZAHL
+
+    karte = Karte(text="Das Licht war 7.500 Jahre unterwegs", layout="zahl")
+    assert _ZAHL.search(karte.text).group(0).startswith("7.500")

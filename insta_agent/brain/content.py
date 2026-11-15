@@ -370,6 +370,18 @@ ist, sieht nach Vorlage aus.
     if len(draft.caption) > MAX_CAPTION:
         draft.caption = draft.caption[: MAX_CAPTION - 1].rstrip() + "…"
 
+    # Eine Kennzahl-Karte ohne eigene Zahl: die Zahl aus dem Satz holen -
+    # oder, wenn keine drinsteht, als Aussage setzen. Sonst hängt die Zahl
+    # am Wortlaut, und eine Umformulierung lässt sie verschwinden.
+    from ..imaging.gestalt import _ZAHL
+
+    for karte in draft.karten:
+        if karte.layout == "zahl" and not karte.zahl.strip():
+            if treffer := _ZAHL.search(karte.text):
+                karte.zahl = treffer.group(0)
+            else:
+                karte.layout = "aussage"
+
     # Das Bild zeigt den Hook, auch wenn das Modell die Felder auseinanderlaufen ließ.
     if draft.hook_text_on_screen:
         draft.visual.headline = draft.hook_text_on_screen

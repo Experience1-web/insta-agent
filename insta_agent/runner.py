@@ -1290,6 +1290,40 @@ class Agent:
         self._von_hand_geaendert(post_id)
         return {"ok": True, "stelle": stelle}
 
+    def karte_ohne_foto(self, post_id: int, stelle: int) -> dict:
+        """Setzt eine Karte ohne ihr Foto neu - als Schriftkarte, kostenlos.
+
+        Für ein Foto, das nicht zeigt, wovon der Satz spricht: Unter "Hubble
+        sieht die Katze dunkelbraun" stand eine Galaxie. Ein falsches Bild
+        ist schlechter als keines; der Satz bleibt, das Foto geht.
+        """
+        zeile = self.store.get_post(post_id)
+        identity = self.identity
+        if zeile is None or zeile["status"] != "draft" or identity is None:
+            return {"ok": False, "grund": "Nur ein Entwurf lässt sich ändern."}
+        draft = PostDraft.model_validate(json.loads(zeile["draft_json"]))
+        bilder = json.loads(zeile["karussell_json"] or "[]")
+        versatz = stelle - 2
+        if not (0 <= versatz < len(bilder) and versatz < len(draft.karten)):
+            return {"ok": False, "grund": f"Ein {stelle}. Bild gibt es hier nicht."}
+        alte = draft.karten[versatz]
+        self._karte_in_verlauf(post_id, bilder, versatz, alte)
+        karte = alte.model_copy(
+            update={"layout": "aussage"} if alte.layout == "foto" else {}
+        )
+        draft.karten[versatz] = karte
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        neues = self._beschrifte_karte(
+            karte, None, f"{stamp}-ohnefoto-{post_id}", stelle, draft, identity
+        )
+        bilder[versatz] = str(neues)
+        self.store.setze_karussell(post_id, bilder)
+        stand = self._bildstand(post_id, len(bilder))
+        stand["karten"][versatz]["roh"] = None
+        self._speichere_bildstand(post_id, stand)
+        self.store.setze_entwurfsdaten(post_id, draft)
+        return {"ok": True, "stelle": stelle}
+
     def bildunterschrift_aendern(self, post_id: int, caption: str) -> dict:
         """Die Bildunterschrift von Hand - kostenlos, wie der Text auf den Bildern."""
         caption = (caption or "").strip()
@@ -2820,6 +2854,11 @@ class Agent:
             return
 
         umgesetzt = self._setze_redaktion_um(post_id, draft, bericht, letzte=len(bilder))
+        # Fotos, die nicht zeigen, wovon der Satz spricht: ohne Foto setzen.
+        for stelle in sorted(set(bericht.foto_passt_nicht)):
+            if 2 <= stelle < len(bilder) and self.karte_ohne_foto(post_id, stelle).get("ok"):
+                umgesetzt += 1
+                report.steps.append(f"Bild {stelle}: Foto passte nicht - jetzt Schriftkarte")
         self.store.set_json(f"schlussredaktion:{post_id}", bericht.model_dump(mode="json"))
         if bericht.lernpunkt.strip():
             gelernt = list(self.store.get_json("redaktion_lernen") or [])
@@ -2860,6 +2899,18 @@ class Agent:
                 continue
             hoechstens = 7 if aenderung.stelle == 1 else 14
             if len(neu.split()) > hoechstens:
+                continue
+            # Eine Kennzahl-Karte ohne eigene Zahl lebt von der Zahl im Satz.
+            # Fällt sie beim Umformulieren weg, steht da ein Satz über nichts.
+            karten = list(getattr(draft, "karten", None) or [])
+            karte = karten[aenderung.stelle - 2] if 0 <= aenderung.stelle - 2 < len(karten) else None
+            if (
+                karte is not None
+                and karte.layout == "zahl"
+                and not karte.zahl
+                and any(z.isdigit() for z in karte.text)
+                and not any(z.isdigit() for z in neu)
+            ):
                 continue
             if self.text_aendern(post_id, aenderung.stelle, neu).get("ok"):
                 umgesetzt += 1
