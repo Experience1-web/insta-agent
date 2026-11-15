@@ -386,10 +386,23 @@ class Agent:
         Fassung der Einstellungen; die Einstellungen selbst bleiben, wie
         sie sind - ausgeschaltet gilt wieder das Gewohnte.
         """
-        from .economy.qualitaet import quali_config
+        from .economy.qualitaet import QUALI_ZYKLUSGRENZE, quali_config
 
         self._spar = self.sparmodus
         self._quali = not self._spar and self.qualitaetsmodus
+        # Im Qualitätsmodus trägt die Notbremse einen ganzen Beitrag; beim
+        # Ausschalten gilt wieder, was vorher eingestellt war.
+        oekonomie = self.settings.economy
+        vorher = self.__dict__.get("_grenze_vorher")
+        if self._quali:
+            if vorher is None:
+                self._grenze_vorher = oekonomie.max_cost_per_cycle_usd
+            oekonomie.max_cost_per_cycle_usd = max(
+                self._grenze_vorher, QUALI_ZYKLUSGRENZE
+            )
+        elif vorher is not None:
+            oekonomie.max_cost_per_cycle_usd = vorher
+            del self._grenze_vorher
         if self._spar:
             self.brain.config = spar_config(self.settings.llm)
         elif self._quali:
@@ -592,7 +605,7 @@ class Agent:
             )
         elif self._quali:
             report.steps.append(
-                "Qualitätsmodus: alle Rollen auf Fable 5.2, gründlich, "
+                "Qualitätsmodus: Arbeit am Beitrag auf Fable 5.2, gründlich, "
                 f"bis zu {self.brain.config.max_web_searches} Websuchen"
             )
         # Gilt nur fuer diesen Lauf: Morgen ist das Kontingent wieder da.

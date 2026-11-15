@@ -556,9 +556,12 @@ def test_die_mannschaft_zeigt_ihr_sparmodell(web_einstellungen):
 def test_qualitaetsmodus_stellt_alle_rollen_auf_fable(agent):
     agent.setze_qualitaetsmodus(True)
     assert agent.qualitaetsmodus and not agent.sparmodus
-    assert agent.brain.config.model == "claude-fable-5-2"
-    assert agent.brain.config.research_model == "claude-fable-5-2"
+    # Nebenarbeiten bleiben beim gewohnten Modell, der Beitrag bekommt Fable.
+    assert agent.brain.config.model == agent.settings.llm.model
+    assert agent.brain.config.effort == "high"
+    assert agent.settings.economy.max_cost_per_cycle_usd >= 6.0
     assert agent._modell("chef") == "claude-fable-5-2"
+    assert agent._modell("stoff") == "claude-fable-5-2"
     assert agent._modell("pruefung") == "claude-fable-5-2"
 
 
@@ -570,6 +573,7 @@ def test_spar_und_qualitaetsmodus_schliessen_einander_aus(agent):
     assert agent.qualitaetsmodus and not agent.sparmodus
     agent.setze_qualitaetsmodus(False)
     assert agent.brain.config.model == agent.settings.llm.model
+    assert agent.settings.economy.max_cost_per_cycle_usd < 6.0
 
 
 def test_fable_5_2_hat_einen_preis():

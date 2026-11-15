@@ -22,16 +22,27 @@ QUALI_AUFWAND = "high"
 QUALI_SUCHEN = 4
 
 
+# Die Notbremse je Zyklus muss einen ganzen Beitrag tragen. Mit Fable
+# kostet er 3 bis 4 USD; bei der üblichen Grenze von gut 2 USD brach der
+# erste Versuch nach dem Schreiben ab - bezahlt, aber ohne Prüfung.
+QUALI_ZYKLUSGRENZE = 6.0
+
+
 def quali_config(llm):
-    """Die Einstellungen fürs Modell, wie sie im Qualitätsmodus gelten."""
+    """Die Einstellungen fürs Modell, wie sie im Qualitätsmodus gelten.
+
+    Das Modell selbst wird hier nicht umgestellt: Die Arbeit am Beitrag
+    holt sich Fable über die Rollen (Stoffsuche, Schreiben, Prüfung,
+    Schlussredaktion). Reflexion, Strategie und Vorbilder bleiben beim
+    gewohnten Modell - beim ersten Versuch kosteten sie auf Fable fast
+    einen Dollar, ohne den Beitrag besser zu machen.
+    """
     return replace(
         llm,
-        model=QUALI_MODELL,
-        research_model=QUALI_MODELL,
         effort=QUALI_AUFWAND,
         research_effort=QUALI_AUFWAND,
         max_web_searches=max(llm.max_web_searches, QUALI_SUCHEN),
     )
 
 
-__all__ = ["KEY_QUALITAET", "QUALI_MODELL", "quali_config"]
+__all__ = ["KEY_QUALITAET", "QUALI_MODELL", "QUALI_ZYKLUSGRENZE", "quali_config"]
