@@ -19,6 +19,7 @@ class ModelPrice:
 
 
 PRICING: dict[str, ModelPrice] = {
+    "claude-fable-5-2": ModelPrice(8.00, 40.00, 0.20, 10.00),
     "claude-fable-5-1": ModelPrice(10.00, 50.00, 0.25, 12.50),
     "claude-fable-5": ModelPrice(10.00, 50.00, 1.00, 12.50),
     "claude-opus-5": ModelPrice(5.00, 25.00, 0.50, 6.25),

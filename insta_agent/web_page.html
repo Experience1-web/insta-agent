@@ -1904,7 +1904,37 @@ function zeichne_sparmodus(d) {
           Jeder Beitrag aus dem Sparmodus trägt die Marke „Sparversion“.
         </p>
       </details>
+    </div>
+    <div class="sparmodus ${s.qualitaet ? "an" : ""}" style="margin-top:12px">
+      <div class="sparkopf">
+        <div class="text">
+          <b>Qualitätsmodus</b>
+          <span class="sparpreis">${s.qualitaet
+            ? "An: Alle Rollen schreiben und prüfen mit <strong>Fable 5.2</strong>, dem stärksten Modell – ca. 2–4 USD je Beitrag."
+            : "Bestes Ergebnis mit Fable 5.2 – ca. 2–4 USD je Beitrag, etwa viermal so teuer wie der Sparmodus."}</span>
+        </div>
+        <button class="schalter" role="switch" id="qualischalter"
+                aria-checked="${s.qualitaet ? "true" : "false"}" aria-label="Qualitätsmodus"
+                title="${s.qualitaet ? "Qualitätsmodus ausschalten" : "Qualitätsmodus einschalten (schaltet den Sparmodus ab)"}"></button>
+      </div>
     </div>`;
+
+  const qualischalter = $("qualischalter");
+  qualischalter.onclick = async () => {
+    const an = qualischalter.getAttribute("aria-checked") !== "true";
+    qualischalter.disabled = true;
+    qualischalter.setAttribute("aria-checked", an ? "true" : "false");
+    try {
+      const ergebnis = await sende("/api/qualitaetsmodus", { an });
+      if (!ergebnis.ok) {
+        qualischalter.setAttribute("aria-checked", an ? "false" : "true");
+        alert(ergebnis.grund || "Das hat nicht geklappt.");
+      }
+    } finally {
+      qualischalter.disabled = false;
+      laden();
+    }
+  };
 
   const schalter = $("sparschalter");
   schalter.onclick = async () => {

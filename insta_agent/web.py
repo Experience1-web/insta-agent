@@ -274,6 +274,7 @@ class Steuerung:
         schaetzung = schaetze(self.settings, modellwahl, agent.store.zyklen())
         return {
             "an": agent.sparmodus,
+            "qualitaet": agent.qualitaetsmodus,
             "normal_usd": schaetzung.normal_usd,
             "spar_usd": schaetzung.spar_usd,
             "normal_grundlage": schaetzung.normal_grundlage,
@@ -995,6 +996,22 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 agent.close()
             self._json(ergebnis, 200 if ergebnis.get("ok") else 409)
 
+        def _setze_qualitaetsmodus(self, rumpf: dict) -> None:
+            """Schaltet den Qualitätsmodus (Fable 5.2) - und den Sparmodus ab."""
+            if steuerung.nur_lesen:
+                self._json({"ok": False, "grund": "Diese Ansicht ist nur zum Nachsehen."}, 409)
+                return
+            an = rumpf.get("an")
+            if not isinstance(an, bool):
+                self._json({"ok": False, "grund": "Gib an, ob an oder aus."}, 400)
+                return
+            agent = Agent(steuerung.settings)
+            try:
+                agent.setze_qualitaetsmodus(an)
+            finally:
+                agent.close()
+            self._json({"ok": True, "an": an, "laeuft": steuerung.laeuft})
+
         def _setze_sparmodus(self, rumpf: dict) -> None:
             """Schaltet den Sparmodus an oder aus - gilt ab dem nächsten Zyklus."""
             if steuerung.nur_lesen:
@@ -1230,6 +1247,7 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
                 "/api/rechte",
                 "/api/vorbilder",
                 "/api/sparmodus",
+                "/api/qualitaetsmodus",
             ):
                 self._sende(404, "text/plain; charset=utf-8", b"Nicht gefunden")
                 return
@@ -1291,6 +1309,10 @@ def _handler_klasse(steuerung: Steuerung, token: str | None):
 
             if pfad == "/api/sparmodus":
                 self._setze_sparmodus(rumpf)
+                return
+
+            if pfad == "/api/qualitaetsmodus":
+                self._setze_qualitaetsmodus(rumpf)
                 return
 
             if pfad == "/api/rechte":

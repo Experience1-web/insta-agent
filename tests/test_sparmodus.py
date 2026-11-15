@@ -546,3 +546,34 @@ def test_die_mannschaft_zeigt_ihr_sparmodell(web_einstellungen):
     leute = {m["schluessel"]: m for m in Steuerung(web_einstellungen).zustand()["mannschaft"]}
     assert leute["chef"]["modell"] == "claude-opus-5"
     assert leute["chef"]["spar_modell"] == SPAR_MODELL
+
+
+# --------------------------------------------------------------------------
+# Der Qualitätsmodus - das Gegenstück
+# --------------------------------------------------------------------------
+
+
+def test_qualitaetsmodus_stellt_alle_rollen_auf_fable(agent):
+    agent.setze_qualitaetsmodus(True)
+    assert agent.qualitaetsmodus and not agent.sparmodus
+    assert agent.brain.config.model == "claude-fable-5-2"
+    assert agent.brain.config.research_model == "claude-fable-5-2"
+    assert agent._modell("chef") == "claude-fable-5-2"
+    assert agent._modell("pruefung") == "claude-fable-5-2"
+
+
+def test_spar_und_qualitaetsmodus_schliessen_einander_aus(agent):
+    agent.setze_qualitaetsmodus(True)
+    agent.setze_sparmodus(True)
+    assert agent.sparmodus and not agent.qualitaetsmodus
+    agent.setze_qualitaetsmodus(True)
+    assert agent.qualitaetsmodus and not agent.sparmodus
+    agent.setze_qualitaetsmodus(False)
+    assert agent.brain.config.model == agent.settings.llm.model
+
+
+def test_fable_5_2_hat_einen_preis():
+    from insta_agent.economy.pricing import PRICING
+
+    assert PRICING["claude-fable-5-2"].input_per_mtok == 8.00
+    assert PRICING["claude-fable-5-2"].output_per_mtok == 40.00

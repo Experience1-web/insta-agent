@@ -55,6 +55,13 @@ class Steckbrief:
 
 
 STECKBRIEFE: dict[str, Steckbrief] = {
+    "claude-fable-5-2": Steckbrief(
+        "Fable 5.2",
+        "Für den Qualitätsmodus: wenn jeder Beitrag das Beste sein soll.",
+        "Das stärkste Modell, günstiger als Fable 5.1 - aber etwa viermal "
+        "so teuer wie Sonnet. Ein Beitrag kostet damit rund 2 bis 4 USD.",
+        True,
+    ),
     "claude-fable-5-1": Steckbrief(
         "Fable 5.1",
         "Nur, wenn ein Beitrag wirklich schwierig ist.",

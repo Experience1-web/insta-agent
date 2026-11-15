@@ -208,6 +208,7 @@ class Agent:
     # Ob dieser Lauf im Sparmodus arbeitet. Als Klassenwert, damit auch ein
     # Agent ohne vollen Aufbau (die Tests bauen solche) im Normalbetrieb ist.
     _spar = False
+    _quali = False
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -342,9 +343,35 @@ class Agent:
         """Ob der Betreiber den Sparmodus eingeschaltet hat."""
         return bool(self.store.get_json(KEY_SPARMODUS))
 
+    @property
+    def qualitaetsmodus(self) -> bool:
+        """Ob der Betreiber den Qualitätsmodus (Fable 5.2) eingeschaltet hat."""
+        from .economy.qualitaet import KEY_QUALITAET
+
+        return bool(self.store.get_json(KEY_QUALITAET))
+
+    def setze_qualitaetsmodus(self, an: bool) -> None:
+        """Schaltet den Qualitätsmodus - und dafür den Sparmodus ab."""
+        from .economy.qualitaet import KEY_QUALITAET
+
+        an = bool(an)
+        if an and self.sparmodus:
+            self.store.set_json(KEY_SPARMODUS, False)
+        if an != self.qualitaetsmodus:
+            self.store.set_json(KEY_QUALITAET, an)
+            self.store.log(
+                "qualitaetsmodus",
+                "Qualitätsmodus eingeschaltet (Fable 5.2)" if an else "Qualitätsmodus ausgeschaltet",
+            )
+        self._wende_sparmodus_an()
+
     def setze_sparmodus(self, an: bool) -> None:
         """Schaltet den Sparmodus - gilt ab dem nächsten Zyklus und für jeden Knopf."""
+        from .economy.qualitaet import KEY_QUALITAET
+
         an = bool(an)
+        if an and self.qualitaetsmodus:
+            self.store.set_json(KEY_QUALITAET, False)
         if an != self.sparmodus:
             self.store.set_json(KEY_SPARMODUS, an)
             self.store.log(
@@ -359,8 +386,16 @@ class Agent:
         Fassung der Einstellungen; die Einstellungen selbst bleiben, wie
         sie sind - ausgeschaltet gilt wieder das Gewohnte.
         """
+        from .economy.qualitaet import quali_config
+
         self._spar = self.sparmodus
-        self.brain.config = spar_config(self.settings.llm) if self._spar else self.settings.llm
+        self._quali = not self._spar and self.qualitaetsmodus
+        if self._spar:
+            self.brain.config = spar_config(self.settings.llm)
+        elif self._quali:
+            self.brain.config = quali_config(self.settings.llm)
+        else:
+            self.brain.config = self.settings.llm
 
     def collect_metrics(self, cycle: int) -> str:
         """Holt die aktuellen Zahlen und schreibt sie ins Gedächtnis."""
@@ -554,6 +589,11 @@ class Agent:
                 f"Sparmodus: {self.brain.config.model.replace('claude-', '')}, "
                 f"höchstens {self.brain.config.max_web_searches} Websuchen, "
                 "ohne Nebenarbeiten"
+            )
+        elif self._quali:
+            report.steps.append(
+                "Qualitätsmodus: alle Rollen auf Fable 5.2, gründlich, "
+                f"bis zu {self.brain.config.max_web_searches} Websuchen"
             )
         # Gilt nur fuer diesen Lauf: Morgen ist das Kontingent wieder da.
         self._bilder_heute_aus: str | None = None
@@ -1822,6 +1862,11 @@ class Agent:
         ein schon günstigeres Modell bleibt.
         """
         gewaehlt = self.modellwahl.get(schluessel)
+        if getattr(self, "_quali", False):
+            # Qualitätsmodus: jede Rolle auf das stärkste Modell.
+            from .economy.qualitaet import QUALI_MODELL
+
+            return QUALI_MODELL
         if not self._spar:
             return gewaehlt
         from .mannschaft import NACH_SCHLUESSEL, standardmodell
