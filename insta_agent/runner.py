@@ -2648,6 +2648,11 @@ class Agent:
             from .imaging.echtbild import KARTENBLICK, finde_und_hole
 
             thema = getattr(self, "_bildthema", "") or suchwort
+            # Der Satz der Karte gehört zur Frage: Zum Thema "Katzennebel"
+            # passte auch eine Galaxie - zum Satz "Hubble sieht den Nebel
+            # dunkelbraun" nicht. Erst die Schlussredaktion hatte das gemerkt.
+            if satz := (getattr(karte, "text", "") or "").strip():
+                thema = f"{thema}. Das Bild steht über dem Satz: \"{satz}\""
             ziel = self.settings.media_dir / f"{stamm}-echt.jpg"
             try:
                 gefunden = finde_und_hole(

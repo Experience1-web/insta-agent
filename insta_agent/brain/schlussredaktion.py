@@ -51,6 +51,11 @@ Verräterisch sind künstliche Spannung ("Doch dann geschah etwas
 Unglaubliches"), Füllwörter, Superlative ohne Grund, Großbuchstaben zur
 Betonung, Floskeln aus den sozialen Medien, Sätze, die nichts sagen.
 
+Verständlich ohne Vorwissen: Versteht jemand, der nur die Bilder sieht,
+worum es geht? Ein Spitzname oder Vergleich, der wie Wirklichkeit dasteht
+("Das Auge dieser Katze" über einem Nebel, der nur so heißt), ist ein
+Fehler - auf jedem Bild, auf dem er so steht.
+
 Roter Faden: Erzählen die Bilder nacheinander eine Geschichte, die man
 ohne Bildunterschrift versteht? Steht etwas doppelt? Fehlt der Schritt,
 der das Ganze verständlich macht? Trägt jedes Bild etwas Eigenes?

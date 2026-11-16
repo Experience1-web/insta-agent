@@ -282,6 +282,12 @@ Sekunde. Deshalb:
 - Gegenprobe: Würde jemand, der mit Wissenschaft nichts zu tun hat, den
   Satz jemandem weitererzählen können? Wenn nicht, ist er falsch.
 
+Ein Spitzname ist keine Sache. Heißt ein Nebel "Katzenkopfnebel", weil
+er so aussieht, dann ist auf keinem Bild von "der Katze" die Rede, als
+wäre es eine: "Dieser Nebel sieht aus wie eine Katze", danach "der
+Katzennebel". Das gilt für jedes Bild, nicht nur das erste - wer
+durchwischt, liest die Bildunterschrift nicht.
+
 Schlecht: "Bei Berührung antwortet sie mit 515 Nanometern".
 Gut: "Diese Koralle leuchtet nur, wenn man sie berührt".
 

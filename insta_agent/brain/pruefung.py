@@ -152,6 +152,9 @@ Deshalb prüfst du zuerst den Fund selbst, bevor du den Text prüfst:
   Neuentdeckung nahelegt, wo nur eine neue Messung ist, ist
   "ungenau" - auch auf dem Bild, und dort zuerst, weil der Bildtext
   das ist, was jeder liest.
+- Ein Spitzname ist keine Tatsache. Steht "die Katze" auf einem Bild,
+  wo ein Nebel gemeint ist, der nur so heißt, ist das "ungenau" - auch
+  wenn der Name belegt ist.
 - Bekannt ist nicht dasselbe wie vorhanden. "Nur ein Exemplar existiert
   auf der Welt" ist falsch, wenn bisher nur ein Exemplar gefunden wurde;
   richtig ist "Man kennt bisher nur ein einziges Exemplar". Dasselbe
